@@ -1,0 +1,3 @@
+provisioners/kubeadm/generated.go
+
+terraform.tfstate*
