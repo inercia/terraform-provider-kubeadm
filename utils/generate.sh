@@ -40,6 +40,9 @@ done
 
 echo    "package $OUT_PACKAGE"            > $OUT_FILE
 echo                                     >> $OUT_FILE
+echo   "// file automatically generated" >> $OUT_FILE
+echo   "// DO NOT MODIFY"                >> $OUT_FILE
+echo                                     >> $OUT_FILE
 echo -n "const $OUT_VAR=\`"              >> $OUT_FILE
 cat     $IN_FILES | sed -e 's|`|\\`|g'   >> $OUT_FILE
 echo    "\`"                             >> $OUT_FILE

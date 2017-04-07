@@ -10,8 +10,9 @@ import (
 
 func TestKubeadm_basic(t *testing.T) {
 	const testAccKubeadm_basic = `
-data "kubeadm_config" "k8s" {
-    name = "test"
+resource "kubeadm" "k8s" {
+  name = "my_cluster"
+  services_cidr = "10.25.0.0/16"
 }`
 
 	resource.UnitTest(t, resource.TestCase{
@@ -21,7 +22,7 @@ data "kubeadm_config" "k8s" {
 			{
 				Config: testAccKubeadm_basic,
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckState("kubeadm_config.k8s"),
+					testAccCheckState("kubeadm.k8s"),
 				),
 			},
 		},

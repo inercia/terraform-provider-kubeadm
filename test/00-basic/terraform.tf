@@ -32,7 +32,6 @@ resource "libvirt_volume" "base_volume" {
 }
 
 resource "kubeadm" "main" {
-  name = "my_cluster"
   services_cidr = "10.25.0.0/16"
 }
 

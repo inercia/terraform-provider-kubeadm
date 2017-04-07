@@ -69,7 +69,7 @@ provider:
 
 ```hcl
 resource "kubeadm" "main" {
-  name = "my_cluster"
+  dns_domain = "my_cluster"
   services_cidr = "10.25.0.0/16"
 }
 
@@ -99,7 +99,7 @@ Notice that the `provisioner` at the
 
 * _master_ must specify the `config = ${... config.master}`,
 * _nodes_ must specify the `config = ${... config.node}` and a `master` pointing
-to the `<IP/name>:[<port>]` (default=_6443_) of the _master_ 
+to the `<IP/name>` of the _master_ 
 
 Now you can see the plan, apply it, and then destroy the infrastructure:
 

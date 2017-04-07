@@ -27,64 +27,64 @@ type TypeMeta struct {
 type MasterConfiguration struct {
 	TypeMeta `json:",inline"`
 
-	API               API        `json:"api"`
-	Etcd              Etcd       `json:"etcd"`
-	Networking        Networking `json:"networking"`
-	KubernetesVersion string     `json:"kubernetesVersion"`
-	CloudProvider     string     `json:"cloudProvider"`
-	AuthorizationMode string     `json:"authorizationMode"`
+	API               API        `json:"api,omitempty"`
+	Etcd              Etcd       `json:"etcd,omitempty"`
+	Networking        Networking `json:"networking,omitempty"`
+	KubernetesVersion string     `json:"kubernetesVersion,omitempty"`
+	CloudProvider     string     `json:"cloudProvider,omitempty"`
+	AuthorizationMode string     `json:"authorizationMode,omitempty"`
 
-	Token    string        `json:"token"`
-	TokenTTL time.Duration `json:"tokenTTL"`
+	Token    string        `json:"token,omitempty"`
+	TokenTTL time.Duration `json:"tokenTTL,omitempty"`
 
 	// SelfHosted enables an alpha deployment type where the apiserver, scheduler, and
 	// controller manager are managed by Kubernetes itself. This option is likely to
 	// become the default in the future.
 	SelfHosted bool `json:"selfHosted"`
 
-	APIServerExtraArgs         map[string]string `json:"apiServerExtraArgs"`
-	ControllerManagerExtraArgs map[string]string `json:"controllerManagerExtraArgs"`
-	SchedulerExtraArgs         map[string]string `json:"schedulerExtraArgs"`
+	APIServerExtraArgs         map[string]string `json:"apiServerExtraArgs,omitempty"`
+	ControllerManagerExtraArgs map[string]string `json:"controllerManagerExtraArgs,omitempty"`
+	SchedulerExtraArgs         map[string]string `json:"schedulerExtraArgs,omitempty"`
 
 	// APIServerCertSANs sets extra Subject Alternative Names for the API Server signing cert
-	APIServerCertSANs []string `json:"apiServerCertSANs"`
+	APIServerCertSANs []string `json:"apiServerCertSANs,omitempty"`
 	// CertificatesDir specifies where to store or look for all required certificates
-	CertificatesDir string `json:"certificatesDir"`
+	CertificatesDir string `json:"certificatesDir,omitempty"`
 }
 
 type API struct {
 	// AdvertiseAddress sets the address for the API server to advertise.
-	AdvertiseAddress string `json:"advertiseAddress"`
+	AdvertiseAddress string `json:"advertiseAddress,omitempty"`
 	// BindPort sets the secure port for the API Server to bind to
-	BindPort int32 `json:"bindPort"`
+	BindPort int32 `json:"bindPort,omitempty"`
 }
 
 type TokenDiscovery struct {
-	ID        string   `json:"id"`
-	Secret    string   `json:"secret"`
-	Addresses []string `json:"addresses"`
+	ID        string   `json:"id,omitempty"`
+	Secret    string   `json:"secret,omitempty"`
+	Addresses []string `json:"addresses,omitempty"`
 }
 
 type Networking struct {
-	ServiceSubnet string `json:"serviceSubnet"`
-	PodSubnet     string `json:"podSubnet"`
-	DNSDomain     string `json:"dnsDomain"`
+	ServiceSubnet string `json:"serviceSubnet,omitempty"`
+	PodSubnet     string `json:"podSubnet,omitempty"`
+	DNSDomain     string `json:"dnsDomain,omitempty"`
 }
 
 type Etcd struct {
-	Endpoints []string `json:"endpoints"`
-	CAFile    string   `json:"caFile"`
-	CertFile  string   `json:"certFile"`
-	KeyFile   string   `json:"keyFile"`
+	Endpoints []string `json:"endpoints,omitempty"`
+	CAFile    string   `json:"caFile,omitempty"`
+	CertFile  string   `json:"certFile,omitempty"`
+	KeyFile   string   `json:"keyFile,omitempty"`
 }
 
 type NodeConfiguration struct {
 	TypeMeta `json:",inline"`
 
-	CACertPath               string   `json:"caCertPath"`
-	DiscoveryFile            string   `json:"discoveryFile"`
-	DiscoveryToken           string   `json:"discoveryToken"`
-	DiscoveryTokenAPIServers []string `json:"discoveryTokenAPIServers"`
-	TLSBootstrapToken        string   `json:"tlsBootstrapToken"`
-	Token                    string   `json:"token"`
+	CACertPath               string   `json:"caCertPath,omitempty"`
+	DiscoveryFile            string   `json:"discoveryFile,omitempty"`
+	DiscoveryToken           string   `json:"discoveryToken,omitempty"`
+	DiscoveryTokenAPIServers []string `json:"discoveryTokenAPIServers,omitempty"`
+	TLSBootstrapToken        string   `json:"tlsBootstrapToken,omitempty"`
+	Token                    string   `json:"token,omitempty"`
 }

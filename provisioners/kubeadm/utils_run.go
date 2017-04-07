@@ -1,5 +1,11 @@
 package kubeadm
 
+// note: we could use go-bindata too, but that would mean we would have to include an extra dependency
+//       just for this... I think it is not worth.
+//go:generate ../../utils/generate.sh --out-var setupScriptCode --out-package kubeadm --out-file generated_setup.go ./static/kubeadm-setup.sh
+//go:generate ../../utils/generate.sh --out-var kubeletMasterCode --out-package kubeadm --out-file generated_kubelet_master.go ./static/kubelet_master
+//go:generate ../../utils/generate.sh --out-var kubeletNodeCode --out-package kubeadm --out-file generated_kubelet_node.go ./static/kubelet_node
+
 import (
 	"crypto/rand"
 	"encoding/hex"
@@ -14,6 +20,9 @@ import (
 
 const (
 	defaultRemoteTmp = "/tmp"
+
+	// the path where a kubeadm runner will be installed/linked
+	defaultKubeadmRunner = "/tmp/kubeadm.sh"
 )
 
 func randBytes(length int) (string, error) {
@@ -51,11 +60,21 @@ func (rs *remoteFile) Upload(contents io.Reader, prefix, extension string) error
 	if err != nil {
 		return err
 	}
+	return rs.UploadTo(contents, p)
+}
+
+func (rs *remoteFile) UploadTo(contents io.Reader, p string) error {
 	rs.Path = p
-	if err := rs.Comm.UploadScript(rs.Path, contents); err != nil {
+	return rs.Comm.Upload(rs.Path, contents)
+}
+
+func (rs *remoteFile) UploadScript(contents io.Reader, prefix string) error {
+	p, err := randomPath(prefix, "sh")
+	if err != nil {
 		return err
 	}
-	return nil
+	rs.Path = p
+	return rs.Comm.UploadScript(rs.Path, contents)
 }
 
 // Perform a cleanup by removing the remote file
@@ -72,8 +91,17 @@ func newRemoteScript(o terraform.UIOutput, comm communicator.Communicator) remot
 	return remoteScript{remoteFile{Output: o, Comm: comm}}
 }
 
-func (rs remoteScript) Run(useSudo bool) error {
-	return runCommand(rs.Output, rs.Comm, useSudo, rs.Path)
+func (rs remoteScript) Run(args string, useSudo bool) error {
+	return runCommand(rs.Output, rs.Comm, useSudo, fmt.Sprintf("%s %s", rs.Path, args))
+}
+
+func runCommands(o terraform.UIOutput, comm communicator.Communicator, useSudo bool, commands []string) error {
+	for _, command := range commands {
+		if err := runCommand(o, comm, useSudo, command); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Run a command in the remote resource

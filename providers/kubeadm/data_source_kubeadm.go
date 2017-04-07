@@ -10,8 +10,13 @@ import (
 )
 
 const (
-	defaultPodCIDR     = "10.2.0.0/16"
-	defaultServiceCIDR = "10.3.0.0/24"
+	defaultPodCIDR           = "10.244.0.0/16"
+	defaultServiceCIDR       = "10.3.0.0/24"
+	defaultKubernetesVersion = "v1.6.1"
+	defaultMasterPort        = 6443
+	defaultDNSDomain         = "cluster.local"
+	defaultAuthMode          = "RBAC"
+	defaultAPIVersion        = "kubeadm.k8s.io/v1alpha1"
 )
 
 func dataSourceKubeadm() *schema.Resource {
@@ -19,10 +24,6 @@ func dataSourceKubeadm() *schema.Resource {
 		Read: dataSourceKubeadmRead,
 
 		Schema: map[string]*schema.Schema{
-			"name": {
-				Type:     schema.TypeString,
-				Required: true,
-			},
 			"etcd_servers": {
 				Type:        schema.TypeList,
 				Elem:        &schema.Schema{Type: schema.TypeString},
@@ -37,6 +38,7 @@ func dataSourceKubeadm() *schema.Resource {
 			"api_port": {
 				Type:        schema.TypeInt,
 				Optional:    true,
+				Default:     defaultMasterPort,
 				Description: "API server binding port",
 			},
 			"api_alt_names": {
@@ -57,15 +59,28 @@ func dataSourceKubeadm() *schema.Resource {
 				Default:     defaultServiceCIDR,
 				Description: "The CIDR range of cluster services.",
 			},
+			"version": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     defaultKubernetesVersion,
+				Description: "Kubernetes version to use (Example: v1.6.0).",
+			},
 			"dns_domain": {
 				Type:        schema.TypeString,
 				Optional:    true,
+				Default:     defaultDNSDomain,
 				Description: "The DNS domain.",
 			},
 			"cloud_provider": {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "The provider for cloud services.  Empty string for no provider.",
+			},
+			"authorization_mode": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     defaultAuthMode,
+				Description: "Authentication mode (Example: RBAC).",
 			},
 			"extra_args": {
 				Type:     schema.TypeSet,
@@ -115,24 +130,30 @@ func dataSourceKubeadmRead(d *schema.ResourceData, meta interface{}) error {
 	nodeConfig := kubernetes.NodeConfiguration{}
 
 	// Generate a valid token
+	log.Printf("[DEBUG] Generating a token")
 	token, err := kubernetes.GenerateToken()
 	if err != nil {
 		return err
 	}
+	log.Printf("[DEBUG] kubeadm token = %s", token)
 	masterConfig.Token = token
 	nodeConfig.Token = token
 
+	log.Printf("[DEBUG] Parsing kubeadm configuration")
 	if podCIDROpt, ok := d.GetOk("pods_cidr"); ok {
 		masterConfig.Networking.PodSubnet = podCIDROpt.(string)
 	}
-	if serviceCIDROpt, ok := d.GetOk("services_cidr"); ok {
-		masterConfig.Networking.ServiceSubnet = serviceCIDROpt.(string)
+	if servicesCIDROpt, ok := d.GetOk("services_cidr"); ok {
+		masterConfig.Networking.ServiceSubnet = servicesCIDROpt.(string)
 	}
 	if cloudProviderOpt, ok := d.GetOk("cloud_provider"); ok {
 		masterConfig.CloudProvider = cloudProviderOpt.(string)
 	}
+	if versionOpt, ok := d.GetOk("version"); ok {
+		masterConfig.KubernetesVersion = versionOpt.(string)
+	}
 	if bindPortOpt, ok := d.GetOk("api_port"); ok {
-		masterConfig.API.BindPort = bindPortOpt.(int32)
+		masterConfig.API.BindPort = int32(bindPortOpt.(int))
 	}
 	if advertisedOpt, ok := d.GetOk("api_advertised"); ok {
 		masterConfig.API.AdvertiseAddress = advertisedOpt.(string)
@@ -142,6 +163,9 @@ func dataSourceKubeadmRead(d *schema.ResourceData, meta interface{}) error {
 	}
 	if etcdServersLst, ok := d.GetOk("etcd_servers"); ok {
 		masterConfig.Etcd.Endpoints = etcdServersLst.([]string)
+	}
+	if authorizationModeOpt, ok := d.GetOk("authorization_mode"); ok {
+		masterConfig.AuthorizationMode = authorizationModeOpt.(string)
 	}
 	if apiServersAltNamesOpt, ok := d.GetOk("api_alt_names"); ok {
 		masterConfig.APIServerCertSANs = apiServersAltNamesOpt.([]string)
@@ -154,13 +178,20 @@ func dataSourceKubeadmRead(d *schema.ResourceData, meta interface{}) error {
 	//	masterConfig.APIServerExtraArgs = apiExtraOpt.([]string)
 	//}
 
-	log.Printf("[DEBUG] Rendering master config")
+	// some defaults we need to set
+	masterConfig.APIVersion = defaultAPIVersion
+	masterConfig.Kind = "MasterConfiguration"
+	masterConfig.SelfHosted = true
+	nodeConfig.APIVersion = defaultAPIVersion
+	nodeConfig.Kind = "NodeConfiguration"
+
+	log.Printf("[DEBUG] Rendering master config as a JSON")
 	mc, err := json.Marshal(masterConfig)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("[DEBUG] Rendering node config")
+	log.Printf("[DEBUG] Rendering node config as a JSON")
 	nc, err := json.Marshal(nodeConfig)
 	if err != nil {
 		return err
