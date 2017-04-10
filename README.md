@@ -79,7 +79,7 @@ resource "libvirt_domain" "master" {
   memory = 1024
   ...
   provisioner "kubeadm" {
-    config = "${kubeadm.k8s.config.master}" 
+    config = "${kubeadm.k8s.config.master}"
   }
 }
 
@@ -89,17 +89,17 @@ resource "libvirt_domain" "minion" {
   name       = "minion${count.index}"
   ...
   provisioner "kubeadm" {
-    config = "${kubeadm.k8s.config.node}" 
+    config = "${kubeadm.k8s.config.node}"
     master = "${libvirt_domain.master.network_interface.0.addresses.0}"
   }
 }
 ```
 
-Notice that the `provisioner` at the 
+Notice that the `provisioner` at the
 
 * _master_ must specify the `config = ${... config.master}`,
 * _nodes_ must specify the `config = ${... config.node}` and a `master` pointing
-to the `<IP/name>` of the _master_ 
+to the `<IP/name>` of the _master_
 
 Now you can see the plan, apply it, and then destroy the infrastructure:
 
@@ -108,6 +108,32 @@ $ terraform plan
 $ terraform apply
 $ terraform destroy
 ```
+
+## Arguments
+
+This is the list of arguments you can use in the `resource "kubeadm"`:
+
+  * `api_advertised`: API server advertised IP/name
+  * `api_port`: API server binding port
+  * `api_alt_names`: List of SANs to use in api-server certificate. Example: 'IP=127.0.0.1,IP=127.0.0.2,DNS=localhost', If empty, SANs will be extracted from the api_servers
+  * `authorization_mode`: Authentication mode (Example: `RBAC`)
+  * `cloud_provider`: The provider for cloud services.  Empty string for no provider
+  * `etcd_servers`: List of etcd servers URLs including host:port
+  * `dns_domain`: The DNS domain
+  * `pods_cidr`: The CIDR range of cluster pods
+  * `services_cidr`: The CIDR range of cluster services (Example: `10.3.0.0/24`)
+  * `version`: Kubernetes version to use (Example: `v1.6.1`)
+
+## Known limitations
+
+* `kubeadm 1.6.[01]` seems to be broken for me, so you should use
+images (or repos) with kubernetes `1.5.x`. But running kubeadm `1.5` does
+not mean you cannort run kubernetes 1.6: just use `version = 1.6` as a
+cluster argument.
+* The `kubeadm-setup.sh` tries to does its best in order to install
+`kubeadm`, but some distros have not been tested too much. I'use used
+`libvirt` with _OpenSUSE Leap 42.2_ images for running my tests, so that
+could be considered the perfect combination for trying this...
 
 ## Running acceptance tests
 
