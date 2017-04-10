@@ -6,14 +6,19 @@
 
 LSB_RELEASE=/usr/bin/lsb_release
 
-# packages version to install
-K8S_VERSION="1.5.5"
-
 # the executable that packages will install, and the packages per distro
 KUBEADM_EXE=/usr/bin/kubeadm
-KUBEADM_PKG_SUSE=kubernetes-kubeadm
-KUBEADM_PKG_APT=kubeadm
-KUBEADM_PKG_YUM=kubeadm
+
+KUBEADM_PKG_SUSE="kubernetes-kubeadm"
+KUBEADM_PKG_SUSE_VERS="1.5.5"
+KUBEADM_PKG_SUSE_REPO="http://download.opensuse.org/repositories/home:/asaurin:/branches:/Virtualization:/containers/openSUSE_Leap_42.2/"
+
+KUBEADM_PKG_APT="kubeadm"
+KUBEADM_PKG_APT_VERS="1.5.4"
+KUBEADM_PKG_APT_REPO="http://apt.kubernetes.io/"
+
+KUBEADM_PKG_YUM="kubeadm"
+KUBEADM_PKG_YUM_VERS="1.5.4"
 
 # we will try to discover the DIST and RELEASE
 ID=
@@ -28,19 +33,9 @@ DOCKER_RUNNER_IMAGE="inercia/kubeadm"
 log()    { echo "[kubeadm setup] $@" ;     }
 abort()  { log "$@" ; exit 1 ; }
 
-kill_kubeadm() {
-    local this=$(basename $0)
-    local pid=$(ps ax | grep -v $this | grep "kubeadm" | grep -v grep | cut -f2 -d' ')
-    if [ -n "$PID" ] ; then
-        log "killing a previous kubeadm running with PID=$pid"
-        kill "$pid" &>/dev/null || /bin/true
-    fi
-}
-
 add_zypper_repo() {
     local name="$1"
     local url="$2"
-
 	if [ ! -f "/etc/zypp/repos.d/$name.repo" ] ; then
 		log "adding repository $name"
         zypper $zypper_args ar -Gf "$url" $name || abort "could not enable $name repo"
@@ -50,16 +45,17 @@ add_zypper_repo() {
 	fi
 }
 
+restart_services() {
+    log "starting services"
+    systemctl enable docker   && systemctl start docker  || abort "could not start docker"
+    systemctl enable kubelet  && systemctl start kubelet || abort "could not start kubelet"
+}
+
 ##########################################################################################
 
 # installation for SUSE variants: OpenSUSE/SLE/CaaSP...
 install_zypper() {
     local zypper_args="-n --no-gpg-checks --quiet --no-color"
-
-    local extra_repo_name="extra"
-    local extra_repo_url="http://download.opensuse.org/repositories/home:/asaurin:/branches:/Virtualization:/containers/openSUSE_Leap_42.2/"
-
-    local packages="$KUBEADM_PKG_SUSE==$K8S_VERSION kubernetes-kubelet==$K8S_VERSION kubernetes-client==$K8S_VERSION"
 
     source /etc/os-release
     case $NAME in
@@ -72,10 +68,11 @@ install_zypper() {
     esac
 
 	log "installing for SUSE"
-    add_zypper_repo "containers"       "$containers_repo_url"
-    add_zypper_repo "$extra_repo_name" "$extra_repo_url"
+    add_zypper_repo "containers"  "$containers_repo_url"
+    add_zypper_repo "extra"       "$KUBEADM_PKG_SUSE_REPO"
 
     log "checking we have everything we need..."
+    local packages="$KUBEADM_PKG_SUSE==$KUBEADM_PKG_SUSE_VERS kubernetes-kubelet==$KUBEADM_PKG_SUSE_VERS kubernetes-client==$KUBEADM_PKG_SUSE_VERS"
 	zypper $zypper_args in -y $packages || abort "could not finish the installation of packages"
     log "... everything installed"
 
@@ -87,18 +84,14 @@ KUBE_ALLOW_PRIV="--allow-privileged=true"
 KUBE_MASTER=""
 EOF
 
-    log "starting services"
-    systemctl enable docker   && systemctl start docker    || abort "could not start docker"
-    systemctl enable kubelet  && systemctl start kubelet   || abort "could not start kubelet"
+    restart_services
 }
 
 # installation for RedHat variants: RedHat/CentOS...
 install_yum() {
 	log "Installing for RedHat..."
-
-	[ -n "$RELEASE" ] || abort "can't continue without knowing the release"
-
 	if [ ! -f /etc/yum.repos.d/kubernetes.repo ] ; then
+		[ -n "$RELEASE" ] || abort "can't continue without knowing the release"
 		cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
@@ -110,20 +103,16 @@ gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
        https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 EOF
 		setenforce 0
-
 	else
 		log "repository already found: skipping installation of the repo"
 	fi
 
     log "checking we have everything we need..."
-    [ -x $KUBEADM_EXE     ] || yum install -y $KUBEADM_PKG_YUM       || abort "could not finish the installation of kubeadm"
-    [ -x /usr/bin/kubelet ] || yum install -y kubelet kubernetes-cni || abort "could not finish the installation of kubelet"
-    [ -x /usr/bin/docker  ] || yum install -y docker                 || abort "could not finish the installation of docker"
-    [ -x /usr/bin/kubectl ] || yum install -y kubectl                || abort "could not finish the installation of kubectl"
+	local packages="$KUBEADM_PKG_YUM-$KUBEADM_PKG_YUM_VERS kubelet kubernetes-cni docker kubectl"
+    [ -x $KUBEADM_EXE ] || yum install -y $packages || abort "could not finish the installation of kubeadm"
     log "... everything installed"
 
-    log "starting services"
-    systemctl enable docker  && systemctl start docker || abort "could not start docker"
+	restart_services
 }
 
 # installation for Debian variants: debian/Ubuntu...
@@ -132,20 +121,18 @@ install_apt() {
 	apt-get update && apt-get install -y apt-transport-https
 	if [ ! -f /etc/apt/sources.list.d/kubernetes.list ] ; then
 		curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
-		cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
-deb http://apt.kubernetes.io/ kubernetes-xenial main
-EOF
+		echo "deb $KUBEADM_PKG_APT_REPO kubernetes-xenial main" >> /etc/apt/sources.list.d/kubernetes.list
 		apt-get update
 	else
 		log "repository already found: skipping installation of the repo"
 	fi
 
     log "checking we have everything we need..."
-    [ -x $KUBEADM_EXE     ] || apt-get install -y $KUBEADM_PKG_APT       || abort "could not finish the installation of kubeadm"
-    [ -x /usr/bin/kubelet ] || apt-get install -y kubelet kubernetes-cni || abort "could not finish the installation of kubelet"
-    [ -x /usr/bin/docker  ] || apt-get install -y docker.io              || abort "could not finish the installation of docker"
-    [ -x /usr/bin/kubectl ] || apt-get install -y kubectl                || abort "could not finish the installation of kubectl"
+    local packages="$KUBEADM_PKG_APT=$KUBEADM_PKG_APT_VERS kubelet kubernetes-cni docker.io kubectl"
+    [ -x $KUBEADM_EXE ] || apt-get install -y $packages || abort "could not finish the installation of kubectl"
     log "... everything installed"
+
+	restart_services
 }
 
 # install a script for running kubeadm inside a container
