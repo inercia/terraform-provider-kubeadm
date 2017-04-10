@@ -1,3 +1,30 @@
+Release v1.8.11 (2017-04-07)
+===
+
+### Service Client Updates
+* `service/redshift`: Updates service API, documentation, and paginators
+  * This update adds the GetClusterCredentials API which is used to get temporary login credentials to the cluster. AccountWithRestoreAccess now has a new member AccountAlias, this is the identifier of the AWS support account authorized to restore the specified snapshot. This is added to support the feature where the customer can share their snapshot with the Amazon Redshift Support Account without having to manually specify the AWS Redshift Service account ID on the AWS Console/API.
+
+Release v1.8.10 (2017-04-06)
+===
+
+### Service Client Updates
+* `service/elbv2`: Updates service documentation
+
+Release v1.8.9 (2017-04-05)
+===
+
+### Service Client Updates
+* `service/elasticache`: Updates service API, documentation, paginators, and examples
+  * ElastiCache added support for testing the Elasticache Multi-AZ feature with Automatic Failover.
+
+Release v1.8.8 (2017-04-04)
+===
+
+### Service Client Updates
+* `service/cloudwatch`: Updates service API, documentation, and paginators
+  * Amazon Web Services announced the immediate availability of two additional alarm configuration rules for Amazon CloudWatch Alarms. The first rule is for configuring missing data treatment. Customers have the options to treat missing data as alarm threshold breached, alarm threshold not breached, maintain alarm state and the current default treatment. The second rule is for alarms based on percentiles metrics that can trigger unnecassarily if the percentile is calculated from a small number of samples. The new rule can treat percentiles with low sample counts as same as missing data. If the first rule is enabled, the same treatment will be applied when an alarm encounters a percentile with low sample counts.
+
 Release v1.8.7 (2017-04-03)
 ===
 

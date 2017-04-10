@@ -14,9 +14,11 @@ clean:
 
 ################################################
 
+# download all the deps defined in vendor.yml
 .PHONY: vendor
 vendor:
 	govend -v --skipTestFiles
 
+# update to the latest version of the dependencies
 vendor-update:
 	govend -u -v -l --skipTestFiles

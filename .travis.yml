@@ -14,12 +14,9 @@ before_install:
   - sudo chmod a+rwx /pool-default
   - sudo virsh pool-define pool.xml
   - sudo virsh pool-start default
-  - go get github.com/mattn/goveralls
-  - go get -u github.com/govend/govend
-  - govend -v
 
 install:
-  - go build .
+  - make
 
 # override the custom test script, this would trigger
 # also the execution of the unit tests of the vendored
@@ -31,5 +28,5 @@ env:
     - LIBVIRT_DEFAULT_URI="qemu:///system"
 
 script:
-  - sg libvirtd -c "go test -v ./libvirt"
-  - sg libvirtd -c "$HOME/gopath/bin/goveralls -v -service=travis-ci"
+  - sg libvirtd -c "go test -v ./providers"
+  - sg libvirtd -c "go test -v ./provisioners"
