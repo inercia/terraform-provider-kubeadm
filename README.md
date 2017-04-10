@@ -1,5 +1,7 @@
 # Terraform kubeadm plugin
 
+[![Build Status](https://travis-ci.org/inercia/terraform-kubeadm.svg?branch=master)](https://travis-ci.org/inercia/terraform-kubeadm)
+
 This provider is still being actively developed. To see what is left or planned,
 see the [issues list](https://github.com/inercia/terraform-kubeadm/issues).
 
