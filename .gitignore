@@ -1,3 +1,5 @@
-provisioners/kubeadm/generated.go
+osc
+
+generated*.go
 
 terraform.tfstate*
