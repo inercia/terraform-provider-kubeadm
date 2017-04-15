@@ -3,11 +3,11 @@ all: build
 build: providers/terraform-provider-kubeadm provisioners/terraform-provisioner-kubeadm
 
 providers/terraform-provider-kubeadm:
-	cd providers && go install .
+	cd providers && go build -o $$GOBIN/terraform-provider-kubeadm .
 
 provisioners/terraform-provisioner-kubeadm:
 	cd provisioners/kubeadm && go generate
-	cd provisioners && go install .
+	cd provisioners && go build -o $$GOBIN/terraform-provisioner-kubeadm .
 
 clean:
 	rm -f */*/generated.go $$GOPATH/bin/terraform-{provider,provisioner}-kubeadm
@@ -22,3 +22,8 @@ vendor:
 # update to the latest version of the dependencies
 vendor-update:
 	govend -u -v -l --skipTestFiles
+
+################################################
+
+rpm:
+	cd osc && osc build

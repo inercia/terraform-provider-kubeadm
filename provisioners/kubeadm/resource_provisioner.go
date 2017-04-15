@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -20,8 +21,9 @@ import (
 )
 
 const (
-	defaultKubeadmSetup = "kubeadm-setup"
-	defaultEtcKubelet   = "/etc/kubernetes/kubelet"
+	defaultKubeadmVersion = "v1.5"
+	defaultKubeadmSetup   = "kubeadm-setup"
+	defaultEtcKubelet     = "/etc/kubernetes/kubelet"
 )
 
 var (
@@ -40,9 +42,12 @@ type ResourceProvisioner struct {
 	masterConfig *kubernetes.MasterConfiguration
 	nodeConfig   *kubernetes.NodeConfiguration
 
-	Master      string `mapstructure:"master"` // something like <master-ip>:<master-port>
-	Config      string `mapstructure:"config"`
-	PreventSudo bool   `mapstructure:"prevent_sudo"`
+	Master       string `mapstructure:"master"` // something like <master-ip>:<master-port>
+	Config       string `mapstructure:"config"`
+	SetupScript  string `mapstructure:"setup_script"`
+	SetupVersion string `mapstructure:"setup_version"`
+
+	PreventSudo bool `mapstructure:"prevent_sudo"`
 }
 
 // decodes configuration from terraform and builds out a provisioner
@@ -72,6 +77,7 @@ func (p *ResourceProvisioner) loadFromResourceConfig(c *terraform.ResourceConfig
 		return err
 	}
 
+	// put the kubeadm config in the right place: master or node
 	if len(p.Config) > 0 {
 		if len(p.Master) == 0 {
 			log.Printf("[DEBUG] parsing master configuration from JSON")
@@ -79,7 +85,7 @@ func (p *ResourceProvisioner) loadFromResourceConfig(c *terraform.ResourceConfig
 			p.nodeConfig = nil
 			err := json.Unmarshal([]byte(p.Config), p.masterConfig)
 			if err != nil {
-				log.Printf("[ERROR] provisioner-kubeadm: could not parse master configuration from '%s'", p.Config)
+				log.Printf("[ERROR] could not parse master configuration from '%s'", p.Config)
 				return err
 			}
 		} else {
@@ -88,10 +94,15 @@ func (p *ResourceProvisioner) loadFromResourceConfig(c *terraform.ResourceConfig
 			p.nodeConfig = &kubernetes.NodeConfiguration{}
 			err := json.Unmarshal([]byte(p.Config), p.nodeConfig)
 			if err != nil {
-				log.Printf("[ERROR] provisioner-kubeadm: could not parse node configuration from '%s'", p.Config)
+				log.Printf("[ERROR] could not parse node configuration from '%s'", p.Config)
 				return err
 			}
 		}
+	}
+
+	// fix some other default values
+	if len(p.SetupVersion) == 0 {
+		p.SetupVersion = defaultKubeadmVersion
 	}
 
 	return nil
@@ -137,18 +148,29 @@ func (r ResourceProvisioner) Apply(o terraform.UIOutput, s *terraform.InstanceSt
 	}
 	defer comm.Disconnect()
 
-	o.Output("Uploading kubeadm runner...")
+	// setup kubeadm
 	remoteSetupScript := newRemoteScript(o, comm)
-	if err := remoteSetupScript.UploadScript(strings.NewReader(setupScriptCode), defaultKubeadmSetup); err != nil {
-		return err
+	if len(r.SetupScript) > 0 {
+		o.Output(fmt.Sprintf("Uploading custom kubeadm script from %s...", r.SetupScript))
+		f, err := os.Open(r.SetupScript)
+		if err != nil {
+			return err
+		}
+		if err := remoteSetupScript.UploadScript(f, defaultKubeadmSetup); err != nil {
+			return err
+		}
+	} else {
+		o.Output("Uploading default kubeadm setup script...")
+		if err := remoteSetupScript.UploadScript(strings.NewReader(setupScriptCode), defaultKubeadmSetup); err != nil {
+			return err
+		}
 	}
-
-	// build a command to run "kubeadm join" in a node
 	o.Output("Running setup script")
 	if err := remoteSetupScript.Run("", useSudo); err != nil {
 		return err
 	}
 
+	// run kukbeadm init/join
 	if len(r.Master) == 0 {
 		// TODO: kubeadm v1.5.5 does not work fine with config files
 		//r.uploadConfig(r.masterConfig, "master", o, comm)

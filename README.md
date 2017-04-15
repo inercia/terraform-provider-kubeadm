@@ -113,6 +113,8 @@ $ terraform destroy
 
 ## Arguments
 
+### ... for the provider
+
 This is the list of arguments you can use in the `resource "kubeadm"`:
 
   * `api_advertised`: API server advertised IP/name
@@ -126,16 +128,40 @@ This is the list of arguments you can use in the `resource "kubeadm"`:
   * `services_cidr`: The CIDR range of cluster services (Example: `10.3.0.0/24`)
   * `version`: Kubernetes version to use (Example: `v1.6.1`)
 
+### ... for the provisioner
+
+  * `master`: the address of the master of the cluster. the presence of the master
+  indicates that this resource will be provisioned as a minion
+  * `config`: the configuration to use, will refer to the `${... config.master}`
+  in the master, and `${... config.node}` in the minions.
+  * `setup_script` (optional): a setup script that will be used for installing `kubeadm`.
+  It will be uploaded to the master and minions and executed before trying to run `kubeadm`.
+  * `setup_version` (optional): the version of kubeadm installed by the `setup_script`.
+  It can be `v1.5` (default) or `v1.6`.
+
 ## Known limitations
 
 * `kubeadm 1.6.[01]` seems to be broken for me, so you should use
 images (or repos) with kubernetes `1.5.x`. But running kubeadm `1.5` does
-not mean you cannort run kubernetes 1.6: just use `version = 1.6` as a
-cluster argument.
+not mean you cannot run kubernetes 1.6: just include `version = 1.6` as a
+cluster's argument.
+* There is currently no way for downloading the `kubeconfig` file generated
+by `kubeadm`. You must `ssh` to the master machine and get the file from
+`/etc/kubernetes/admin.conf`.
+* `kubeadm` currently does not install any networking driver (ie, `flannel`,
+`calico`, etc). You need a valid `kubeconfig`, and then you can install the
+driver by just invoking `kubectl` with the right manifest, for example (for
+Flannel):
+  ```
+  export ARCH=amd64
+  export KUBECONFIG=<your-kubeconfig-file>
+  curl -sSL "https://github.com/coreos/flannel/blob/master/Documentation/kube-flannel.yml?raw=true" | sed "s/amd64/${ARCH}/g" | kubectl create -f -
+  ```
 * The `kubeadm-setup.sh` tries to does its best in order to install
 `kubeadm`, but some distros have not been tested too much. I'use used
 `libvirt` with _OpenSUSE Leap 42.2_ images for running my tests, so that
 could be considered the perfect combination for trying this...
+* See also the current list of [`kubeadm` limitations](https://kubernetes.io/docs/getting-started-guides/kubeadm/#limitations)
 
 ## Running acceptance tests
 
