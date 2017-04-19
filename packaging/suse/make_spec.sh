@@ -42,42 +42,46 @@ Name:           $NAME
 Version:        $VERSION
 Release:        0
 License:        MPL-2.0
-Summary:        Experimental Terraform provider for libvirt
-Url:            https://github.com/dmacvicar/terraform-provider-libvirt/
+Summary:        Experimental Terraform plugin for kubeadm
+Url:            https://github.com/inercia/terraform-kubeadm/
 Group:          System/Management
 Source:         %{name}-%{version}.tar.xz
-Source1:        vendor.tar.xz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 
 BuildRequires:  golang-packaging
 BuildRequires:  libvirt-devel
 BuildRequires:  xz
+BuildRequires:  go >= 1.6
 
 Requires:       terraform >= 0.8.5
-Requires:       libvirt-client
 Requires:       genisoimage
 %{go_provides}
 
 %description
-This is a terraform provider that lets you provision servers on a libvirt host
-via Terraform.
+Terraform plugin for using kubeadm for creating kubernetes clusters.
 
 %prep
 %setup -q -n %{name}-%{version}
-tar xvJf %{SOURCE1}
 
 %build
 %goprep github.com/inercia/terraform-kubeadm
-%gobuild
+echo ">>>> making"
+export GOPATH=%{_builddir}/go
+export GOBIN=$GOPATH/bin
+make -C $GOPATH/src/github.com/inercia/terraform-kubeadm
 
 %install
-%goinstall
+
+echo ">>>> installing"
+install -m 755 -d %{buildroot}%{_bindir}
+install -p -m 755 -t %{buildroot}%{_bindir} %{_builddir}/go/bin/terraform-{provider,provisioner}-kubeadm
+
 rm -rf %{buildroot}/%{_libdir}/go/contrib
 
 %files
 %defattr(-,root,root,-)
-%doc README.md LICENSE
-%{_bindir}/%{name}
+%doc README.md
+%{_bindir}/terraform-{provider,provisioner}-kubeadm
 
 %changelog
 EOF
