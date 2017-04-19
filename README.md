@@ -34,17 +34,15 @@ zypper install terraform-kubeadm
 
 1.  `go get -u github.com/inercia/terraform-kubeadm`
 
-2.  Switch the terraform project back to the stable version, otherwise you will get a `Incompatible API version with plugin. Plugin version: 1, Ours: 2` error at runtime:
+2.  Make sure your Terraform binary has been built with some stable version,
+    otherwise you will get a `Incompatible API version with plugin. Plugin version: 1, Ours: 2` error at runtime. If you built it from sources:
     ```
     cd $GOPATH/src/github.com/hashicorp/terraform
-    git checkout v0.6.16
+    git checkout v0.8.0
     cd $GOPATH/src/github.com/inercia/terraform-kubeadm
     ```
-3.  .. or alternatively install [govend](https://github.com/govend/govend) and:
-    1. Run `govend`, which will scan dependencies and download them into vendor
-    2. problematic dependencies, like terraform, will be automatically in the right version thanks to the `vendor.yml` file.
-4.  Run `go install` to build the binary. You will now find the
-    binary at `$GOPATH/bin/terraform-provider-libvirt`.
+3.  Run `make` to build the binaries. You will now find the
+    binary at `$GOPATH/bin/terraform-{provider,provisioner}-kubeadm`.
 
 ### `terraformrc` file
 
