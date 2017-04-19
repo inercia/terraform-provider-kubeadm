@@ -3,11 +3,13 @@ all: build
 build: providers/terraform-provider-kubeadm provisioners/terraform-provisioner-kubeadm
 
 providers/terraform-provider-kubeadm:
-	cd providers && go build -o $$GOBIN/terraform-provider-kubeadm .
+	[ -n "$$GOBIN" ] || GOBIN=$$GOPATH/bin ; \
+		cd providers && go build -o $$GOBIN/terraform-provider-kubeadm .
 
 provisioners/terraform-provisioner-kubeadm:
 	cd provisioners/kubeadm && go generate
-	cd provisioners && go build -o $$GOBIN/terraform-provisioner-kubeadm .
+	[ -n "$$GOBIN" ] || GOBIN=$$GOPATH/bin ; \
+		cd provisioners && go build -o $$GOBIN/terraform-provisioner-kubeadm .
 
 clean:
 	rm -f */*/generated.go $$GOPATH/bin/terraform-{provider,provisioner}-kubeadm
