@@ -137,9 +137,12 @@ func runCommand(o terraform.UIOutput, comm communicator.Communicator, useSudo bo
 	if err := comm.Start(cmd); err != nil {
 		return fmt.Errorf("Error executing command %q: %v", cmd.Command, err)
 	}
-	cmd.Wait()
-	if cmd.ExitStatus != 0 {
-		err = fmt.Errorf("Command %q exited with non-zero exit status: %d", cmd.Command, cmd.ExitStatus)
+	waitResult := cmd.Wait()
+	if waitResult  != nil {
+		cmdError, _ := waitResult.(*remote.ExitError)
+		if cmdError.ExitStatus != 0 {
+			err = fmt.Errorf("Command '%q' exited with non-zero exit status: %d", cmdError.Command, cmdError.ExitStatus)
+		}	
 	}
 
 	outW.Close()

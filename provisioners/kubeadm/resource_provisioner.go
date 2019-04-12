@@ -260,6 +260,11 @@ func (r *ResourceProvisioner) Validate(c *terraform.ResourceConfig) (ws []string
 	return ws, es
 }
 
+func (r *ResourceProvisioner) Stop() error {
+	// TODO
+	return nil
+}
+
 func retryFunc(timeout time.Duration, f func() error) error {
 	finish := time.After(timeout)
 	for {
