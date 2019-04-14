@@ -1,8 +1,9 @@
 dist: trusty
+services:
+  - docker
 language: go
-
 go:
-  - 1.7
+  - "1.11.x"
 
 before_install:
   - sudo add-apt-repository -y cloud-archive:mitaka
@@ -28,5 +29,16 @@ env:
     - LIBVIRT_DEFAULT_URI="qemu:///system"
 
 script:
-  - sg libvirtd -c "go test -v ./providers"
-  - sg libvirtd -c "go test -v ./provisioners"
+  #- sg libvirtd -c "go test -v ./providers"
+  #- sg libvirtd -c "go test -v ./provisioners"
+  - make test
+  - make vet
+  #- make website-test
+
+branches:
+  only:
+    - master
+matrix:
+  fast_finish: true
+  allow_failures:
+    - go: tip

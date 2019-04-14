@@ -11,6 +11,7 @@ require (
 	github.com/dylanmei/winrmtest v0.0.0-20151226195028-025617847eb2
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-ini/ini v1.42.1-0.20190327024845-3be5ad479f69
+	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1
 	github.com/hashicorp/errwrap v1.0.0
 	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
@@ -41,6 +42,7 @@ require (
 	github.com/mitchellh/reflectwalk v0.0.0-20170110165207-417edcfd99a4
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
 	github.com/packer-community/winrmcp v0.0.0-20170128143328-c804d432b8b7
+	github.com/pkg/errors v0.8.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/satori/go.uuid v0.0.0-20170321230731-5bf94b69c6b6
 	github.com/smartystreets/assertions v0.0.0-20170213165318-c9ee7d9e9a2a
@@ -50,7 +52,12 @@ require (
 	github.com/zclconf/go-cty v0.0.0-20190320224746-fd76348b9329 // indirect
 	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3 // indirect
-	golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a
+	golang.org/x/sys v0.0.0-20190312061237-fead79001313
+	google.golang.org/appengine v1.5.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
 	gopkg.in/yaml.v2 v2.2.2
+	k8s.io/apiserver v0.0.0-20190413053200-5b6ebd80335e // indirect
+	k8s.io/client-go v11.0.0+incompatible // indirect
+	k8s.io/cluster-bootstrap v0.0.0-20190409094012-b1f5b510577d // indirect
+	k8s.io/kubernetes v1.14.1
 )

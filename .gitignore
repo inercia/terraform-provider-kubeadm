@@ -1,5 +1,4 @@
 osc
-
-generated*.go
-
+.idea
 terraform.tfstate*
+.terraform

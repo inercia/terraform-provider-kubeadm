@@ -14,22 +14,6 @@ kubernetes on a cluster provisioned with [Terraform](https://terraform.io/).
 
 ## Installing
 
-### ... from RPMs
-
-[Copied from the Terraform documentation](https://www.terraform.io/docs/plugins/basics.html):
-> To install a plugin, put the binary somewhere on your filesystem, then configure Terraform to be able to find it. The configuration where plugins are defined is ~/.terraformrc for Unix-like systems and %APPDATA%/terraform.rc for Windows.
-
-If you are using opensuse/SUSE distro, add the repo and download the package (check the repo according your distro)
-
-```console
-
-DISTRO=openSUSE_Leap_42.1
-zypper addrepo http://download.opensuse.org/repositories/Virtualization:containers/$DISTRO/Virtualization:containers.repo
-zypper refresh
-zypper install terraform-kubeadm
-
-```
-
 ### ... from source
 
 1.  `go get -u github.com/inercia/terraform-kubeadm`
@@ -53,11 +37,11 @@ your `~/.terraformrc` could look like this:
 ```hcl
 providers {
   libvirt = "/home/user/go/bin/terraform-provider-libvirt"
-  kubeadm = "/home/user/go/bin/terraform-kubeadm"
+  kubeadm = "/home/user/go/bin/terraform-provider-kubeadm"
 }
 
 provisioners {
-  kubeadm = "/home/user/go/bin/terraform-kubeadm"
+  kubeadm = "/home/user/go/bin/terraform-provisioner-kubeadm"
 }
 ```
 
@@ -68,9 +52,15 @@ created with the Terraform [libvirt](github.com/dmacvicar/terraform-provider-lib
 provider:
 
 ```hcl
-resource "kubeadm" "main" {
-  dns_domain = "my_cluster"
-  services_cidr = "10.25.0.0/16"
+data "kubeadm" "main" {
+  api {
+    external = "loadbalancer.external.com"
+  }
+  
+  network {
+    dns_domain = "my_cluster.local"  
+    services = "10.25.0.0/16"
+  }
 }
 
 # from the libvirt provider
@@ -79,7 +69,7 @@ resource "libvirt_domain" "master" {
   memory = 1024
   ...
   provisioner "kubeadm" {
-    config = "${kubeadm.k8s.config.master}"
+    config = "${data.kubeadm.main.config.init}"
   }
 }
 
@@ -89,17 +79,17 @@ resource "libvirt_domain" "minion" {
   name       = "minion${count.index}"
   ...
   provisioner "kubeadm" {
-    config = "${kubeadm.k8s.config.node}"
-    master = "${libvirt_domain.master.network_interface.0.addresses.0}"
+    config = "${data.kubeadm.main.config.join}"
+    join = "${libvirt_domain.master.network_interface.0.addresses.0}"
   }
 }
 ```
 
 Notice that the `provisioner` at the
 
-* _master_ must specify the `config = ${... config.master}`,
-* _nodes_ must specify the `config = ${... config.node}` and a `master` pointing
-to the `<IP/name>` of the _master_
+* _seeder_ must specify the `config = ${XXX.config}`,
+* _joiner_ must specify the `config = ${XXX.config}` and a `join` pointing
+to the `<IP/name>` they must _join_.
 
 Now you can see the plan, apply it, and then destroy the infrastructure:
 
@@ -115,34 +105,37 @@ $ terraform destroy
 
 This is the list of arguments you can use in the `resource "kubeadm"`:
 
-  * `api_advertised`: API server advertised IP/name
-  * `api_port`: API server binding port
-  * `api_alt_names`: List of SANs to use in api-server certificate. Example: 'IP=127.0.0.1,IP=127.0.0.2,DNS=localhost', If empty, SANs will be extracted from the api_servers
-  * `authorization_mode`: Authentication mode (Example: `RBAC`)
-  * `cloud_provider`: The provider for cloud services.  Empty string for no provider
-  * `etcd_servers`: List of etcd servers URLs including host:port
-  * `dns_domain`: The DNS domain
-  * `pods_cidr`: The CIDR range of cluster pods
-  * `services_cidr`: The CIDR range of cluster services (Example: `10.3.0.0/24`)
-  * `version`: Kubernetes version to use (Example: `v1.6.1`)
+  * `version`: Kubernetes version to use (Example: `v1.14.1`)
+  * `api`:
+    * `advertised`: API server advertised IP/name
+    * `port`: API server binding port
+    * `alt_names`: List of SANs to use in api-server certificate. Example: 'IP=127.0.0.1,IP=127.0.0.2,DNS=localhost', If empty, SANs will be extracted from the api_servers
+  * `network`:  
+    * `dns_domain`: The DNS domain
+    * `pods_cidr`: The CIDR range of cluster pods
+    * `services_cidr`: The CIDR range of cluster services (Example: `10.3.0.0/24`)
+  * `etcd`
+    * `endpoints`: List of etcd servers URLs including host:port
+  * `config`: a read-only configruation that must be linked to
+  the `config` in the provisioner. 
 
 ### ... for the provisioner
 
-  * `master`: the address of the master of the cluster. the presence of the master
-  indicates that this resource will be provisioned as a minion
-  * `config`: the configuration to use, will refer to the `${... config.master}`
-  in the master, and `${... config.node}` in the minions.
-  * `setup_script` (optional): a setup script that will be used for installing `kubeadm`.
-  It will be uploaded to the master and minions and executed before trying to run `kubeadm`.
-  * `setup_version` (optional): the version of kubeadm installed by the `setup_script`.
+  * `join`: the address of the node to join in the cluster. 
+  The absence of a `join` indicates that this node will be used as a kubernetes
+  master and seeder for the cluster.
+  * `config`: a reference to the `config` configuration of the _provider_.
+  * `install`: (true/false) try to install the `kubeadm` package with the help of
+  the built-in script.
+  * `install_version` (optional): the version of kubeadm installed by automatic
+  `kubeadm` installer.
+  * `install_script` (optional): a user-provider script that will be used for installing
+  `kubeadm`. It will be uploaded to all the machines in the cluster and executed
+  before trying to run `kubeadm`.
   It can be `v1.5` (default) or `v1.6`.
 
 ## Known limitations
 
-* `kubeadm 1.6.[01]` seems to be broken for me, so you should use
-images (or repos) with kubernetes `1.5.x`. But running kubeadm `1.5` does
-not mean you cannot run kubernetes 1.6: just include `version = 1.6` as a
-cluster's argument.
 * There is currently no way for downloading the `kubeconfig` file generated
 by `kubeadm`. You must `ssh` to the master machine and get the file from
 `/etc/kubernetes/admin.conf`.
