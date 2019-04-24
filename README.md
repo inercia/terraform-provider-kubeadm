@@ -101,24 +101,6 @@ $ terraform destroy
 
 ## Arguments
 
-### ... for the provider
-
-This is the list of arguments you can use in the `resource "kubeadm"`:
-
-  * `version`: Kubernetes version to use (Example: `v1.14.1`)
-  * `api`:
-    * `advertised`: API server advertised IP/name
-    * `port`: API server binding port
-    * `alt_names`: List of SANs to use in api-server certificate. Example: 'IP=127.0.0.1,IP=127.0.0.2,DNS=localhost', If empty, SANs will be extracted from the api_servers
-  * `network`:  
-    * `dns_domain`: The DNS domain
-    * `pods_cidr`: The CIDR range of cluster pods
-    * `services_cidr`: The CIDR range of cluster services (Example: `10.3.0.0/24`)
-  * `etcd`
-    * `endpoints`: List of etcd servers URLs including host:port
-  * `config`: a read-only configruation that must be linked to
-  the `config` in the provisioner. 
-
 ### ... for the provisioner
 
   * `join`: the address of the node to join in the cluster. 

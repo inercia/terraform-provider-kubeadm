@@ -11,8 +11,7 @@ GOBIN=$([ -n "${GOBIN}" ] && echo ${GOBIN} || (echo $(GOPATH)/bin))
 DISTROBUILDER=
 DISTROBUILDER_YAML=$DIR/distrobuilder-opensuse.yaml
 DISTROBUILDER_CACHE=$HOME/.cache/distrobuilder
-
-IMAGE_ALIAS="opensuse-caasp"
+IMAGE_ALIAS="lxd-kubeadm"
 
 FORCE=
 

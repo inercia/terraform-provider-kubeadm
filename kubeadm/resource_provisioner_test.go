@@ -1,12 +1,9 @@
 package kubeadm
 
 import (
-	"fmt"
-	"log"
 	"testing"
 
 	"github.com/hashicorp/terraform/config"
-	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
 )
 

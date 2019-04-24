@@ -38,6 +38,8 @@ done
 [ -z "$OUT_PACKAGE" ] && abort "no output package provided"
 [ -z "$OUT_VAR"     ] && abort "no output variable provided"
 
+rm -f $OUT_FILE
+
 echo   "// Code generated automatically with go generate; DO NOT EDIT." > $OUT_FILE
 echo                                     >> $OUT_FILE
 echo   "package $OUT_PACKAGE"            >> $OUT_FILE

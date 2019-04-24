@@ -1,0 +1,234 @@
+#####
+##### WARNING: this profile does not currently work
+#####          for some reason, the container created with this profile
+#####          does not get a valid network configuration
+#####
+
+image:
+  distribution: ubuntu
+  release: cosmic
+  variant: default
+  description: Ubuntu {{ image.release }}
+  expiry: 30d
+  architecture: amd64
+
+source:
+  downloader: ubuntu-http
+  url: http://cdimage.ubuntu.com/ubuntu-base
+  skip_verification: true
+  #keyserver: keyserver.ubuntu.com
+  #keys:
+  #  - 0x790BC7277767219C42C86F933B4FE6ACC0B21F32
+
+  apt_sources: |-
+    {% if image.architecture_mapped == "amd64" or image.architecture_mapped == "i386" %}deb http://archive.ubuntu.com/ubuntu {{ image.release }} main restricted universe multiverse
+    deb http://archive.ubuntu.com/ubuntu {{ image.release }}-updates main restricted universe multiverse
+    deb http://security.ubuntu.com/ubuntu {{ image.release }}-security main restricted universe multiverse
+    {% else %}deb http://ports.ubuntu.com/ubuntu-ports {{ image.release }} main restricted universe multiverse
+    deb http://ports.ubuntu.com/ubuntu-ports {{ image.release }}-updates main restricted universe multiverse
+    deb http://ports.ubuntu.com/ubuntu-ports {{ image.release }}-security main restricted universe multiverse
+    {% endif %}
+
+targets:
+  lxc:
+    create-message: |-
+      You just created an {{ image.description }} container.
+
+      To enable SSH, run: apt install openssh-server
+      No default root or user password are set by LXC.
+
+    config:
+      - type: all
+        before: 5
+        content: |-
+          lxc.include = LXC_TEMPLATE_CONFIG/ubuntu.common.conf
+
+      - type: user
+        before: 5
+        content: |-
+          lxc.include = LXC_TEMPLATE_CONFIG/ubuntu.userns.conf
+
+      - type: all
+        after: 4
+        content: |-
+          lxc.include = LXC_TEMPLATE_CONFIG/common.conf
+
+      - type: user
+        after: 4
+        content: |-
+          lxc.include = LXC_TEMPLATE_CONFIG/userns.conf
+
+      - type: all
+        content: |-
+          lxc.arch = {{ image.architecture_personality }}
+
+files:
+  - path: /etc/hostname
+    generator: hostname
+
+  - path: /etc/hosts
+    generator: hosts
+
+  - path: /etc/resolv.conf
+    generator: dump
+    content: |-
+      nameserver 8.8.8.8
+      nameserver 8.8.4.4
+
+  - path: /etc/resolvconf/resolv.conf.d/original
+    generator: remove
+
+  - path: /etc/resolvconf/resolv.conf.d/tail
+    generator: remove
+
+  - path: /etc/machine-id
+    generator: remove
+
+  - path: /etc/netplan/10-lxc.yaml
+    generator: dump
+    content: |-
+      network:
+        version: 2
+        ethernets:
+          eth0:
+            dhcp4: true
+
+    releases:
+      - artful
+      - bionic
+      - cosmic
+      - disco
+
+  - path: /etc/network/interfaces
+    generator: dump
+    content: |-
+      # This file describes the network interfaces available on your system
+      # and how to activate them. For more information, see interfaces(5).
+
+      # The loopback network interface
+      auto lo
+      iface lo inet loopback
+
+      auto eth0
+      iface eth0 inet dhcp
+    releases:
+      - trusty
+      - xenial
+
+  - path: /etc/init/lxc-tty.conf
+    generator: upstart-tty
+    releases:
+      - trusty
+
+  # From the version v11.0 kubelet requires to have shared mode for the host mounts.
+  # There is dirty hack for achieve that, inside LXC-container run:
+  # see https://medium.com/@kvaps/run-kubernetes-in-lxc-container-f04aa94b6c9c
+  - path: /etc/rc.local
+    generator: dump
+    content: |-
+      #!/bin/sh -e
+      mount --make-rshared /
+
+  - path: /etc/cni/net.d/99-loopback.conf
+    generator: dump
+    content: |-
+      {
+        "cniVersion": "0.2.0",
+        "name": "lo",
+        "type": "loopback"
+      }
+
+packages:
+  manager: apt
+  update: true
+  cleanup: true
+  sets:
+    - packages:
+        - software-properties-common
+        - netplan.io
+        - openssh-server
+        - openssh-client
+        - apt-transport-https
+        - language-pack-en
+        - vim
+        - gnupg
+        - sed
+        - sudo
+        - systemd
+        - apt-transport-https
+        - curl
+        - haproxy
+      action: install
+
+actions:
+  - trigger: post-update
+    action: |-
+      #!/bin/sh
+      set -eux
+
+      # Create the ubuntu user account
+      getent group sudo >/dev/null 2>&1 || groupadd --system sudo
+      useradd --create-home -s /bin/bash -G sudo -U ubuntu
+
+  - trigger: post-packages
+    action: |-
+      #!/bin/sh
+      set -eux
+
+      # disable some services that are enabled by default
+      systemctl disable haproxy
+
+      mkdir -p /etc/sysconfig
+      mkdir -p /etc/containerd
+      mkdir -p /etc/cni/net.d
+      mkdir -p /opt/cni/bin
+
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg          | apt-key add -
+      curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+
+      echo ">>> installing kubelet, kubeadm..."
+      apt-add-repository --yes --update 'deb https://apt.kubernetes.io/ kubernetes-xenial main'
+      apt-get install --yes kubelet kubeadm kubectl docker.io containerd runc
+      apt-mark hold kubelet kubeadm kubectl docker.io containerd runc
+      systemctl enable kubelet
+
+      echo ">>> make sure the locale is built and functional"
+      locale-gen en_US.UTF-8
+      update-locale LANG=en_US.UTF-8
+
+      echo ">>> setting docker config file"
+      echo '{ "storage-driver": "overlay2" }' > /etc/docker/daemon.json
+
+      echo ">>> cleanup underlying /run"
+      mount -o bind / /mnt
+      rm -rf /mnt/run/*
+      umount /mnt
+
+      echo ">>> cleanup temporary shadow paths"
+      rm /etc/*-
+
+      # encryted "linux"
+      # obtained with `echo "linux" | openssl passwd -1 -stdin`
+      ROOT_PASSWORD='$1$62xujQ/G$IxTMM4LZimNXF3LFcBawC1'
+
+      echo ">>> setting a trivial password for root and allowing SSH for root"
+      echo "root:$ROOT_PASSWORD" | /usr/sbin/chpasswd -e
+      echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
+
+      mkdir -p /root/.ssh
+      chmod 700 /root/.ssh
+      touch /root/.ssh/authorized_keys
+      chmod 600 /root/.ssh/authorized_keys
+
+      [ -f /etc/crio/crio.conf ] && /usr/bin/sed -i -e 's/btrfs/overlay2/g' /etc/crio/crio.conf
+
+      # some commands are really useless in a LXC container, so we create "fake" clones:
+      for target in /usr/bin/kmod /sbin/sysctl ; do
+        rm -f $target
+        ln -s /bin/true $target
+      done
+
+      exit 0
+
+mappings:
+  architecture_map: debian

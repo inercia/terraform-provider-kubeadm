@@ -7,7 +7,6 @@ provider "lxd" {
   accept_remote_certificate    = true
 }
 
-
 data "template_file" "authorized_keys_line" {
   count    = "${length(var.authorized_keys)}"
   template = "${file(element(var.authorized_keys, count.index))}"
@@ -24,19 +23,26 @@ ${file("~/.ssh/id_dsa.pub")}
 EOT
 }
 
-
 ##########################
 # Kubeadm #
 ##########################
 
 data "kubeadm" "main" {
-  api {
-    external = "loadbalancer.external.com"
+  network {
+    dns_domain = "mycluster.com"
+    services   = "10.25.0.0/16"
   }
 
-  network {
-    dns_domain = "my_cluster.local"
-    services = "10.25.0.0/16"
+  runtime {
+    # note: "crio" seems to have some issues in LXD: some pods keep erroring
+    #       in "ContainerCreating", with "failed to get network status for pod sandbox"
+    #       switching to Docker solves those problems...
+    engine = "docker"
+  }
+
+  cni {
+    # OpenSUSE images use a non-standard directory
+    bin_dir = "/usr/lib/cni"
   }
 }
 
@@ -48,13 +54,13 @@ resource "null_resource" "base_image" {
   # make sure we have an opensuse-caasp image
   # if that is not the case, build one with the help of distrobuilder
   provisioner "local-exec" {
-    command = "./support/build-image.sh --img '${var.img}' --force '${var.force_img}'"
+    command = "./images/build-image.sh --img '${var.img}' --yaml './images/${var.distrobuilder}' --force '${var.force_img}'"
   }
 }
 
-# from https://github.com/juju-solutions/bundle-canonical-kubernetes/issues/566#issuecomment-386195937
-resource "lxd_profile" "k8s" {
-  name = "k8s"
+# see https://github.com/corneliusweig/kubernetes-lxd
+resource "lxd_profile" "kubelet" {
+  name = "kubelet"
 
   device {
     name = "root"
@@ -67,48 +73,81 @@ resource "lxd_profile" "k8s" {
   }
 
   device {
-    name = "default"   # must match the `lxc storage show default` used
+    name = "default"
     type = "unix-block"
 
     properties {
-      source = "/dev/sda3"
-      path = "/dev/sda3"
-      #source = "/var/snap/lxd/common/lxd/storage-pools/default"
-      #path = "/var/snap/lxd/common/lxd/storage-pools/default"
+      source = "${var.root_device}"
+      path   = "${var.root_device}"
     }
   }
 
-  device {
-    name = "aadisable1"
-    type = "disk"
-
-    properties {
-      source = "/dev/null"
-      path = "/sys/module/nf_conntrack/parameters/hashsize"
-    }
-  }
-
+  # map /sys/module/apparmor/parameters/enabled -> /dev/null
   device {
     name = "aadisable2"
     type = "disk"
 
     properties {
       source = "/dev/null"
-      path = "/sys/module/apparmor/parameters/enabled"
+      path   = "/sys/module/apparmor/parameters/enabled"
+    }
+  }
+
+  # map /lib/modules -> /lib/modules
+  device {
+    name = "lib-modules"
+    type = "disk"
+
+    properties {
+      source = "/lib/modules"
+      path   = "/lib/modules"
+    }
+  }
+
+  # map /dev/kvm -> /dev/null
+  device {
+    name = "kvm"
+    type = "unix-char"
+
+    properties {
+      source = "/dev/null"
+      path   = "/dev/kvm"
+    }
+  }
+
+  device {
+    name = "mem"
+    type = "unix-char"
+
+    properties {
+      source = "/dev/null"
+      path   = "/dev/mem"
     }
   }
 
   config {
-    limits.cpu = 1
+    limits.cpu           = 1
     limits.cpu.allowance = "25%"
-    linux.kernel_modules = "ip_tables,ip6_tables,netlink_diag,nf_nat,overlay"
+    limits.memory        = "3GB"
+    limits.memory.swap   = "false"
+
+    #  for a privileged container which may create nested cgroups
     security.privileged = "true"
-    security.nesting = "true"
+    security.nesting    = "true"
+
+    # depending on the kernel of your host system, you need to add
+    # further kernel modules here. The ones listed above are for
+    # networking and for dockers overlay filesystem.
+    linux.kernel_modules = "br_netfilter,ip_tables,ip6_tables,ip_vs,ip_vs_rr,ip_vs_wrr,ip_vs_sh,netlink_diag,nf_nat,overlay,xt_conntrack"
+
+    environment.http_proxy = ""
+    user.network_mode      = ""
+
     raw.lxc = <<EOF
-lxc.apparmor.profile = unconfined
-lxc.cap.drop =
-lxc.cgroup.devices.allow = a
-lxc.mount.auto = proc:rw sys:rw
+lxc.apparmor.profile=unconfined
+lxc.cap.drop=
+lxc.cgroup.devices.allow=a
+lxc.mount.auto=proc:rw sys:rw
 EOF
   }
 }
@@ -122,7 +161,7 @@ resource "lxd_container" "master" {
   name       = "${var.name_prefix}master-${count.index}"
   image      = "${var.img}"
   depends_on = ["null_resource.base_image"]
-  profiles   = ["default", "${lxd_profile.k8s.name}"]
+  profiles   = ["default", "${lxd_profile.kubelet.name}"]
 
   connection {
     type     = "ssh"
@@ -136,7 +175,9 @@ resource "lxd_container" "master" {
   }
 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config.init}"
+    config     = "${data.kubeadm.main.config.init}"
+    kubeconfig = "${var.kubeconfig}"
+    manifests  = "${var.manifests}"
   }
 }
 
@@ -152,8 +193,8 @@ resource "lxd_container" "worker" {
   count      = "${var.worker_count}"
   name       = "${var.name_prefix}worker-${count.index}"
   image      = "${var.img}"
-  depends_on = ["null_resource.base_image"]
-  profiles   = ["default", "${lxd_profile.k8s.name}"]
+  depends_on = ["lxd_container.master"]
+  profiles   = ["default", "${lxd_profile.kubelet.name}"]
 
   connection {
     type     = "ssh"
@@ -168,61 +209,16 @@ resource "lxd_container" "worker" {
 
   provisioner "kubeadm" {
     config = "${data.kubeadm.main.config.join}"
-    join = "${lxd_container.master.0.ip_address}"
+    join   = "${lxd_container.master.0.ip_address}"
+
+    #ignore_checks = [
+    #  "NumCPU",
+    #  "FileContent--proc-sys-net-bridge-bridge-nf-call-iptables",
+    #  "Swap",
+    #]
   }
 }
 
 output "workers" {
   value = ["${lxd_container.worker.*.ip_address}"]
-}
-
-######################
-# Load Balancer node #
-######################
-data "template_file" "haproxy_backends_master" {
-  count    = "${var.master_count}"
-  template = "${file("templates/haproxy-backends.tpl")}"
-
-  vars = {
-    fqdn = "${var.name_prefix}master-${count.index}.${var.name_prefix}${var.domain_name}"
-    ip   = "${element(lxd_container.master.*.ip_address, count.index)}"
-  }
-}
-
-data "template_file" "haproxy_cfg" {
-  template = "${file("templates/haproxy.cfg.tpl")}"
-
-  vars = {
-    backends = "${join("      ", data.template_file.haproxy_backends_master.*.rendered)}"
-  }
-}
-
-resource "lxd_container" "lb" {
-  name       = "${var.name_prefix}lb"
-  image      = "${var.img}"
-  depends_on = ["lxd_container.master"]
-
-  connection {
-    type     = "ssh"
-    user     = "${var.ssh_user}"
-    password = "${var.ssh_pass}"
-  }
-
-  provisioner "file" {
-    content     = "${local.authorized_keys_file}"
-    destination = "/root/.ssh/authorized_keys"
-  }
-
-  provisioner "file" {
-    content     = "${data.template_file.haproxy_cfg.rendered}"
-    destination = "/etc/haproxy/haproxy.cfg"
-  }
-
-  provisioner "remote-exec" {
-    inline = "systemctl enable --now haproxy"
-  }
-}
-
-output "ip_lb" {
-  value = "${lxd_container.lb.ip_address}"
 }

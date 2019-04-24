@@ -2,4 +2,5 @@
 
 package kubeadm
 
-const kubeletSysconfigCode = `KUBELET_EXTRA_ARGS=`
+const kubeletSysconfigCode = `# kubelet extra configuration
+KUBELET_EXTRA_ARGS="--fail-swap-on=false"`

@@ -3,14 +3,8 @@ package kubeadm
 import (
 	"log"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/terraform/helper/schema"
-)
-
-const (
-	defaultPodCIDR           = "10.244.0.0/16"
-	defaultServiceCIDR       = "10.96.0.0/12"
-	defaultKubernetesVersion = "v1.14.1"
-	defaultDNSDomain         = "cluster.local"
 )
 
 func dataSourceKubeadm() *schema.Resource {
@@ -39,7 +33,35 @@ func dataSourceKubeadm() *schema.Resource {
 							Type:        schema.TypeList,
 							Elem:        &schema.Schema{Type: schema.TypeString},
 							Optional:    true,
-							Description: "List of SANs to use in api-server certificate. Example: 'IP=127.0.0.1,IP=127.0.0.2,DNS=localhost', If empty, SANs will be extracted from the api_servers",
+							Description: "List of SANs to use in api-server certificate. Example: 'IP=127.0.0.1,IP=127.0.0.2,DNS=localhost', If empty, SANs will be obtained from the external and internal names/IPs",
+						},
+					},
+				},
+			},
+			"cni": {
+				Type:     schema.TypeList,
+				Optional: true,
+				ForceNew: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						// "plugin": {
+						// 	Type:        schema.TypeString,
+						// 	Optional:    true,
+						// 	Default:     "",
+						// 	Description: "CNI plugin to install",
+						// },
+						"bin_dir": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Default:     defCniBinDir,
+							Description: "Binaries directory for CNI",
+						},
+						"conf_dir": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Default:     defCniConfDir,
+							Description: "Configuration directory for CNI",
 						},
 					},
 				},
@@ -59,20 +81,20 @@ func dataSourceKubeadm() *schema.Resource {
 						"services": {
 							Type:        schema.TypeString,
 							Optional:    true,
-							Default:     defaultServiceCIDR,
+							Default:     defServiceCIDR,
 							Description: "subnet used by k8s services. Defaults to 10.96.0.0/12.",
 						},
 						"pods": {
 							Type:        schema.TypeString,
 							Optional:    true,
-							Default:     defaultPodCIDR,
+							Default:     defPodCIDR,
 							Description: "subnet used by pods",
 						},
 						"dns_domain": {
 							Type:        schema.TypeString,
 							Optional:    true,
-							Default:     defaultDNSDomain,
-							Description: "dns domain used by k8s services. Defaults to cluster.local.",
+							Default:     defDNSDomain,
+							Description: "DNS domain used by k8s services. Defaults to cluster.local.",
 						},
 					},
 				},
@@ -97,7 +119,7 @@ func dataSourceKubeadm() *schema.Resource {
 						"etcd_version": {
 							Type:        schema.TypeString,
 							Optional:    true,
-							Description: "the images repository",
+							Description: "the etcd version",
 						},
 					},
 				},
@@ -113,7 +135,7 @@ func dataSourceKubeadm() *schema.Resource {
 							Type:        schema.TypeList,
 							Elem:        &schema.Schema{Type: schema.TypeString},
 							Optional:    true,
-							Description: "List of etcd servers URLs including host:port",
+							Description: "list of etcd servers URLs including host:port",
 						},
 					},
 				},
@@ -121,39 +143,55 @@ func dataSourceKubeadm() *schema.Resource {
 			"version": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				Default:     defaultKubernetesVersion,
+				Default:     defKubernetesVersion,
 				Description: "Kubernetes version to use (Example: v1.6.0).",
 			},
-			"extra_args": {
+			"runtime": {
 				Type:     schema.TypeList,
 				Optional: true,
 				ForceNew: true,
 				MaxItems: 1,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"api_server": {
-							Type:        schema.TypeMap,
-							Elem:        &schema.Schema{Type: schema.TypeString},
+						"engine": {
+							Type:        schema.TypeString,
 							Optional:    true,
-							Description: "Map of extra flags for running the API server",
+							Default:     defRuntimeEngine,
+							Description: "runtime engine: docker or crio",
 						},
-						"controller_manager": {
-							Type:        schema.TypeMap,
-							Elem:        &schema.Schema{Type: schema.TypeString},
-							Optional:    true,
-							Description: "Map of extra flags for running the Controller Manager",
-						},
-						"scheduler": {
-							Type:        schema.TypeMap,
-							Elem:        &schema.Schema{Type: schema.TypeString},
-							Optional:    true,
-							Description: "Map of extra flags for running the Scheduler",
-						},
-						"kubelet": {
-							Type:        schema.TypeMap,
-							Elem:        &schema.Schema{Type: schema.TypeString},
-							Optional:    true,
-							Description: "Map of extra flags for running the Kubelet",
+						"extra_args": {
+							Type:     schema.TypeList,
+							Optional: true,
+							ForceNew: true,
+							MaxItems: 1,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"api_server": {
+										Type:        schema.TypeMap,
+										Elem:        &schema.Schema{Type: schema.TypeString},
+										Optional:    true,
+										Description: "Map of extra flags for running the API server",
+									},
+									"controller_manager": {
+										Type:        schema.TypeMap,
+										Elem:        &schema.Schema{Type: schema.TypeString},
+										Optional:    true,
+										Description: "Map of extra flags for running the Controller Manager",
+									},
+									"scheduler": {
+										Type:        schema.TypeMap,
+										Elem:        &schema.Schema{Type: schema.TypeString},
+										Optional:    true,
+										Description: "Map of extra flags for running the Scheduler",
+									},
+									"kubelet": {
+										Type:        schema.TypeMap,
+										Elem:        &schema.Schema{Type: schema.TypeString},
+										Optional:    true,
+										Description: "Map of extra flags for running the Kubelet",
+									},
+								},
+							},
 						},
 					},
 				},
@@ -208,6 +246,8 @@ func dataSourceKubeadmRead(d *schema.ResourceData, meta interface{}) error {
 		"init": ToTerraformSafeString(initConfig[:]),
 		"join": ToTerraformSafeString(joinConfig[:]),
 	}
+
+	log.Printf("[DEBUG] [KUBEADM] provisioner configuration:\n%s\n%", spew.Sdump(config))
 
 	d.Set("config", config)
 

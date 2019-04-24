@@ -5,18 +5,14 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	kubeadmscheme "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/scheme"
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
-)
-
-const (
-	defaultAPIServerPort = 6443
 )
 
 // dataSourceKubeadmReadToInitConfig copies some settings from the
@@ -32,12 +28,14 @@ func dataSourceKubeadmReadToInitConfig(d *schema.ResourceData, token string) ([]
 			},
 			UseHyperKubeImage: true,
 		},
-		NodeRegistration: kubeadmapiv1beta1.NodeRegistrationOptions{},
+		NodeRegistration: kubeadmapiv1beta1.NodeRegistrationOptions{
+			KubeletExtraArgs: defKubeletSettings,
+		},
 	}
 
 	if _, ok := d.GetOk("api.0"); ok {
 		if external, ok := d.GetOk("api.0.external"); ok {
-			initConfig.ControlPlaneEndpoint = addressWithPort(external.(string), defaultAPIServerPort)
+			initConfig.ControlPlaneEndpoint = addressWithPort(external.(string), defAPIServerPort)
 		}
 
 		if internal, ok := d.GetOk("api.0.internal"); ok {
@@ -71,7 +69,16 @@ func dataSourceKubeadmReadToInitConfig(d *schema.ResourceData, token string) ([]
 			initConfig.Networking.ServiceSubnet = servicesCIDROpt.(string)
 		}
 		if dnsDomainOpt, ok := d.GetOk("network.0.dns_domain"); ok {
-			initConfig.Networking.DNSDomain = dnsDomainOpt.(string)
+			dnsDomain := dnsDomainOpt.(string)
+
+			// validate the DNS domain... otherwise we will get an error when
+			// we run `kubeadm init`
+			r, _ := regexp.Compile(`[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*`)
+			if !r.MatchString(dnsDomain) {
+				return nil, fmt.Errorf("invalid DNS name '%s': a DNS-1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (e.g. 'example.com')", dnsDomain)
+			}
+
+			initConfig.Networking.DNSDomain = dnsDomain
 		}
 	}
 
@@ -93,18 +100,39 @@ func dataSourceKubeadmReadToInitConfig(d *schema.ResourceData, token string) ([]
 		}
 	}
 
-	if _, ok := d.GetOk("extra_args.0"); ok {
-		if args, ok := d.GetOk("extra_args.0.api_server"); ok {
-			initConfig.ClusterConfiguration.APIServer.ExtraArgs = args.(map[string]string)
+	if _, ok := d.GetOk("runtime.0"); ok {
+		if runtimeEngineOpt, ok := d.GetOk("runtime.0.engine"); ok {
+			if socket, ok := defCriSocket[runtimeEngineOpt.(string)]; ok {
+				log.Printf("[DEBUG] [KUBEADM] setting CRI socket '%s'", socket)
+				initConfig.NodeRegistration.KubeletExtraArgs["container-runtime-endpoint"] = fmt.Sprintf("unix://%s", socket)
+				initConfig.NodeRegistration.CRISocket = socket
+			} else {
+				return []byte{}, fmt.Errorf("unknown runtime engine %s", runtimeEngineOpt.(string))
+			}
 		}
-		if args, ok := d.GetOk("extra_args.0.controller_manager"); ok {
-			initConfig.ClusterConfiguration.ControllerManager.ExtraArgs = args.(map[string]string)
+
+		if _, ok := d.GetOk("runtime.0.extra_args.0"); ok {
+			if args, ok := d.GetOk("runtime.0.extra_args.0.api_server"); ok {
+				initConfig.ClusterConfiguration.APIServer.ExtraArgs = args.(map[string]string)
+			}
+			if args, ok := d.GetOk("runtime.0.extra_args.0.controller_manager"); ok {
+				initConfig.ClusterConfiguration.ControllerManager.ExtraArgs = args.(map[string]string)
+			}
+			if args, ok := d.GetOk("runtime.0.extra_args.0.scheduler"); ok {
+				initConfig.ClusterConfiguration.Scheduler.ExtraArgs = args.(map[string]string)
+			}
+			if args, ok := d.GetOk("runtime.0.extra_args.0.kubelet"); ok {
+				initConfig.NodeRegistration.KubeletExtraArgs = args.(map[string]string)
+			}
 		}
-		if args, ok := d.GetOk("extra_args.0.scheduler"); ok {
-			initConfig.ClusterConfiguration.Scheduler.ExtraArgs = args.(map[string]string)
+	}
+
+	if _, ok := d.GetOk("cni.0"); ok {
+		if arg, ok := d.GetOk("cni.0.bin_dir"); ok {
+			initConfig.NodeRegistration.KubeletExtraArgs["cni-bin-dir"] = arg.(string)
 		}
-		if args, ok := d.GetOk("extra_args.0.kubelet"); ok {
-			initConfig.NodeRegistration.KubeletExtraArgs = args.(map[string]string)
+		if arg, ok := d.GetOk("cni.0.conf_dir"); ok {
+			initConfig.NodeRegistration.KubeletExtraArgs["cni-conf-dir"] = arg.(string)
 		}
 	}
 
@@ -146,12 +174,4 @@ func dataSourceKubeadmReadToInitConfig(d *schema.ResourceData, token string) ([]
 	allFiles = append(allFiles, clusterbytes)
 
 	return bytes.Join(allFiles, []byte(kubeadmconstants.YAMLDocumentSeparator)), nil
-}
-
-// return an address as host:port (setting a default port p if there was no port specified)
-func addressWithPort(name string, p int) string {
-	if strings.IndexByte(name, ':') < 0 {
-		return net.JoinHostPort(name, fmt.Sprintf("%d", p))
-	}
-	return name
 }

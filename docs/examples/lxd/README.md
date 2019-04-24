@@ -2,10 +2,6 @@
 
 Terraform cluster definition leveraging the libvirt provider.
 
-The whole infra is based on openSUSE Leap 15.0 built for public cloud usage.
-
-The image customization relies on cloud-init.
-
 ## Pre-requisites
 
 * _LXD_
@@ -32,18 +28,11 @@ The image customization relies on cloud-init.
 By default all the machines will have the following users:
 
 * All the instances have a `root` user with `linux` password.
-* It is important to have your public ssh key within the `authorized_keys`,
-this is done by `cloud-init` through a terraform variable called `authorized_keys`.
-
-## Load balancer
-
-Terraform will create a static DHCP configuration to be used.
 
 ## Topology
 
 The cluster will be made by these machines:
 
-  * A load balancer
   * X master nodes: have `kubeadm`, `kubelet` and `kubectl` preinstalled
   * Y worker nodes: have `kubeadm`, `kubelet` and `kubectl` preinstalled
 

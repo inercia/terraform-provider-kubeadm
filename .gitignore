@@ -1,4 +1,8 @@
 osc
 .idea
+
 terraform.tfstate*
 .terraform
+*.auto.tfvars
+
+*.local

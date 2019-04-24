@@ -11,16 +11,23 @@ TEST           ?= $$(go list ./... |grep -v 'vendor')
 GOFMT_FILES    ?= $$(find . -name '*.go' |grep -v vendor)
 WEBSITE_REPO   = github.com/hashicorp/terraform-website
 
+# for some unknown reason, "provisioners" are only recognized in this directory
+PLUGINS_DIR    = $$HOME/.terraform.d/plugins
+
 all: build
 
 default: build
 
-build: fmtcheck
-	$(GO) build -o $(GO_BIN)/terraform-provider-kubeadm .
-	ln -sf $(GO_BIN)/terraform-provider-kubeadm $(GO_BIN)/terraform-provisioner-kubeadm
+build: fmtcheck build-forced
+
+build-forced:
+	mkdir -p $(PLUGINS_DIR)
+	$(GO) build -o $(PLUGINS_DIR)//terraform-provider-kubeadm .
+	cp -f $(PLUGINS_DIR)/terraform-provider-kubeadm \
+	      $(PLUGINS_DIR)/terraform-provisioner-kubeadm
 
 generate:
-	cd kubeadm && $(GO) generate -n
+	cd kubeadm && $(GO) generate -x
 
 ################################################
 

@@ -73,15 +73,23 @@ files:
       #!/bin/sh -e
       mount --make-rshared /
 
+  - path: /etc/cni/net.d/99-loopback.conf
+    generator: dump
+    content: |-
+      {
+        "cniVersion": "0.2.0",
+        "name": "lo",
+        "type": "loopback"
+      }
+
 packages:
   manager: zypper
   update: false
   refresh: true
   cleanup: true
   repositories:
-    - name: suse_ca
-      url: http://download.suse.de/ibs/SUSE:/CA/SLE_15_SP1
-
+    - name: kubic
+      url: https://download.opensuse.org/repositories/devel:/kubic/openSUSE_Leap_15.1/
   sets:
     - packages:
         - systemd-sysvinit
@@ -101,15 +109,12 @@ packages:
         - shared-mime-info
         - which
         - vim
-        # certificates for the SUSE registry
-        - ca-certificates-suse
         # CaaSP packages
         - kubernetes-kubeadm
         - kubernetes-kubelet
         - kubectl
         - haproxy
-        - cri-o
-        - cri-tools
+        - docker
       action: install
 
 actions:
@@ -117,11 +122,11 @@ actions:
     action: |-
       #!/bin/sh
 
-      echo ">>> tweaking some kubelet args..."
-      echo 'KUBELET_EXTRA_ARGS="--fail-swap-on=false"' > /etc/sysconfig/kubelet
-      cat /etc/sysconfig/kubelet
+      mkdir -p /etc/cni/net.d
 
-      # encryted "linux"
+      # NOTE: CNI plugins are installed in /usr/lib/cni in OpenSUSE
+
+      # encrypted "linux"
       # obtained with `echo "linux" | openssl passwd -1 -stdin`
       ROOT_PASSWORD='$1$62xujQ/G$IxTMM4LZimNXF3LFcBawC1'
 
@@ -134,48 +139,21 @@ actions:
       touch /root/.ssh/authorized_keys
       chmod 600 /root/.ssh/authorized_keys
 
-      # for using this image with the Vagrant-LXD  plugin, uncomment the following lines:
-      # encryted "vagrant"
-      # obtained with `echo "vagrant" | openssl passwd -1 -stdin`
-      # PASSWORD='$1$TEfkpqbs$cwgryzvqKnlWf5WgPBvKS0'
-      # echo ">>> creating vagrant user"
-      # groupadd -f vagrant
-      # useradd --create-home -p "$PASSWORD" -s /bin/bash vagrant
-      # echo ">>> adding vagrant to the 'sudo' group"
-      # groupadd -f sudo
-      # usermod -a -G sudo vagrant
-      # echo ">>> adding vagrant to the 'docker' group"
-      # usermod -a -G docker vagrant
-      # echo ">>> enabling passwordless sudo for users under the 'sudo' group"
-      # mkdir -p /etc/sudoers.d
-      # echo "%sudo ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/sudo
-
       echo ">>> making sure some packages are not installed..."
       rpm -e --nodeps docker-kubic docker-libnetwork-kubic docker-runc-kubic || /bin/true
 
-      /usr/bin/sed -i -e 's/btrfs/overlay2/g' /etc/crio/crio.conf
+      # /usr/bin/sed -i -e 's/btrfs/overlay2/g' /etc/crio/crio.conf
 
       echo ">>> enabling some services..."
       systemctl enable sshd
-      systemctl enable crio
+      systemctl enable docker
+      systemctl disable crio
 
       # some commands are really useless in a LXC container, so we create "fake" clones:
       for target in /usr/bin/kmod /sbin/sysctl ; do
         rm -f $target
         ln -s /bin/true $target
       done
-
-      # pre-pull some images
-      # IMAGES="\
-      #   registry.suse.de/devel/caasp/4.0/containers/containers/caasp/v4/pause:3.1 \
-      #   registry.suse.de/devel/caasp/4.0/containers/containers/caasp/v4/etcd:3.3.1 \
-      #   registry.suse.de/devel/caasp/4.0/containers/containers/caasp/v4/coredns:1.2.6 \
-      #   registry.suse.de/devel/caasp/4.0/containers/containers/caasp/v4/hyperkube:v1.14.0 \
-      #   "
-      # echo ">>> pre-pulling some images with podman..."
-      # for image in $IMAGES ; do
-      #   podman pull "$image"
-      # done
 
       exit 0
 
