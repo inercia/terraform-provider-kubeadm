@@ -10,6 +10,7 @@ PKG_NAME       = kubeadm
 TEST           ?= $$(go list ./... |grep -v 'vendor')
 GOFMT_FILES    ?= $$(find . -name '*.go' |grep -v vendor)
 WEBSITE_REPO   = github.com/hashicorp/terraform-website
+WIKI_REPO      = $(shell echo `pwd`.wiki)
 
 # for some unknown reason, "provisioners" are only recognized in this directory
 PLUGINS_DIR    = $$HOME/.terraform.d/plugins
@@ -70,21 +71,13 @@ errcheck:
 
 ################################################
 
-website:
-ifeq (,$(wildcard $(GOPATH)/src/$(WEBSITE_REPO)))
-	echo "$(WEBSITE_REPO) not found in your GOPATH (necessary for layouts and assets), get-ting..."
-	git clone https://$(WEBSITE_REPO) $(GOPATH)/src/$(WEBSITE_REPO)
-endif
-	@$(MAKE) -C $(GOPATH)/src/$(WEBSITE_REPO) website-provider PROVIDER_PATH=$(shell pwd) PROVIDER_NAME=$(PKG_NAME)
-
-website-test:
-ifeq (,$(wildcard $(GOPATH)/src/$(WEBSITE_REPO)))
-	echo "$(WEBSITE_REPO) not found in your GOPATH (necessary for layouts and assets), get-ting..."
-	git clone https://$(WEBSITE_REPO) $(GOPATH)/src/$(WEBSITE_REPO)
-endif
-	@$(MAKE) -C $(GOPATH)/src/$(WEBSITE_REPO) website-provider-test PROVIDER_PATH=$(shell pwd) PROVIDER_NAME=$(PKG_NAME)
-
-.PHONY: build test testacc vet fmt fmtcheck errcheck test-compile website website-test
+wiki:
+	@echo "Copying markdown file to $(WIKI_REPO)"
+	@rsync -av --delete \
+		--exclude=.git \
+		--exclude=examples \
+		docs/ $(WIKI_REPO)/
+	@echo "Done. You must commit changes in the wiki repo!"
 
 ################################################
 

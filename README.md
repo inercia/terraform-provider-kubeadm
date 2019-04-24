@@ -12,37 +12,12 @@ kubernetes on a cluster provisioned with [Terraform](https://terraform.io/).
 
 * Terraform
 
-## Installing
+## Quick start
 
-### ... from source
-
-1.  `go get -u github.com/inercia/terraform-kubeadm`
-
-2.  Make sure your Terraform binary has been built with some stable version,
-    otherwise you will get a `Incompatible API version with plugin. Plugin version: 1, Ours: 2` error at runtime. If you built it from sources:
-    ```
-    cd $GOPATH/src/github.com/hashicorp/terraform
-    git checkout v0.8.0
-    cd $GOPATH/src/github.com/inercia/terraform-kubeadm
-    ```
-3.  Run `make` to build the binaries. You will now find the
-    binary at `$GOPATH/bin/terraform-{provider,provisioner}-kubeadm`.
-
-### `terraformrc` file
-
-Even though Terraform has an autodiscovery mechanism for finding plugins, you should _register_ this plugins
-by adding it to your `~/.terraformrc` file, keeping any previous plugins you could have. For example,
-your `~/.terraformrc` could look like this:
-
-```hcl
-providers {
-  libvirt = "/home/user/go/bin/terraform-provider-libvirt"
-  kubeadm = "/home/user/go/bin/terraform-provider-kubeadm"
-}
-
-provisioners {
-  kubeadm = "/home/user/go/bin/terraform-provisioner-kubeadm"
-}
+``` bash
+$ go get -d github.com/inercia/terraform-provider-kubeadm
+$ cd $GOPATH/src/github.com/inercia/terraform-provider-kubeadm
+$ make
 ```
 
 ## Usage
@@ -87,11 +62,13 @@ resource "libvirt_domain" "minion" {
 
 Notice that the `provisioner` at the
 
-* _seeder_ must specify the `config = ${XXX.config}`,
-* _joiner_ must specify the `config = ${XXX.config}` and a `join` pointing
-to the `<IP/name>` they must _join_.
+* _seeder_ must specify the `config = ${XXX.config.init}`,
+* any other nodes that _joins_ the _seeder_ must specify the
+`config = ${XXX.config.join}` and a `join` pointing to the 
+`<IP/name>` they must _join_.
 
-Now you can see the plan, apply it, and then destroy the infrastructure:
+Now you can see the plan, apply it, and then destroy the
+infrastructure:
 
 ```console
 $ terraform plan
@@ -99,42 +76,11 @@ $ terraform apply
 $ terraform destroy
 ```
 
-## Arguments
+You can find examples of the privider/provisioner in other environments like OpenStack, LXD, etc. in the [examples](docs/examples) directory)
 
-### ... for the provisioner
+## Documentation
 
-  * `join`: the address of the node to join in the cluster. 
-  The absence of a `join` indicates that this node will be used as a kubernetes
-  master and seeder for the cluster.
-  * `config`: a reference to the `config` configuration of the _provider_.
-  * `install`: (true/false) try to install the `kubeadm` package with the help of
-  the built-in script.
-  * `install_version` (optional): the version of kubeadm installed by automatic
-  `kubeadm` installer.
-  * `install_script` (optional): a user-provider script that will be used for installing
-  `kubeadm`. It will be uploaded to all the machines in the cluster and executed
-  before trying to run `kubeadm`.
-  It can be `v1.5` (default) or `v1.6`.
-
-## Known limitations
-
-* There is currently no way for downloading the `kubeconfig` file generated
-by `kubeadm`. You must `ssh` to the master machine and get the file from
-`/etc/kubernetes/admin.conf`.
-* `kubeadm` currently does not install any networking driver (ie, `flannel`,
-`calico`, etc). You need a valid `kubeconfig`, and then you can install the
-driver by just invoking `kubectl` with the right manifest, for example (for
-Flannel):
-  ```
-  export ARCH=amd64
-  export KUBECONFIG=<your-kubeconfig-file>
-  curl -sSL "https://github.com/coreos/flannel/blob/master/Documentation/kube-flannel.yml?raw=true" | sed "s/amd64/${ARCH}/g" | kubectl create -f -
-  ```
-* The `kubeadm-setup.sh` tries to does its best in order to install
-`kubeadm`, but some distros have not been tested too much. I'use used
-`libvirt` with _OpenSUSE Leap 42.2_ images for running my tests, so that
-could be considered the perfect combination for trying this...
-* See also the current list of [`kubeadm` limitations](https://kubernetes.io/docs/getting-started-guides/kubeadm/#limitations)
+Please take a look at the [wiki](https://github.com/inercia/terraform-provider-kubeadm/wiki)
 
 ## Running acceptance tests
 
@@ -147,7 +93,7 @@ go test ./...
 
 ## Author(s)
 
-* Alvaro Saurin <alvaro.saurin@suse.de>
+* Alvaro Saurin <alvaro.saurin@gmail.com>
 
 ## License
 
