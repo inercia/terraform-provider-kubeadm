@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/hashicorp/terraform/plugin"
 
-	"github.com/inercia/terraform-kubeadm/kubeadm"
+	"github.com/inercia/terraform-provider-kubeadm/kubeadm"
 )
 
 func main() {

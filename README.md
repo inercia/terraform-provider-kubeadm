@@ -1,9 +1,9 @@
 # Terraform kubeadm plugin
 
-[![Build Status](https://travis-ci.org/inercia/terraform-kubeadm.svg?branch=master)](https://travis-ci.org/inercia/terraform-kubeadm)
+[![Build Status](https://travis-ci.org/inercia/terraform-kubeadm.svg?branch=master)](https://travis-ci.org/inercia/terraform-provider-kubeadm)
 
 This provider is still being actively developed. To see what is left or planned,
-see the [issues list](https://github.com/inercia/terraform-kubeadm/issues).
+see the [issues list](https://github.com/inercia/terraform-provider-kubeadm/issues).
 
 This is a terraform provider and provisioner that lets you install
 kubernetes on a cluster provisioned with [Terraform](https://terraform.io/).
@@ -80,7 +80,17 @@ You can find examples of the privider/provisioner in other environments like Ope
 
 ## Documentation
 
-Please take a look at the [wiki](https://github.com/inercia/terraform-provider-kubeadm/wiki)
+* More details on the [installation](../../wiki/Installation) 
+instructions.
+* Using `kubeadm` in your Terraform scripts:
+  * The [`data "kubeadm"`](../../wiki/Data_kubeadm) configuration
+  block.
+  * The [`provisioner "kubeadm"`](../../wiki/Provisioner_kubeadm)
+  block.
+  * [Additional stuff](../../wiki/Additional_tasks) ncessary for 
+  having a fully functional Kubernetes cluster, like installing
+  CNI, the dashboard, etc...
+* [Roadmap, TODO and vision](../../wiki/Roadmap).
 
 ## Running acceptance tests
 
@@ -93,7 +103,7 @@ go test ./...
 
 ## Author(s)
 
-* Alvaro Saurin <alvaro.saurin@gmail.com>
+* Alvaro Saurin \<alvaro.saurin@gmail.com\>
 
 ## License
 

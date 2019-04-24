@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/terraform"
 
-	"github.com/inercia/terraform-kubeadm/internal/ssh"
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
 const (

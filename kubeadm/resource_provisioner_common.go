@@ -5,8 +5,10 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
+	// "k8s.io/client-go/kubernetes"
+	// "k8s.io/client-go/tools/clientcmd"
 
-	"github.com/inercia/terraform-kubeadm/internal/ssh"
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
 func doCommonProvisioning() ssh.ApplyFunc {
@@ -53,3 +55,19 @@ func getKubeadmNodenameArg(d *schema.ResourceData) string {
 	}
 	return ""
 }
+
+// getClientset gets a clientset, or "nil" if no "kubeconfig" has been provided
+// Usage:
+//      clientset := getClientset(d)
+// 		pods, _ := clientset.CoreV1().Nodes().List(metav1.ListOptions{})
+// 		fmt.Printf("There are %d pods in the cluster\n", len(pods.Items))
+//
+// func getClientset(d *schema.ResourceData) (*kubernetes.Clientset, error) {
+// 	if kubeconfigOpt, ok := d.GetOk("kubeconfig"); ok {
+// 		kubeconfig := kubeconfigOpt.(string)
+
+// 		config, _ := clientcmd.BuildConfigFromFlags("", kubeconfig)
+// 		return kubernetes.NewForConfig(config)
+// 	}
+// 	return nil, nil
+// }

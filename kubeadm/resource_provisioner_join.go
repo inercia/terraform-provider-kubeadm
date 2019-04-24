@@ -11,7 +11,7 @@ import (
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 
-	"github.com/inercia/terraform-kubeadm/internal/ssh"
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
 // doKubeadmJoin performs a `kubeadm join` in the remote host

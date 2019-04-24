@@ -16,7 +16,7 @@ import (
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 
-	"github.com/inercia/terraform-kubeadm/internal/ssh"
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
 // doKubeadmInit performs a `kubeadm init` in the remote host

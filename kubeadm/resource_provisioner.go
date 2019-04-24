@@ -17,7 +17,7 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
 
-	"github.com/inercia/terraform-kubeadm/internal/ssh"
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
 var (

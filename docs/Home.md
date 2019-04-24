@@ -40,9 +40,11 @@ resource "libvirt_domain" "minion" {
 
 ## Contents
 
-* [Installation](Installation)
-* The [`data "kubeadm"`](Data_kubeadm) block.
-* The [`provisioner "kubeadm"`](Provisioner_kubeadm) block.
-* [Additional stuff](Additional_tasks) ncessary for having a fully
-functional Kubernetes cluster, like installing CNI, the dashboard, 
-etc...
+* [Installation](Installation) instructions.
+* Using `kubeadm` in your Terraform scripts:
+  * The [`data "kubeadm"`](Data_kubeadm) configuration block.
+  * The [`provisioner "kubeadm"`](Provisioner_kubeadm) block.
+  * [Additional stuff](Additional_tasks) ncessary for having a
+  fully functional Kubernetes cluster, like installing CNI,
+  the dashboard, etc...
+* [Roadmap, TODO and vision](Roadmap).
