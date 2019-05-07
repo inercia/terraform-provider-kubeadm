@@ -23,6 +23,11 @@ Terraform cluster definition leveraging the libvirt provider.
   }
   ```
 
+## Contents
+
+* [Cluster definition](cluster.tf)
+* [Variables](variables.tf)
+
 ## Machine access
 
 By default all the machines will have the following users:

@@ -1,9 +1,11 @@
 package ssh
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
+	"os/exec"
 	"strings"
 
 	"github.com/hashicorp/terraform/communicator"
@@ -71,6 +73,7 @@ func DoExec(command string) ApplyFunc {
 	return DoExecList([]string{command})
 }
 
+// DoExecScript is a runner for a script
 func DoExecScript(contents io.Reader, prefix string) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		path, err := randomPath(prefix, "sh")
@@ -82,7 +85,42 @@ func DoExecScript(contents io.Reader, prefix string) ApplyFunc {
 	})
 }
 
-// ExecCondition checks if bash command/condition succeedes or not
+// DoLocalExec executes a local command
+func DoLocalExec(cmd string, args ...string) ApplyFunc {
+	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+		o.Output(fmt.Sprintf("Running loc al command %s...", cmd))
+
+		cmd := exec.Command(cmd, args...)
+		cmdReader, err := cmd.StdoutPipe()
+		if err != nil {
+			o.Output(fmt.Sprintf("Error creating pipe for %s: %s", cmd, err))
+			return err
+		}
+
+		scanner := bufio.NewScanner(cmdReader)
+		go func() {
+			for scanner.Scan() {
+				o.Output(fmt.Sprintf("%s\n", scanner.Text()))
+			}
+		}()
+
+		err = cmd.Start()
+		if err != nil {
+			o.Output(fmt.Sprintf("Error running local command %s: %s", cmd, err))
+			return err
+		}
+
+		err = cmd.Wait()
+		if err != nil {
+			o.Output(fmt.Sprintf("Error waiting for %s: %s", cmd, err))
+			return err
+		}
+
+		return nil
+	})
+}
+
+// CheckCondition checks if bash command/condition succeedes or not
 func CheckCondition(cmd string) CheckerFunc {
 	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
 		success := "CONDITION_SUCCEEDED"

@@ -48,3 +48,5 @@ resource "libvirt_domain" "minion" {
   fully functional Kubernetes cluster, like installing CNI,
   the dashboard, etc...
 * [Roadmap, TODO and vision](Roadmap).
+* [Examples](examples/README.md) for several providers like
+_libvirt_, _LXD_, etc.

@@ -28,6 +28,8 @@ EOT
 ##########################
 
 data "kubeadm" "main" {
+  config_path = "${var.kubeconfig}"
+
   network {
     dns_domain = "mycluster.com"
     services   = "10.25.0.0/16"
@@ -41,8 +43,15 @@ data "kubeadm" "main" {
   }
 
   cni {
+    plugin = "flannel"
+
     # OpenSUSE images use a non-standard directory
     bin_dir = "/usr/lib/cni"
+  }
+
+  addons {
+    helm = "true"
+    dashboard = "true"
   }
 }
 
@@ -175,9 +184,13 @@ resource "lxd_container" "master" {
   }
 
   provisioner "kubeadm" {
-    config     = "${data.kubeadm.main.config.init}"
-    kubeconfig = "${var.kubeconfig}"
+    config     = "${data.kubeadm.main.config}"
     manifests  = "${var.manifests}"
+    # ignore_checks = [
+    #   "NumCPU",
+    #   "FileContent--proc-sys-net-bridge-bridge-nf-call-iptables",
+    #   "Swap",
+    # ]
   }
 }
 
@@ -208,14 +221,8 @@ resource "lxd_container" "worker" {
   }
 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config.join}"
+    config = "${data.kubeadm.main.config}"
     join   = "${lxd_container.master.0.ip_address}"
-
-    #ignore_checks = [
-    #  "NumCPU",
-    #  "FileContent--proc-sys-net-bridge-bridge-nf-call-iptables",
-    #  "Swap",
-    #]
   }
 }
 

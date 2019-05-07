@@ -69,7 +69,6 @@ variable "manifests" {
   type = "list"
 
   default = [
-    "https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml",
     "https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/mandatory.yaml",
     "https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/cloud-generic.yaml",
     "https://raw.githubusercontent.com/kubernetes/dashboard/master/aio/deploy/recommended/kubernetes-dashboard.yaml",

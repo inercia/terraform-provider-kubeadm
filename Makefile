@@ -5,7 +5,6 @@ GO_BIN         := $(shell [ -n "${GOBIN}" ] && echo ${GOBIN} || (echo $(GOPATH_F
 GO_VERSION     := $(shell $(GO) version | sed -e 's/^[^0-9.]*\([0-9.]*\).*/\1/')
 GO_VERSION_MAJ := $(shell echo $(GO_VERSION) | cut -f1 -d'.')
 GO_VERSION_MIN := $(shell echo $(GO_VERSION) | cut -f2 -d'.')
-PKG_NAME       = kubeadm
 
 TEST           ?= $$(go list ./... |grep -v 'vendor')
 GOFMT_FILES    ?= $$(find . -name '*.go' |grep -v vendor)
@@ -23,12 +22,13 @@ build: fmtcheck build-forced
 
 build-forced:
 	mkdir -p $(PLUGINS_DIR)
-	$(GO) build -o $(PLUGINS_DIR)//terraform-provider-kubeadm .
-	cp -f $(PLUGINS_DIR)/terraform-provider-kubeadm \
-	      $(PLUGINS_DIR)/terraform-provisioner-kubeadm
+	$(GO) build -v -o $(PLUGINS_DIR)/terraform-provider-kubeadm     ./cmd/terraform-provider-kubeadm
+	$(GO) build -v -o $(PLUGINS_DIR)/terraform-provisioner-kubeadm  ./cmd/terraform-provisioner-kubeadm
 
 generate:
-	cd kubeadm && $(GO) generate -x
+	cd internal/assets && $(GO) generate -x
+	cd pkg/provider    && $(GO) generate -x
+	cd pkg/provisioner && $(GO) generate -x
 
 ################################################
 
@@ -43,7 +43,7 @@ testacc: fmtcheck
 test-compile:
 	@if [ "$(TEST)" = "./..." ]; then \
 		echo "ERROR: Set TEST to a specific package. For example,"; \
-		echo "  make test-compile TEST=./$(PKG_NAME)"; \
+		echo "  make test-compile TEST=./pkg/provisioner"; \
 		exit 1; \
 	fi
 	$(GO) test -c $(TEST) $(TESTARGS)

@@ -1,33 +1,54 @@
 package ssh
 
 import (
+	"fmt"
+
 	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/terraform"
 )
 
-type Action interface {
+// Applyer is an action that can be "applied"
+type Applyer interface {
 	Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error
 }
 
-// ApplyFunc is a function that can be converted to a `Action`
+// ApplyFunc is a function that can be converted to a `Applyer`
 //
 // ie: 	ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 // 			return nil
 // }),
 type ApplyFunc func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error
 
+// Apply applies an action
 func (f ApplyFunc) Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 	return f(o, comm, useSudo)
 }
 
+// EmptyAction is a dummy action
 func EmptyAction() ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		return nil
 	})
 }
 
-// RunActions applies a list of actions
-func RunActions(actions []Action, o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+// Message is a dummy action that just prints a message
+func Message(msg string) ApplyFunc {
+	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+		o.Output(msg)
+		return nil
+	})
+}
+
+// Fatal is an action that prints an error message and exists
+func Fatal(msg string) ApplyFunc {
+	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+		o.Output(fmt.Sprintf("ERROR: %s", msg))
+		return fmt.Errorf("ERROR: %s", msg)
+	})
+}
+
+// ApplyList applies a list of actions
+func ApplyList(actions []Applyer, o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 	for _, action := range actions {
 		if err := action.Apply(o, comm, useSudo); err != nil {
 			return err
@@ -36,10 +57,10 @@ func RunActions(actions []Action, o terraform.UIOutput, comm communicator.Commun
 	return nil
 }
 
-// Compose a list of actions as a single ApplyFunc
-func Composite(actions ...Action) ApplyFunc {
+// ApplyComposed composes from a list of actions a single ApplyFunc
+func ApplyComposed(actions ...Applyer) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		return RunActions(actions, o, comm, useSudo)
+		return ApplyList(actions, o, comm, useSudo)
 	})
 }
 
@@ -50,14 +71,16 @@ type Checker interface {
 	Check(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error)
 }
 
+// CheckerFunc is a function that implements the Checker interface
 type CheckerFunc func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error)
 
+// Check implements the Checker interface in CheckerFuncs
 func (f CheckerFunc) Check(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
 	return f(o, comm, useSudo)
 }
 
-// ActionIf runs an action iff the condition is true
-func ActionIf(condition Checker, action Action) ApplyFunc {
+// ApplyIf runs an action iff the condition is true
+func ApplyIf(condition Checker, action Applyer) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		res, err := condition.Check(o, comm, useSudo)
 		if err != nil {
@@ -71,8 +94,8 @@ func ActionIf(condition Checker, action Action) ApplyFunc {
 	})
 }
 
-// ActionIfElse runs an action iff the condition is true, otherwise runs a different action
-func ActionIfElse(condition Checker, actionIf Action, actionElse Action) ApplyFunc {
+// ApplyIfElse runs an action iff the condition is true, otherwise runs a different action
+func ApplyIfElse(condition Checker, actionIf Applyer, actionElse Applyer) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		res, err := condition.Check(o, comm, useSudo)
 		if err != nil {
@@ -81,12 +104,21 @@ func ActionIfElse(condition Checker, actionIf Action, actionElse Action) ApplyFu
 
 		if res {
 			return actionIf.Apply(o, comm, useSudo)
-		} else {
-			return actionElse.Apply(o, comm, useSudo)
 		}
+		return actionElse.Apply(o, comm, useSudo)
+	})
+}
+
+// ApplyTry tries to run an action, but it is ok if
+// the action fails
+func ApplyTry(action Applyer) ApplyFunc {
+	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+		action.Apply(o, comm, useSudo)
 		return nil
 	})
 }
+
+// CheckAnd applies a logical And on a group of Checks
 func CheckAnd(checks ...Checker) CheckerFunc {
 	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
 		for _, check := range checks {
@@ -102,6 +134,7 @@ func CheckAnd(checks ...Checker) CheckerFunc {
 	})
 }
 
+// CheckOr applies a logical Or on a group of Checks
 func CheckOr(checks ...Checker) CheckerFunc {
 	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
 		for _, check := range checks {
@@ -117,6 +150,7 @@ func CheckOr(checks ...Checker) CheckerFunc {
 	})
 }
 
+// CheckNot return the logical Not of a Check
 func CheckNot(check Checker) CheckerFunc {
 	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
 		res, err := check.Check(o, comm, useSudo)

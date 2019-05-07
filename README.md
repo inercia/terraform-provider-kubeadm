@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/inercia/terraform-kubeadm.svg?branch=master)](https://travis-ci.org/inercia/terraform-provider-kubeadm)
 
-This provider is still being actively developed. To see what is left or planned,
+This provider/provisioner is still being actively developed. To see what is left or planned,
 see the [issues list](https://github.com/inercia/terraform-provider-kubeadm/issues).
 
 This is a terraform provider and provisioner that lets you install
@@ -14,10 +14,12 @@ kubernetes on a cluster provisioned with [Terraform](https://terraform.io/).
 
 ## Quick start
 
-``` bash
-$ go get -d github.com/inercia/terraform-provider-kubeadm
-$ cd $GOPATH/src/github.com/inercia/terraform-provider-kubeadm
-$ make
+```console
+$ mkdir -p $HOME/.terraform.d/plugins
+$ go build -v -o $HOME/.terraform.d/plugins/terraform-provider-kubeadm \
+    github.com/inercia/terraform-provider-kubeadm/cmd/terraform-provider-kubeadm
+$ go build -v -o $HOME/.terraform.d/plugins/terraform-provisioner-kubeadm \
+    github.com/inercia/terraform-provider-kubeadm/cmd/terraform-provisioner-kubeadm
 ```
 
 ## Usage
@@ -32,9 +34,19 @@ data "kubeadm" "main" {
     external = "loadbalancer.external.com"
   }
   
+  cni {
+    plugin = "flannel"
+  }
+  
   network {
     dns_domain = "my_cluster.local"  
     services = "10.25.0.0/16"
+  }
+  
+  # install some extras: helm, the dashboard...
+  addons {
+    helm = "true"
+    dashboard = "true"
   }
 }
 
@@ -44,7 +56,7 @@ resource "libvirt_domain" "master" {
   memory = 1024
   ...
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config.init}"
+    config = "${data.kubeadm.main.config}"
   }
 }
 
@@ -54,18 +66,17 @@ resource "libvirt_domain" "minion" {
   name       = "minion${count.index}"
   ...
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config.join}"
+    config = "${data.kubeadm.main.config}"
     join = "${libvirt_domain.master.network_interface.0.addresses.0}"
   }
 }
 ```
 
-Notice that the `provisioner` at the
+Notice that:
 
-* _seeder_ must specify the `config = ${XXX.config.init}`,
+* all the `provisioners` must specify the `config = ${XXX.config}`,
 * any other nodes that _joins_ the _seeder_ must specify the
-`config = ${XXX.config.join}` and a `join` pointing to the 
-`<IP/name>` they must _join_.
+`join` attribute pointing to the `<IP/name>` they must _join_.
 
 Now you can see the plan, apply it, and then destroy the
 infrastructure:

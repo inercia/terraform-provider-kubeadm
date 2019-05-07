@@ -1,43 +1,46 @@
-dist: trusty
+dist: xenial
+
+sudo: enabled
+
+addons:
+  snaps:
+    - lxd
+
 services:
   - docker
+
 language: go
 go:
   - "1.11.x"
 
 before_install:
-  - sudo add-apt-repository -y cloud-archive:mitaka
-  - sudo apt-get -qq update
-  - sudo apt-get install -y qemu libvirt-bin libvirt-dev
-  - sudo usermod -a -G libvirtd $USER
-  - echo -e "<pool type='dir'>\n<name>default</name>\n<target>\n<path>/pool-default</path>\n</target>\n</pool>" > pool.xml
-  - sudo mkdir /pool-default
-  - sudo chmod a+rwx /pool-default
-  - sudo virsh pool-define pool.xml
-  - sudo virsh pool-start default
+  - sudo sh -c 'echo PATH=/snap/bin:$PATH >> /etc/environment';
+    sudo sh -c 'lxd activateifneeded';
+    sudo sh -c 'lxd waitready';
+    sudo sh -c 'lxd init --auto';
+    sudo usermod -a -G lxd travis;
+    sudo su travis -c 'lxc network set lxdbr0 ipv6.address none'
 
 install:
   - make
 
-# override the custom test script, this would trigger
-# also the execution of the unit tests of the vendored
-# code
 env:
   global:
-    - TERRAFORM_LIBVIRT_TEST_DOMAIN_TYPE=qemu
     - TF_ACC=true
-    - LIBVIRT_DEFAULT_URI="qemu:///system"
+    - LC_ALL=C.UTF-8
+    - LANG=C.UTF-8
 
 script:
-  #- sg libvirtd -c "go test -v ./providers"
-  #- sg libvirtd -c "go test -v ./provisioners"
   - make test
   - make vet
-  #- make website-test
 
 branches:
   only:
     - master
+
+after_failure:
+  - sudo journalctl -u snapd
+
 matrix:
   fast_finish: true
   allow_failures:
