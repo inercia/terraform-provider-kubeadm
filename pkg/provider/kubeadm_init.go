@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"net"
@@ -9,10 +8,7 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	kubeadmscheme "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/scheme"
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
-	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
-	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
@@ -161,19 +157,5 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) ([]byte, error
 		initConfig.BootstrapTokens = []kubeadmapiv1beta1.BootstrapToken{bto}
 	}
 
-	kubeadmscheme.Scheme.Default(initConfig)
-
-	initbytes, err := kubeadmutil.MarshalToYamlForCodecs(initConfig, kubeadmapiv1beta1.SchemeGroupVersion, kubeadmscheme.Codecs)
-	if err != nil {
-		return []byte{}, err
-	}
-	allFiles := [][]byte{initbytes}
-
-	clusterbytes, err := kubeadmutil.MarshalToYamlForCodecs(&initConfig.ClusterConfiguration, kubeadmapiv1beta1.SchemeGroupVersion, kubeadmscheme.Codecs)
-	if err != nil {
-		return []byte{}, err
-	}
-	allFiles = append(allFiles, clusterbytes)
-
-	return bytes.Join(allFiles, []byte(kubeadmconstants.YAMLDocumentSeparator)), nil
+	return common.InitConfigToYAML(initConfig)
 }

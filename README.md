@@ -2,11 +2,18 @@
 
 [![Build Status](https://travis-ci.org/inercia/terraform-kubeadm.svg?branch=master)](https://travis-ci.org/inercia/terraform-provider-kubeadm)
 
-This provider/provisioner is still being actively developed. To see what is left or planned,
-see the [issues list](https://github.com/inercia/terraform-provider-kubeadm/issues).
+This is a [Terraform](https://terraform.io/) _data_ definition and _provisioner_
+that lets you install Kubernetes on a cluster. The underlying _resources_ could
+be things like AWS instances, libvirt machines, LXD containers or any other
+class of object that provides a SSH-like connection. The `kubeadm` `provisioner`
+will run over the SSH connection all the commands necessary for installing
+Kuberentes in those resources, according to the configuration specified in
+the `data` block.
 
-This is a terraform provider and provisioner that lets you install
-kubernetes on a cluster provisioned with [Terraform](https://terraform.io/).
+## Status
+
+This provider/provisioner is still being actively developed. To see what is left
+or planned, see the [issues list](https://github.com/inercia/terraform-provider-kubeadm/issues).
 
 ## Requirements
 
@@ -57,6 +64,7 @@ resource "libvirt_domain" "master" {
   ...
   provisioner "kubeadm" {
     config = "${data.kubeadm.main.config}"
+    # there is no "join", so this will be the first node in the cluster
   }
 }
 
@@ -67,12 +75,14 @@ resource "libvirt_domain" "minion" {
   ...
   provisioner "kubeadm" {
     config = "${data.kubeadm.main.config}"
+
+    # this will make this minion _join_ the cluster started by the "master"
     join = "${libvirt_domain.master.network_interface.0.addresses.0}"
   }
 }
 ```
 
-Notice that:
+Note well that:
 
 * all the `provisioners` must specify the `config = ${XXX.config}`,
 * any other nodes that _joins_ the _seeder_ must specify the

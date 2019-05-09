@@ -5,9 +5,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	kubeadmscheme "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/scheme"
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
-	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
@@ -44,11 +42,5 @@ func dataSourceToJoinConfig(d *schema.ResourceData, token string) ([]byte, error
 		}
 	}
 
-	kubeadmscheme.Scheme.Default(joinConfig)
-	nodebytes, err := kubeadmutil.MarshalToYamlForCodecs(joinConfig, kubeadmapiv1beta1.SchemeGroupVersion, kubeadmscheme.Codecs)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	return nodebytes, nil
+	return common.JoinConfigToYAML(joinConfig)
 }

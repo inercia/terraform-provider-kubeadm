@@ -15,25 +15,25 @@ func CheckProcessRunning(process string) CheckerFunc {
 
 // DoRestartService restart a systemctl service
 func DoRestartService(service string) ApplyFunc {
-	return DoExec(fmt.Sprintf("systemctl restart %s", service))
+	return DoExec(fmt.Sprintf("systemctl --no-pager restart '%s'", service))
 }
 
 // DoEnableService enables a systemctl service
 func DoEnableService(service string) ApplyFunc {
 	log.Printf("[DEBUG] Enabling service '%s'", service)
-	return DoExec(fmt.Sprintf("systemctl enable %s", service))
+	return DoExec(fmt.Sprintf("systemctl --no-pager enable '%s'", service))
 }
 
 // CheckServiceExists checks that service exists
 func CheckServiceExists(service string) CheckerFunc {
 	log.Printf("[DEBUG] Checking if service '%s' exists", service)
-	exists := fmt.Sprintf("systemctl status '%s' 2>/dev/null", service)
+	exists := fmt.Sprintf("systemctl --no-pager status '%s' 2>/dev/null", service)
 	return CheckCondition(exists)
 }
 
 // CheckServiceActive checks that service exists and is active
 func CheckServiceActive(service string) CheckerFunc {
-	inactive := fmt.Sprintf("systemctl status '%s' 2>/dev/null | grep Active | grep -q inactive", service)
+	inactive := fmt.Sprintf("systemctl --no-pager status '%s' 2>/dev/null | grep Active | grep -q inactive", service)
 	return CheckNot(
 		CheckAnd(CheckServiceExists(service),
 			CheckCondition(inactive)))

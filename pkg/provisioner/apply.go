@@ -71,7 +71,7 @@ func applyFn(ctx context.Context) error {
 
 	// run kubeadm init/join
 	if len(join) == 0 {
-		_, configFile, err := unmarshallInitConfig(d)
+		_, kubeadmConfig, err := unmarshallInitConfig(d)
 		if err != nil {
 			return err
 		}
@@ -79,7 +79,7 @@ func applyFn(ctx context.Context) error {
 		o.Output(fmt.Sprintf("Initializing the cluster with 'kubadm init'"))
 		return ssh.ApplyList([]ssh.Applyer{
 			doCommonProvisioning(),
-			doKubeadmInit(d, configFile),
+			doKubeadmInit(d, kubeadmConfig),
 			doDownloadKubeconfig(d),
 			doLoadCNI(d),
 			doLoadDashboard(d),
@@ -87,7 +87,7 @@ func applyFn(ctx context.Context) error {
 			doLoadManifests(d),
 		}, o, comm, useSudo)
 	} else {
-		_, configFile, err := unmarshallJoinConfig(d)
+		_, kubeadmConfig, err := unmarshallJoinConfig(d)
 		if err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func applyFn(ctx context.Context) error {
 		o.Output(fmt.Sprintf("Joining the cluster with 'kubadm join'"))
 		return ssh.ApplyList([]ssh.Applyer{
 			doCommonProvisioning(),
-			doKubeadmJoin(d, configFile),
+			doKubeadmJoin(d, kubeadmConfig),
 		}, o, comm, useSudo)
 	}
 }

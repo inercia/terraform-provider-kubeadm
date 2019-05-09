@@ -34,13 +34,13 @@ func Provisioner() terraform.ResourceProvisioner {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Default:     false,
-				Description: "when true, remove this node from the cluster instead of addinng it",
+				Description: "when true, remove this node from the cluster instead of adding it",
 			},
 			"nodename": {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Default:     "",
-				Description: "node name in the kubernetes cluster",
+				Description: "name used for registering the node in the kubernetes cluster (defaults to the hostname)",
 			},
 			"prevent_sudo": {
 				Type:        schema.TypeBool,

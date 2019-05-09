@@ -75,14 +75,15 @@ func DoExec(command string) ApplyFunc {
 
 // DoExecScript is a runner for a script
 func DoExecScript(contents io.Reader, prefix string) ApplyFunc {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		path, err := randomPath(prefix, "sh")
-		if err != nil {
-			return err
-		}
+	path, err := randomPath(prefix, "sh")
+	if err != nil {
+		panic(err)
+	}
 
-		return DoUploadFile(contents, path).Apply(o, comm, useSudo)
-	})
+	return ApplyComposed(
+		doRealUploadFile(contents, path),
+		DoExec(fmt.Sprintf("sh %s", path)),
+	)
 }
 
 // DoLocalExec executes a local command

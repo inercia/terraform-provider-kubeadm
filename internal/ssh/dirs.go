@@ -10,11 +10,11 @@ import (
 
 // DoMkdir creates a remote directory
 func DoMkdir(path string) ApplyFunc {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		o.Output(fmt.Sprintf("Creating directory %s", path))
-		mkdirCmd := fmt.Sprintf("mkdir -p %s", path)
-		return DoExec(mkdirCmd).Apply(o, comm, useSudo)
-	})
+	mkdirCmd := fmt.Sprintf("mkdir -p %s", path)
+	return ApplyComposed(
+		Message(fmt.Sprintf("Creating directory %s", path)),
+		DoExec(mkdirCmd),
+	)
 }
 
 // CheckDirExists checks that a directory exists

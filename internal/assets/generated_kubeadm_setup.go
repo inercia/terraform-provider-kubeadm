@@ -14,23 +14,25 @@ LSB_RELEASE=/usr/bin/lsb_release
 KUBEADM_EXE=/usr/bin/kubeadm
 
 KUBEADM_PKG_SUSE="kubernetes-kubeadm"
-KUBEADM_PKG_SUSE_VERS="1.14.0"
 KUBEADM_PKG_SUSE_REPO="https://download.opensuse.org/repositories/devel:/kubic/openSUSE_Leap_15.1/"
+KUBEADM_PKG_SUSE_REPOFILE="/etc/zypp/repos.d/kubernetes.repo"
+KUBEADM_PKG_SUSE_PACKAGES="$KUBEADM_PKG_SUSE kubernetes-kubelet kubernetes-client"
 
 KUBEADM_PKG_APT="kubeadm"
-KUBEADM_PKG_APT_VERS="1.14.0"
 KUBEADM_PKG_APT_REPO="http://apt.kubernetes.io/"
+KUBEADM_PKG_APT_GPG="https://packages.cloud.google.com/apt/doc/apt-key.gpg"
+KUBEADM_PKG_APT_PACKAGES="$KUBEADM_PKG_APT kubelet kubectl docker.io kubernetes-cni"
+KUBEADM_PKG_APT_PACKAGES_PRE="apt-transport-https ebtables ethtool"
+KUBEADM_PKG_APT_SRCLST="/etc/apt/sources.list.d/kubernetes.list"
 
 KUBEADM_PKG_YUM="kubeadm"
-KUBEADM_PKG_YUM_VERS="1.14.0"
+KUBEADM_PKG_YUM_REPOFILE="/etc/yum.repos.d/kubernetes.repo"
+KUBEADM_PKG_YUM_PACKAGES="$KUBEADM_PKG_YUM kubelet kubernetes-cni docker kubectl"
 
 # we will try to discover the DIST and RELEASE
 ID=
 DIST=
 RELEASE=
-
-# a container that can be used for running kubeadm
-DOCKER_RUNNER_IMAGE="inercia/kubeadm"
 
 ##########################################################################################
 
@@ -49,10 +51,11 @@ restart_services() {
 install_zypper() {
     source /etc/os-release
 
-    local name=$(echo $NAME | tr " " "_")
-    local ver=$VERSION
+	if [ ! -f $KUBEADM_PKG_SUSE_REPOFILE ] ; then
+		local name=$(echo $NAME | tr " " "_")
+		local ver=$VERSION
 
-	cat <<EOF > /etc/zypp/repos.d/kubernetes.repo
+		cat <<EOF > $KUBEADM_PKG_SUSE_REPOFILE
 [kubernetes]
 name=Kubernetes
 baseurl=https://download.opensuse.org/repositories/devel:/kubic/$name_$ver/
@@ -60,31 +63,23 @@ enabled=1
 gpgcheck=1
 repo_gpgcheck=1
 EOF
+		zypper refresh
+	else
+		log "repository already found: skipping installation of the repo"
+	fi
 
-    log "checking we have everything we need..."
-    local packages="$KUBEADM_PKG_SUSE==$KUBEADM_PKG_SUSE_VERS \
-                    kubernetes-kubelet==$KUBEADM_PKG_SUSE_VERS \
-                    kubernetes-client==$KUBEADM_PKG_SUSE_VERS"
-	zypper $zypper_args in -y $packages || abort "could not finish the installation of packages"
-    log "... everything installed"
-
-    log "allowing privileged containers in kubernetes config"
-    cat <<EOF > /etc/kubernetes/config
-KUBE_LOGTOSTDERR="--logtostderr=true"
-KUBE_LOG_LEVEL="--v=2"
-KUBE_ALLOW_PRIV="--allow-privileged=true"
-KUBE_MASTER=""
-EOF
-
-    restart_services
+	log "checking we have everything we need..."
+	zypper $zypper_args in -y $KUBEADM_PKG_SUSE_PACKAGES || abort "could not finish the installation of packages"
+	log "... everything installed"
+	restart_services
 }
 
 # installation for RedHat variants: RedHat/CentOS...
 install_yum() {
 	log "Installing for RedHat..."
-	if [ ! -f /etc/yum.repos.d/kubernetes.repo ] ; then
+	if [ ! -f $KUBEADM_PKG_YUM_REPOFILE ] ; then
 		[ -n "$RELEASE" ] || abort "can't continue without knowing the release"
-		cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+		cat <<EOF > $KUBEADM_PKG_YUM_REPOFILE
 [kubernetes]
 name=Kubernetes
 baseurl=http://yum.kubernetes.io/repos/kubernetes-el$RELEASE-x86_64
@@ -100,30 +95,26 @@ EOF
 	fi
 
     log "checking we have everything we need..."
-	local packages="$KUBEADM_PKG_YUM-$KUBEADM_PKG_YUM_VERS kubelet kubernetes-cni docker kubectl"
-    [ -x $KUBEADM_EXE ] || yum install -y $packages || abort "could not finish the installation of kubeadm"
+    [ -x $KUBEADM_EXE ] || yum install -y $KUBEADM_PKG_YUM_PACKAGES || abort "could not finish the installation of kubeadm"
     log "... everything installed"
-
 	restart_services
 }
 
 # installation for Debian variants: debian/Ubuntu...
 install_apt() {
 	log "installing for Ubuntu|Debian..."
-	apt-get update && apt-get install -y apt-transport-https
-	if [ ! -f /etc/apt/sources.list.d/kubernetes.list ] ; then
-		curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
-		echo "deb $KUBEADM_PKG_APT_REPO kubernetes-xenial main" >> /etc/apt/sources.list.d/kubernetes.list
+	if [ ! -f $KUBEADM_PKG_APT_SRCLST ] ; then
+		apt-get update && apt-get install -y $KUBEADM_PKG_APT_PACKAGES_PRE
+		curl -s "$KUBEADM_PKG_APT_GPG" | apt-key add -
+		echo "deb $KUBEADM_PKG_APT_REPO kubernetes-xenial main" >> $KUBEADM_PKG_APT_SRCLST
 		apt-get update
 	else
 		log "repository already found: skipping installation of the repo"
 	fi
 
     log "checking we have everything we need..."
-    local packages="$KUBEADM_PKG_APT=$KUBEADM_PKG_APT_VERS kubelet kubernetes-cni docker.io kubectl"
-    [ -x $KUBEADM_EXE ] || apt-get install -y $packages || abort "could not finish the installation of kubectl"
+    [ -x $KUBEADM_EXE ] || apt-get install -y $KUBEADM_PKG_APT_PACKAGES || abort "could not finish the installation of kubectl"
     log "... everything installed"
-
 	restart_services
 }
 

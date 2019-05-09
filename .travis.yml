@@ -2,10 +2,6 @@ dist: xenial
 
 sudo: enabled
 
-#addons:
-#  snaps:
-#    - lxd
-
 services:
   - docker
 
@@ -16,13 +12,10 @@ go:
 before_install:
   - sudo apt update
   - sudo apt install -y lxd
-  #- sudo apt install -y snapd
-  #- sudo snap install lxd --channel 3.0/stable
   - sudo lxd waitready
   - sudo lxd init --auto
   - mkdir -p "$TRAVIS_BUILD_DIR/snaps-cache"
   - sudo usermod -a -G lxd travis;
-  #- sudo su travis -c 'lxc network set lxdbr0 ipv6.address none'
 
 install:
   - make
@@ -42,7 +35,7 @@ branches:
     - master
 
 after_failure:
-  - sudo journalctl -u snapd
+  - sudo journalctl -e
 
 matrix:
   fast_finish: true

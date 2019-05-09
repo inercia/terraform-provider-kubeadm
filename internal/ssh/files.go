@@ -44,8 +44,8 @@ func randomPath(prefix, extension string) (string, error) {
 	return fmt.Sprintf("%s/%s-%s.%s", defaultRemoteTmp, prefix, r, extension), nil
 }
 
-// DoUploadFile uploads a file to a remote path
-func DoUploadFile(contents io.Reader, remote string) ApplyFunc {
+// doRealUploadFile uploads a file to a remote path
+func doRealUploadFile(contents io.Reader, remote string) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		dir := filepath.Dir(remote)
 		log.Printf("[DEBUG] [KUBEADM] Making sure directory '%s' is there", dir)
@@ -71,9 +71,27 @@ func DoUploadFile(contents io.Reader, remote string) ApplyFunc {
 		c := strings.NewReader(string(allContents))
 
 		log.Printf("[DEBUG] [KUBEADM] Uploading to %s:\n%s\n", remote, allContents)
-		o.Output(fmt.Sprintf("Uploading file %s (%d bytes)", remote, len(allContents)))
+		o.Output(fmt.Sprintf("Uploading to %s (%d bytes)", remote, len(allContents)))
 		return comm.Upload(remote, c)
 	})
+}
+
+// DoUploadFile uploads a file to a remote path, using a temporary file in /tmp
+// and then moving it to the final destination with `sudo`.
+// It is important to use a temporary file as uploads are performed as a regular
+// user, while the `mv` is done with `sudo`
+func DoUploadFile(contents io.Reader, remote string) ApplyFunc {
+	path, err := randomPath("tmpfile", "tmp")
+	if err != nil {
+		panic(err)
+	}
+
+	return ApplyComposed(
+		doRealUploadFile(contents, path),
+		DoMkdir(filepath.Dir(remote)),
+		Message(fmt.Sprintf("Moving to final destination %s", remote)),
+		DoExec(fmt.Sprintf("mv -f %s %s", path, remote)),
+	)
 }
 
 // DoDownloadFileToWriter downloads a file to a writer
