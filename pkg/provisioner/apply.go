@@ -78,8 +78,14 @@ func applyFn(ctx context.Context) error {
 
 		o.Output(fmt.Sprintf("Initializing the cluster with 'kubadm init'"))
 		return ssh.ApplyList([]ssh.Applyer{
-			doCommonProvisioning(),
-			doKubeadmInit(d, kubeadmConfig),
+			ssh.ApplyIfElse(
+				ssh.CheckFileExists(common.DefAdminKubeconfig),
+				ssh.DoMessage("admin.conf already exists: skipping `kubeadm init`"),
+				ssh.ApplyComposed(
+					doCommonProvisioning(),
+					doKubeadmInit(d, kubeadmConfig),
+				),
+			),
 			doDownloadKubeconfig(d),
 			doLoadCNI(d),
 			doLoadDashboard(d),

@@ -12,7 +12,7 @@ import (
 func DoMkdir(path string) ApplyFunc {
 	mkdirCmd := fmt.Sprintf("mkdir -p %s", path)
 	return ApplyComposed(
-		Message(fmt.Sprintf("Creating directory %s", path)),
+		DoMessage(fmt.Sprintf("Creating directory %s", path)),
 		DoExec(mkdirCmd),
 	)
 }

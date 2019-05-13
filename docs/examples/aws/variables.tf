@@ -3,19 +3,20 @@ variable "stack_name" {
   description = "identifier to make all your resources unique and avoid clashes with other users of this terraform project"
 }
 
-variable "region" {
+variable "aws_region" {
   default     = "eu-west-3"
-  description = "Name of the region to be used - London by default"
+  description = "Name of the region to be used"
 }
 
-variable "ami_name_pattern" {
-  default     = ".*ubuntu-bionic.*server.*"
-  description = "Pattern for choosing the AMI image"
+variable "aws_az" {
+  type        = "string"
+  description = "AWS Availability Zone"
+  default     = "eu-west-3a"
 }
 
-variable "ami_owner" {
-  default     = "099720109477"
-  description = "AMI owner id"
+variable "ami_distro" {
+  default     = "ubuntu"
+  description = "AMI distro"
 }
 
 variable "kubeconfig" {
@@ -26,21 +27,33 @@ variable "kubeconfig" {
 variable "private_key" {
   type        = "string"
   default     = "~/.ssh/id_rsa"
-  description = "filename of ssh private key used for accessing all the nodes. the equivalent .pub file must exist"
+  description = "filename of ssh private key used for accessing all the nodes. a corresponding .pub file must exist"
 }
 
-variable "subnet_cidr" {
+variable "vpc_cidr" {
   type        = "string"
   default     = "10.0.0.0/16"
   description = "Subnet CIDR"
 }
 
-variable "access_key" {
+variable "vpc_cidr_public" {
+  type        = "string"
+  default     = "10.0.70.0/24"
+  description = "Subnet CIDR for the public subnet"
+}
+
+variable "vpc_cidr_private" {
+  type        = "string"
+  default     = "10.0.80.0/24"
+  description = "Subnet CIDR for the private subnet"
+}
+
+variable "aws_access_key" {
   default     = ""
   description = "AWS access key"
 }
 
-variable "secret_key" {
+variable "aws_secret_key" {
   default     = ""
   description = "AWS secret key"
 }
@@ -63,11 +76,6 @@ variable "worker_size" {
 variable "workers" {
   default     = 1
   description = "Number of worker nodes"
-}
-
-variable "public_worker" {
-  description = "Weither or not the workers should have a public IP"
-  default     = true
 }
 
 variable "tags" {

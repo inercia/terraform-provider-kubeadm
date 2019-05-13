@@ -89,10 +89,10 @@ func DoExecScript(contents io.Reader, prefix string) ApplyFunc {
 // DoLocalExec executes a local command
 func DoLocalExec(cmd string, args ...string) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		o.Output(fmt.Sprintf("Running loc al command %s...", cmd))
+		o.Output(fmt.Sprintf("Running local command %s...", cmd))
 
-		cmd := exec.Command(cmd, args...)
-		cmdReader, err := cmd.StdoutPipe()
+		command := exec.Command(cmd, args...)
+		cmdReader, err := command.StdoutPipe()
 		if err != nil {
 			o.Output(fmt.Sprintf("Error creating pipe for %s: %s", cmd, err))
 			return err
@@ -105,15 +105,21 @@ func DoLocalExec(cmd string, args ...string) ApplyFunc {
 			}
 		}()
 
-		err = cmd.Start()
+		err = command.Start()
 		if err != nil {
 			o.Output(fmt.Sprintf("Error running local command %s: %s", cmd, err))
 			return err
 		}
 
-		err = cmd.Wait()
+		err = command.Wait()
 		if err != nil {
 			o.Output(fmt.Sprintf("Error waiting for %s: %s", cmd, err))
+			stdoutStderr, err := command.CombinedOutput()
+			if err != nil {
+				o.Output("Could not obtain stderr for process")
+				return err
+			}
+			o.Output(fmt.Sprintf("%s\n", stdoutStderr))
 			return err
 		}
 

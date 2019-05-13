@@ -81,16 +81,16 @@ func doRealUploadFile(contents io.Reader, remote string) ApplyFunc {
 // It is important to use a temporary file as uploads are performed as a regular
 // user, while the `mv` is done with `sudo`
 func DoUploadFile(contents io.Reader, remote string) ApplyFunc {
-	path, err := randomPath("tmpfile", "tmp")
+	tmpPath, err := randomPath("tmpfile", "tmp")
 	if err != nil {
 		panic(err)
 	}
 
 	return ApplyComposed(
-		doRealUploadFile(contents, path),
+		doRealUploadFile(contents, tmpPath),
 		DoMkdir(filepath.Dir(remote)),
-		Message(fmt.Sprintf("Moving to final destination %s", remote)),
-		DoExec(fmt.Sprintf("mv -f %s %s", path, remote)),
+		DoMessage(fmt.Sprintf("Moving to final destination %s", remote)),
+		DoMoveFile(tmpPath, remote),
 	)
 }
 
@@ -122,7 +122,7 @@ func DoDownloadFileToWriter(remote string, contents io.WriteCloser) ApplyFunc {
 		// hopefully it will be terminal-friendly
 		// otherwise, we could use `cat <FILE> | base64 -`
 		o.Output(fmt.Sprintf("Dumping remote file %s", remote))
-		command := fmt.Sprintf("echo '%s' && cat '%s' && echo '%s'",
+		command := fmt.Sprintf("sh -c \"echo '%s' && cat '%s' && echo '%s'\"",
 			markStart, remote, markEnd)
 		err := DoExec(command).Apply(interceptor, comm, useSudo)
 		if err != nil {
@@ -132,6 +132,16 @@ func DoDownloadFileToWriter(remote string, contents io.WriteCloser) ApplyFunc {
 
 		return nil
 	})
+}
+
+// DoDeleteFile removes a file
+func DoDeleteFile(remote string) ApplyFunc {
+	return DoExec(fmt.Sprintf("rm -f %s", remote))
+}
+
+// DoMoveFile removes a file
+func DoMoveFile(src, dst string) ApplyFunc {
+	return DoExec(fmt.Sprintf("mv -f %s %s", src, dst))
 }
 
 // DoDownloadFile downloads a remote file to a local file
@@ -150,4 +160,9 @@ func DoDownloadFile(remote, local string) ApplyFunc {
 // CheckFileExists checks that a remote file exists
 func CheckFileExists(path string) CheckerFunc {
 	return CheckCondition(fmt.Sprintf("[ -f '%s' ]", path))
+}
+
+// CheckFileAbsent checks that a remote file does not exists
+func CheckFileAbsent(path string) CheckerFunc {
+	return CheckNot(CheckFileExists(path))
 }

@@ -31,16 +31,16 @@ func EmptyAction() ApplyFunc {
 	})
 }
 
-// Message is a dummy action that just prints a message
-func Message(msg string) ApplyFunc {
+// DoMessage is a dummy action that just prints a message
+func DoMessage(msg string) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		o.Output(msg)
 		return nil
 	})
 }
 
-// Fatal is an action that prints an error message and exists
-func Fatal(msg string) ApplyFunc {
+// DoAbort is an action that prints an error message and exits
+func DoAbort(msg string) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		o.Output(fmt.Sprintf("ERROR: %s", msg))
 		return fmt.Errorf("ERROR: %s", msg)

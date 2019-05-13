@@ -38,7 +38,8 @@ resource "libvirt_domain" "minion" {
 
 #### Arguments
 
-* `auto` - (Optional) try to automatically install kubeadm with the built-in helper script.
+* `auto` - (Optional) try to automatically install kubeadm with
+[the built-in helper script](https://github.com/inercia/terraform-provider-kubeadm/blob/master/internal/assets/static/kubeadm-setup.sh).
 * `script` - (Optional) user-provided installation script.
 * `version` - (Optional) kubeadm version to install.
 

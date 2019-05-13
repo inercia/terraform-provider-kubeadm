@@ -29,9 +29,12 @@ func doKubeadmInit(d *schema.ResourceData, configFile []byte) ssh.ApplyFunc {
 	return ssh.ApplyComposed(
 		ssh.ApplyIf(
 			ssh.CheckFileExists(kubeadmConfigFile),
-			ssh.DoExec("kubeadm reset --force")),
+			ssh.ApplyComposed(
+				ssh.DoExec("kubeadm reset --force"),
+				ssh.DoDeleteFile(kubeadmConfigFile),
+			)),
 		ssh.DoUploadFile(bytes.NewReader(configFile), kubeadmConfigFile),
-		ssh.DoExec(fmt.Sprintf("kubeadm init --config=%s %s", kubeadmConfigFile, extraArgs)),
+		ssh.DoExec(fmt.Sprintf("kubeadm init --config=%s --experimental-upload-certs %s", kubeadmConfigFile, extraArgs)),
 	)
 }
 
@@ -69,12 +72,12 @@ func doLoadCNI(d *schema.ResourceData) ssh.ApplyFunc {
 	}
 
 	if len(manifest) == 0 {
-		return ssh.Message("no CNI driver is going to be loaded")
+		return ssh.DoMessage("no CNI driver is going to be loaded")
 	}
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
 		log.Printf("[DEBUG] [KUBEADM] will not load CNI driver as no 'config_path' has been specified")
-		return ssh.Message("ERROR: will not load CNI driver as no 'config_path' has been specified")
+		return ssh.DoMessage("ERROR: will not load CNI driver as no 'config_path' has been specified")
 	}
 	return ssh.DoLocalKubectlApply(kubeconfig, []string{manifest})
 }
@@ -92,7 +95,7 @@ func doLoadManifests(d *schema.ResourceData) ssh.ApplyFunc {
 
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
-		return ssh.Message("ERROR: will not load manifests as no 'config_path' has been specified")
+		return ssh.DoMessage("ERROR: will not load manifests as no 'config_path' has been specified")
 	}
 	return ssh.DoLocalKubectlApply(kubeconfig, manifests)
 }
@@ -101,21 +104,21 @@ func doLoadManifests(d *schema.ResourceData) ssh.ApplyFunc {
 func doLoadHelm(d *schema.ResourceData) ssh.ApplyFunc {
 	opt, ok := d.GetOk("config.helm_enabled")
 	if !ok {
-		return ssh.Message("Helm will not be loaded")
+		return ssh.DoMessage("Helm will not be loaded")
 	}
 	enabled, err := strconv.ParseBool(opt.(string))
 	if err != nil {
 		panic("couold not parse helm_enabled in provisioner")
 	}
 	if !enabled {
-		return ssh.Message("Helm will not be loaded")
+		return ssh.DoMessage("Helm will not be loaded")
 	}
 	if common.DefHelmManifest == "" {
-		return ssh.Message("no manifest for Helm: Helm will not be loaded")
+		return ssh.DoMessage("no manifest for Helm: Helm will not be loaded")
 	}
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
-		return ssh.Fatal("cannot not load Helm: no 'config_path' has been specified")
+		return ssh.DoAbort("cannot not load Helm: no 'config_path' has been specified")
 	}
 	return ssh.DoLocalKubectlApply(kubeconfig, []string{common.DefHelmManifest})
 }
@@ -124,21 +127,21 @@ func doLoadHelm(d *schema.ResourceData) ssh.ApplyFunc {
 func doLoadDashboard(d *schema.ResourceData) ssh.ApplyFunc {
 	opt, ok := d.GetOk("config.dashboard_enabled")
 	if !ok {
-		return ssh.Message("the Dashboard will not be loaded")
+		return ssh.DoMessage("the Dashboard will not be loaded")
 	}
 	enabled, err := strconv.ParseBool(opt.(string))
 	if err != nil {
 		panic("couold not parse dashboard_enabled in provisioner")
 	}
 	if !enabled {
-		return ssh.Message("the Dashboard will not be loaded")
+		return ssh.DoMessage("the Dashboard will not be loaded")
 	}
 	if common.DefDashboardManifest == "" {
-		return ssh.Message("no manifest for Dashboard: the Dashboard will not be loaded")
+		return ssh.DoMessage("no manifest for Dashboard: the Dashboard will not be loaded")
 	}
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
-		return ssh.Fatal("cannot not load the Dashboard: no 'config_path' has been specified")
+		return ssh.DoAbort("cannot not load the Dashboard: no 'config_path' has been specified")
 	}
 	return ssh.DoLocalKubectlApply(kubeconfig, []string{common.DefDashboardManifest})
 }
