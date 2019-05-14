@@ -7,22 +7,6 @@ provider "lxd" {
   accept_remote_certificate    = true
 }
 
-data "template_file" "authorized_keys_line" {
-  count    = "${length(var.authorized_keys)}"
-  template = "${file(element(var.authorized_keys, count.index))}"
-}
-
-data "template_file" "authorized_keys_file_contents" {
-  template = "${join("\n", data.template_file.authorized_keys_line.*.rendered)}"
-}
-
-locals {
-  authorized_keys_file = <<EOT
-${data.template_file.authorized_keys_file_contents.rendered}
-${file("~/.ssh/id_dsa.pub")}
-EOT
-}
-
 ##########################
 # Kubeadm #
 ##########################
@@ -59,11 +43,22 @@ data "kubeadm" "main" {
 # Base image and profile #
 ##########################
 
+# auto-detect the root device, so it can be mounted in the LXC container
+# and the kubelet can be happy (it wants to detect how much free
+# space is left and so on...)
+data "external" "root_device" {
+  program = [
+    "sh",
+    "./support/get-root-device.sh",
+  ]
+}
+
 resource "null_resource" "base_image" {
   # make sure we have an opensuse-caasp image
   # if that is not the case, build one with the help of distrobuilder
   provisioner "local-exec" {
-    command = "./images/build-image.sh --img '${var.img}' --yaml './images/${var.distrobuilder}' --force '${var.force_img}'"
+    command     = "./images/build-image.sh --img '${var.img}' --yaml './images/${var.distrobuilder}' --force '${var.force_img}'"
+    interpreter = ["bash", "-c"]
   }
 }
 
@@ -86,8 +81,7 @@ resource "lxd_profile" "kubelet" {
     type = "unix-block"
 
     properties {
-      source = "${var.root_device}"
-      path   = "${var.root_device}"
+      path   = "${data.external.root_device.result.device}"
     }
   }
 
@@ -114,22 +108,20 @@ resource "lxd_profile" "kubelet" {
   }
 
   # map /dev/kvm -> /dev/null
-  device {
-    name = "kvm"
-    type = "unix-char"
-
-    properties {
-      source = "/dev/null"
-      path   = "/dev/kvm"
-    }
-  }
+  # device {
+  #   name = "kvm"
+  #   type = "unix-char"
+  #
+  #   properties {
+  #     path   = "/dev/kvm"
+  #   }
+  # }
 
   device {
     name = "mem"
     type = "unix-char"
 
     properties {
-      source = "/dev/null"
       path   = "/dev/mem"
     }
   }
@@ -179,7 +171,7 @@ resource "lxd_container" "master" {
   }
 
   provisioner "file" {
-    content     = "${local.authorized_keys_file}"
+    content     = "${file("${var.private_key}.pub")}"
     destination = "/root/.ssh/authorized_keys"
   }
 
@@ -216,7 +208,7 @@ resource "lxd_container" "worker" {
   }
 
   provisioner "file" {
-    content     = "${local.authorized_keys_file}"
+    content     = "${file("${var.private_key}.pub")}"
     destination = "/root/.ssh/authorized_keys"
   }
 

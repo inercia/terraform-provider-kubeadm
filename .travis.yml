@@ -1,34 +1,40 @@
 dist: xenial
-
-sudo: enabled
-
-services:
-  - docker
-
+sudo: required
 language: go
+
 go:
-  - "1.11.x"
+  - 1.11.x
+
+cache:
+  directories:
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
+    - $HOME/.terraform.d/plugins
+    # https://docs.travis-ci.com/user/caching/
+    # "If you store archives larger than a few hundred megabytes
+    # in the cache, it is unlikely that you’ll see a big
+    # speed improvement".
 
 before_install:
-  - sudo apt update
-  - sudo apt install -y lxd
-  - sudo lxd waitready
-  - sudo lxd init --auto
-  - mkdir -p "$TRAVIS_BUILD_DIR/snaps-cache"
-  - sudo usermod -a -G lxd travis;
-
-install:
-  - make
+  - make ci-install-deps
 
 env:
   global:
+    # Force-enable Go modules. Also force go to use the code in vendor/
+    # These will both be unnecessary when Go 1.13 lands.
+    - GO111MODULE=on
     - TF_ACC=true
     - LC_ALL=C.UTF-8
     - LANG=C.UTF-8
 
-script:
-  - make test
-  - make vet
+jobs:
+  include:
+    - stage: Build and test the code
+      script:
+        - make ci-save-env
+        # NOTE: use this `sudo .. su` trick in order to use
+        #       the `usermod -a -G lxd` we did on the `before_install`
+        - sudo -E su $USER -c "make ci-tests ci-deploy-lxd"
 
 branches:
   only:

@@ -25,6 +25,9 @@ with something like:
 $ ssh -J ubuntu@<BASTION-IP> ubuntu@<NODE-IP>
 ```
 
+where these IP addresses can be obtained after `apply`ing
+with `terraform output`. 
+
 The private/public keys used for accessing all the instances (as
 well as the bastion host) can be customizable with
 `var.private_key`, being the default value 

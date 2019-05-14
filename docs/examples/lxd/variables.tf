@@ -41,10 +41,10 @@ variable "name_prefix" {
   description = "Optional prefix to be able to have multiple clusters on one host"
 }
 
-variable "authorized_keys" {
-  type        = "list"
-  default     = []
-  description = "ssh keys to inject into all the nodes"
+variable "private_key" {
+  type        = "string"
+  default     = "~/.ssh/id_rsa"
+  description = "filename of ssh private key used for accessing all the nodes. a corresponding .pub file must exist"
 }
 
 variable "ssh_user" {
@@ -75,10 +75,4 @@ variable "manifests" {
   ]
 
   description = "List of manifests to load after setting up the first master"
-}
-
-variable "root_device" {
-  type        = "string"
-  default     = "/dev/sda3"                                                                   # must match the `lxc storage show default` used
-  description = "The root device in the host (so the kubelet can see how much space is free)"
 }

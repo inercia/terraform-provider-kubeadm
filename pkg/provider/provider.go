@@ -2,6 +2,7 @@ package provider
 
 import (
 	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform/helper/validation"
 	"github.com/hashicorp/terraform/terraform"
 
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
@@ -27,14 +28,16 @@ func dataSourceKubeadm() *schema.Resource {
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"external": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Description: "stable IP/DNS (and port) for the control plane (for example, the load balancer)",
+							Type:         schema.TypeString,
+							Optional:     true,
+							Description:  "stable IP/DNS (and port) for the control plane (for example, the load balancer)",
+							ValidateFunc: common.ValidateDNSNameOrIP,
 						},
 						"internal": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Description: "IP/DNS and port the local API server advertises it's accessible",
+							Type:         schema.TypeString,
+							Optional:     true,
+							Description:  "IP/DNS and port the local API server advertises it's accessible",
+							ValidateFunc: common.ValidateDNSNameOrIP,
 						},
 						"alt_names": {
 							Type:        schema.TypeList,
@@ -75,10 +78,11 @@ func dataSourceKubeadm() *schema.Resource {
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"plugin": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Default:     "",
-							Description: "CNI plugin to install. Currently supported: flannel",
+							Type:         schema.TypeString,
+							Optional:     true,
+							Default:      "",
+							Description:  "CNI plugin to install. Currently supported: flannel",
+							ValidateFunc: validation.StringInSlice([]string{"", "flannel"}, true),
 						},
 						"plugin_manifest": {
 							Type:        schema.TypeString,
@@ -87,16 +91,18 @@ func dataSourceKubeadm() *schema.Resource {
 							Description: "Use a specific manifest for the CNI driver instead of the pre-defined manifests",
 						},
 						"bin_dir": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Default:     common.DefCniBinDir,
-							Description: "Binaries directory for CNI",
+							Type:         schema.TypeString,
+							Optional:     true,
+							Default:      common.DefCniBinDir,
+							Description:  "Binaries directory for CNI",
+							ValidateFunc: common.ValidateAbsPath,
 						},
 						"conf_dir": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Default:     common.DefCniConfDir,
-							Description: "Configuration directory for CNI",
+							Type:         schema.TypeString,
+							Optional:     true,
+							Default:      common.DefCniConfDir,
+							Description:  "Configuration directory for CNI",
+							ValidateFunc: common.ValidateAbsPath,
 						},
 					},
 				},
@@ -114,22 +120,25 @@ func dataSourceKubeadm() *schema.Resource {
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"services": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Default:     common.DefServiceCIDR,
-							Description: "subnet used by k8s services. Defaults to 10.96.0.0/12.",
+							Type:         schema.TypeString,
+							Optional:     true,
+							Default:      common.DefServiceCIDR,
+							Description:  "subnet used by k8s services. Defaults to 10.96.0.0/12.",
+							ValidateFunc: validation.CIDRNetwork(0, 32),
 						},
 						"pods": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Default:     common.DefPodCIDR,
-							Description: "subnet used by pods",
+							Type:         schema.TypeString,
+							Optional:     true,
+							Default:      common.DefPodCIDR,
+							Description:  "subnet used by pods",
+							ValidateFunc: validation.CIDRNetwork(0, 32),
 						},
 						"dns_domain": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Default:     common.DefDNSDomain,
-							Description: "DNS domain used by k8s services. Defaults to cluster.local.",
+							Type:         schema.TypeString,
+							Optional:     true,
+							Default:      common.DefDNSDomain,
+							Description:  "DNS domain used by k8s services. Defaults to cluster.local.",
+							ValidateFunc: common.ValidateDNSName,
 						},
 					},
 				},
@@ -189,10 +198,11 @@ func dataSourceKubeadm() *schema.Resource {
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"engine": {
-							Type:        schema.TypeString,
-							Optional:    true,
-							Default:     common.DefRuntimeEngine,
-							Description: "runtime engine: docker or crio",
+							Type:         schema.TypeString,
+							Optional:     true,
+							Default:      common.DefRuntimeEngine,
+							Description:  "runtime engine: docker or crio",
+							ValidateFunc: validation.StringInSlice([]string{"crio", "docker"}, true),
 						},
 						"extra_args": {
 							Type:     schema.TypeList,

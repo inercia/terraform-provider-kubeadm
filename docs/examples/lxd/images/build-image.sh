@@ -1,9 +1,10 @@
-#!/bin/sh
+#!/bin/bash
 #
 # LXD image build
 #
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+[ -z "$GOPATH" ] && echo ">>> FATAL: GOPATH not defined !!!" && exit 1
 
 FIRST_GOPATH=$(echo `echo ${GOPATH} | cut -f1 -d':'`)
 GOBIN=$([ -n "${GOBIN}" ] && echo ${GOBIN} || (echo $(GOPATH)/bin))
@@ -90,9 +91,14 @@ check_distrobuilder() {
     fi
 
     echo ">>> downloading distrobuilde with 'go get'..."
-    go get -d github.com/lxc/distrobuilder
+    mkdir -p $FIRST_GOPATH/src/github.com/
+    GO111MODULE=off go get -d github.com/lxc/distrobuilder
     echo ">>> building distrobuilder..."
-    make -C $FIRST_GOPATH/src/github.com/lxc/distrobuilder
+    GO111MODULE=off make -C $FIRST_GOPATH/src/github.com/lxc/distrobuilder
+    if [ ! -x $GOBIN/distrobuilder ] ; then
+      echo "distrobuildr could not be built"
+      exit 1
+    fi
     echo ">>> distrobuilder installed at $GOBIN/distrobuilder"
     DISTROBUILDER=$GOBIN/distrobuilder
 }

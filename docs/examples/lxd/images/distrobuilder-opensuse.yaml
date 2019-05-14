@@ -134,6 +134,7 @@ actions:
       echo "root:$ROOT_PASSWORD" | /usr/sbin/chpasswd -e
       echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
 
+      echo ">>> fixing authorized keys"
       mkdir -p /root/.ssh
       chmod 700 /root/.ssh
       touch /root/.ssh/authorized_keys
