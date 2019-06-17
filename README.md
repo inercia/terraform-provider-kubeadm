@@ -10,9 +10,24 @@ will run over the SSH connection all the commands necessary for installing
 Kuberentes in those resources, according to the configuration specified in
 the `data` block.
 
+## Features
+
+* Easy deployment of kubernetes clusters in any platform supported
+by Terraform, just adding our `provisioner "kubeadm"` in the machines
+you want to be part of the cluster.
+* Easy _scale-up_/_scale-down_ of the cluster by just changing the
+`count` of your masters or workers.
+* Automatic rolling upgrade of the cluster by just changing the base
+image of your machines. Terraform will take care of replacing old
+nodes with upgraded ones...
+* Automatic deployment of CNI drivers and addons
+like Dashboard, Ingress Controller, etc.  
+
+(check the [TODO](../../wiki/Roadmap) for an updated list of features).  
+
 ## Status
 
-This provider/provisioner is still being actively developed. To see what is left
+This `provider`/`provisioner` is still being actively developed. To see what is left
 or planned, see the [issues list](https://github.com/inercia/terraform-provider-kubeadm/issues).
 
 ## Requirements
@@ -111,6 +126,10 @@ instructions.
   * [Additional stuff](../../wiki/Additional_tasks) ncessary for 
   having a fully functional Kubernetes cluster, like installing
   CNI, the dashboard, etc...
+* Deployment examples for:
+  * [AWS](docs/examples/aws/README.md)
+  * [libvirt](docs/examples/libvirt/README.md)
+  * [lxd](docs/examples/lxd/README.md)
 * [Roadmap, TODO and vision](../../wiki/Roadmap).
 
 ## Running acceptance tests

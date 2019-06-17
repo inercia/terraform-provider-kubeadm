@@ -8,3 +8,4 @@ by
   1) loading an existing `kubeconfig`
   2) using the current token if still valid, or creating a new token otherwise
 * [ ] The ability to specify the Cloud Provider.
+* [ ] Publish the provider in the [community page](https://www.terraform.io/docs/providers/type/community-index.html).
