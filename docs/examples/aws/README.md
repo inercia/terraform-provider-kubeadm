@@ -35,13 +35,29 @@ well as the bastion host) can be customizable with
 
 ## Usage
 
-Example:
+Deployment configuration can be done with a variables
+file as well as with environment variables. The configuration
+file could be something like:
 
 ```bash
-$ TF_VAR_stack_name="alv-k8s" \
-  TF_VAR_aws_access_key="AKIAZ..." \
-  TF_VAR_aws_secret_key="sto3ybm+j..." \
-  TF_VAR_private_key=~/.ssh/aws \
+stack_name = "my-k8s"
+ami_distro = "ubuntu"
+authorized_keys = [
+  "ssh-rsa AAAAB3NzaC1yc2E...",
+]
+aws_region = "eu-central-1"
+aws_az = "eu-central-1a"
+aws_access_key = "AKIAZKQ2..."
+aws_secret_key = "ORdkX3vw..."
+```
+
+or you could provide these values in environmenta variables
+when launching `terraform`:
+
+```bash
+$ TF_VAR_stack_name="my-k8s" \
+  TF_VAR_aws_access_key="AKIAZKQ2..." \
+  TF_VAR_aws_secret_key="ORdkX3vw..." \
   terraform apply -auto-approve
 ```
 
@@ -49,8 +65,9 @@ You could be intersested in customizing some variables like:
 
 * `stack_name`: identifier to make all your resources unique and avoid
 clashes with other users of this Terraform project.
-* `private_key`: the filename of a `ssh` private key used for accessing
-all the nodes (a corresponding `.pub` file must exist too).
+* `authorized_keys`: a list of `ssh` public key to populate in the machines, 
+used for accessing all the nodes. The private key must have been added to
+the ssh agent and the agenet must be running.
 * `ami_distro`: the Linux distro to use, currently `ubuntu` or `fedora`.
 * `aws_region`: name of the region to be used.
 * `aws_az`: the AWS Availability Zone
@@ -58,7 +75,7 @@ all the nodes (a corresponding `.pub` file must exist too).
 for the VPC and the public and private subnets.
 * `master_size` and `worker_size`: the VM size for the masters
 and workers.
- 
+
 ## Topology
 
 The cluster will be made by these machines:
@@ -74,25 +91,28 @@ There are some constraints imposed by Terraform/AWS that must be
 taken into account when using this code as a base for your own
 deployments. 
 
-1) Firstly, the cluster creation order in AWS is not _natural_
-   for using our provisioner. The problem comes when `kubeadm` is started
-   in the seeder as part of the provisioning. At some point it tries to
-   access the API server through the Load Balancer. However, the Load
-   Balancer creation depends on the very same instance being fully
-   created _and provisioned_, so there is a deadlock in the
-   creation process.
+### Cluster creation order
 
-   The only solution is to do the `kubeadm` provisioning _after_
-   the instance and the Load Balancer have been created, using a
-   `null_resource` where the `provisioner "kubeadm"` is embeded.
+Firstly, the cluster creation order in AWS is not _natural_
+for using our provisioner. The problem comes when `kubeadm` is started
+in the seeder as part of the provisioning. At some point it tries to
+access the API server through the Load Balancer. However, the Load
+Balancer creation depends on the very same instance being fully
+created _and provisioned_, so there is a deadlock in the
+creation process.
 
-2) In addition, the Load Balancer checks that the API server(s) are healthy 
-   for keeping them in the list of backends. So if we create `1)` a master
-   instance `2)` the Load Balancer `3)` the API server in that master, there is
-   a lapse of time when the API server is not going to respond to the health
-   checks. By using an higher `unhealthy_threshold` in the `health_check`
-   we can reduce this chance of failure, but we are also reducing
-   the ability to detect real failures in the backend(s).
+The only solution is to do the `kubeadm` provisioning _after_
+the instance and the Load Balancer have been created, using a
+`null_resource` where the `provisioner "kubeadm"` is embeded.
+
+### Nodenames
+
+Nodes must be registered with the private DNS names provided
+by AWS. This can be accomplished by using the `private_dns` name
+as the `nodename` in the _provisioner_.
+
+### Autoscaling groups
+
+_TODO_
+
  
-3) Nodes must be registered with the private DNS names provided
-   by AWS.

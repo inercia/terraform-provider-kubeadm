@@ -24,28 +24,22 @@ variable "kubeconfig" {
   description = "A local copy of the admin kubeconfig created after the cluster initialization"
 }
 
-variable "private_key" {
-  type        = "string"
-  default     = "~/.ssh/id_rsa"
-  description = "filename of ssh private key used for accessing all the nodes. a corresponding .pub file must exist"
-}
-
 variable "vpc_cidr" {
   type        = "string"
-  default     = "10.0.0.0/16"
+  default     = "10.1.0.0/16"
   description = "Subnet CIDR"
 }
 
-variable "vpc_cidr_public" {
+variable "public_subnet" {
   type        = "string"
-  default     = "10.0.70.0/24"
-  description = "Subnet CIDR for the public subnet"
+  description = "CIDR blocks for each public subnet of vpc"
+  default     = "10.1.1.0/24"
 }
 
-variable "vpc_cidr_private" {
+variable "private_subnet" {
   type        = "string"
-  default     = "10.0.80.0/24"
-  description = "Subnet CIDR for the private subnet"
+  description = "Private subnet of vpc"
+  default     = "10.1.4.0/24"
 }
 
 variable "aws_access_key" {
@@ -82,4 +76,10 @@ variable "tags" {
   type        = "map"
   default     = {}
   description = "Extra tags used for the AWS resources created"
+}
+
+variable "authorized_keys" {
+  type        = "list"
+  default     = []
+  description = "ssh keys to inject into all the nodes. First key will be used for creating a keypair."
 }

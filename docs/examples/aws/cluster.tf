@@ -7,354 +7,64 @@ locals {
 
   # name pattern for the different distros
   ami_name_pattern_map = {
-    ubuntu = "ubuntu/images/hvm-ssd/ubuntu-bionic-18.04*"
-    fedora = ".*Fedora-Cloud-Base.*standard.*"
+    ubuntu   = "ubuntu/images/hvm-ssd/ubuntu-bionic-18.04*"
+    fedora   = ".*Fedora-Cloud-Base.*standard.*"
+    opensuse = "openSUSE-Leap-15-*"
   }
 
   ami_name_pattern = "${lookup(local.ami_name_pattern_map, var.ami_distro)}"
 
   # owner for the different distros
   ami_owner_map = {
-    ubuntu = "099720109477"
-    fedora = "125523088429"
+    ubuntu   = "099720109477"
+    fedora   = "125523088429"
+    opensuse = "679593333241"
   }
 
   ami_owner = "${lookup(local.ami_owner_map, var.ami_distro)}"
 
   # ssh user used in the different distros
   ssh_user_map = {
-    ubuntu = "ubuntu"
-    fedora = "fedora"
+    ubuntu   = "ubuntu"
+    fedora   = "fedora"
+    opensuse = "ec2-user"
   }
 
   ssh_user = "${lookup(local.ssh_user_map, var.ami_distro)}"
-}
 
-###########################################
-#
-###########################################
+  ssh_key = "${element(var.authorized_keys, 0)}"
+}
 
 provider "aws" {
   region     = "${var.aws_region}"
   access_key = "${var.aws_access_key}"
   secret_key = "${var.aws_secret_key}"
-
-  #shared_credentials_file = "~/.aws/creds"
-  profile = "default"
+  profile    = "default"
 }
 
-# resource "aws_iam_role" "k8s_master" {
-#   assume_role_policy = <<EOF
-# {
-#   "Version": "2012-10-17",
-#   "Statement": [
-#     {
-#       "Effect": "Allow",
-#       "Principal": { "Service": "ec2.amazonaws.com" },
-#       "Action": "sts:AssumeRole"
-#     }
-#   ]
-# }
-# EOF
-# }
-#
-# resource "aws_iam_role" "k8s_worker" {
-#   assume_role_policy = <<EOF
-# {
-#   "Version": "2012-10-17",
-#   "Statement": [
-#     {
-#       "Effect": "Allow",
-#       "Principal": { "Service": "ec2.amazonaws.com"},
-#       "Action": "sts:AssumeRole"
-#     }
-#   ]
-# }
-# EOF
-# }
-#
-# resource "aws_iam_role_policy" "k8s_master" {
-#   role = "${aws_iam_role.k8s_master.id}"
-#   policy = <<EOF
-# {
-#   "Version": "2012-10-17",
-#   "Statement": [
-#     {
-#       "Effect": "Allow",
-#       "Action": ["ec2:*"],
-#       "Resource": ["*"]
-#     },
-#     {
-#       "Effect": "Allow",
-#       "Action": ["elasticloadbalancing:*"],
-#       "Resource": ["*"]
-#     },
-#     {
-#       "Effect": "Allow",
-#       "Action": ["route53:*"],
-#       "Resource": ["*"]
-#     },
-#     {
-#       "Effect": "Allow",
-#       "Action": "s3:*",
-#       "Resource": [ "arn:aws:s3:::kubernetes-*"]
-#     }
-#   ]
-# }
-# EOF
-# }
-#
-# resource "aws_iam_role_policy" "k8s_worker" {
-#   role = "${aws_iam_role.k8s_worker.id}"
-#   policy = <<EOF
-# {
-#   "Version": "2012-10-17",
-#   "Statement": [
-#     {
-#       "Effect": "Allow",
-#       "Action": "s3:*",
-#       "Resource": [
-#         "arn:aws:s3:::kubernetes-*"
-#       ]
-#     },
-#     {
-#       "Effect": "Allow",
-#       "Action": "ec2:Describe*",
-#       "Resource": "*"
-#     },
-#     {
-#       "Effect": "Allow",
-#       "Action": "ec2:AttachVolume",
-#       "Resource": "*"
-#     },
-#     {
-#       "Effect": "Allow",
-#       "Action": "ec2:DetachVolume",
-#       "Resource": "*"
-#     },
-#     {
-#       "Effect": "Allow",
-#       "Action": ["route53:*"],
-#       "Resource": ["*"]
-#     },
-#     {
-#       "Effect": "Allow",
-#       "Action": [
-#         "ecr:GetAuthorizationToken",
-#         "ecr:BatchCheckLayerAvailability",
-#         "ecr:GetDownloadUrlForLayer",
-#         "ecr:GetRepositoryPolicy",
-#         "ecr:DescribeRepositories",
-#         "ecr:ListImages",
-#         "ecr:BatchGetImage"
-#       ],
-#       "Resource": "*"
-#     }
-#   ]
-# }
-# EOF
-# }
-#
-# resource "aws_iam_instance_profile" "k8s_master" {
-#   name = "profile_master"
-#   role = "${aws_iam_role.k8s_master.name}"
-# }
-#
-# resource "aws_iam_instance_profile" "k8s_worker" {
-#   name = "profile_worker"
-#   role = "${aws_iam_role.k8s_worker.name}"
-# }
+###########################################
+# images
+###########################################
 
-resource "aws_vpc" "vpc" {
-  cidr_block           = "${var.vpc_cidr}"
-  enable_dns_support   = true
-  enable_dns_hostnames = true
-  tags                 = "${merge(local.tags, map("Class", "VPC"))}"
-}
+data "template_file" "cloud-init" {
+  template = "${file("cloud-init/cloud-init.yaml.tpl")}"
 
-resource "aws_internet_gateway" "igw" {
-  vpc_id     = "${aws_vpc.vpc.id}"
-  depends_on = ["aws_vpc.vpc"]
-}
-
-resource "aws_subnet" "public_subnet" {
-  vpc_id                  = "${aws_vpc.vpc.id}"
-  cidr_block              = "${var.vpc_cidr_public}"
-  availability_zone       = "${var.aws_az}"
-  map_public_ip_on_launch = true
-  depends_on              = ["aws_vpc.vpc"]
-  tags                    = "${merge(local.tags, map("Class", "PublicSubnet"))}"
-}
-
-resource "aws_subnet" "private_subnet" {
-  vpc_id            = "${aws_vpc.vpc.id}"
-  cidr_block        = "${var.vpc_cidr_private}"
-  availability_zone = "${var.aws_az}"
-  depends_on        = ["aws_vpc.vpc"]
-  tags              = "${merge(local.tags, map("Class", "PrivateSubnet"))}"
-}
-
-resource "aws_eip" "nat_eip" {
-  vpc        = true
-  depends_on = ["aws_internet_gateway.igw"]
-}
-
-resource "aws_nat_gateway" "nat_gw" {
-  allocation_id = "${aws_eip.nat_eip.id}"
-  subnet_id     = "${aws_subnet.public_subnet.id}"
-  depends_on    = ["aws_eip.nat_eip"]
-}
-
-resource "aws_route_table" "public_rt" {
-  vpc_id = "${aws_vpc.vpc.id}"
-
-  route {
-    gateway_id = "${aws_internet_gateway.igw.id}"
-    cidr_block = "0.0.0.0/0"
-  }
-
-  depends_on = ["aws_vpc.vpc"]
-}
-
-resource "aws_route_table" "private_rt" {
-  vpc_id     = "${aws_vpc.vpc.id}"
-  depends_on = ["aws_vpc.vpc"]
-  tags       = "${merge(local.tags, map("Class", "PrivateRouteTable"))}"
-
-  route = {
-    nat_gateway_id = "${aws_nat_gateway.nat_gw.id}"
-    cidr_block     = "0.0.0.0/0"
+  vars {
+    public_key = "${local.ssh_key}"
   }
 }
 
-resource "aws_route_table_association" "public_rta" {
-  subnet_id      = "${aws_subnet.public_subnet.id}"
-  route_table_id = "${aws_route_table.public_rt.id}"
-  depends_on     = ["aws_subnet.public_subnet"]
-}
+data "template_cloudinit_config" "cfg" {
+  gzip          = false
+  base64_encode = false
 
-resource "aws_route_table_association" "private_rta" {
-  subnet_id      = "${aws_subnet.private_subnet.id}"
-  route_table_id = "${aws_route_table.private_rt.id}"
-  depends_on     = ["aws_subnet.private_subnet"]
-}
-
-resource "aws_elb" "k8s_master_elb" {
-  name                      = "k8scontrollerselb"
-  subnets                   = ["${aws_subnet.public_subnet.id}"]
-  security_groups           = ["${aws_security_group.allow_k8s_elb.id}"]
-  instances                 = ["${aws_instance.k8s_master.*.id}"]
-  cross_zone_load_balancing = false
-
-  listener {
-    instance_port     = 80
-    instance_protocol = "http"
-    lb_port           = 80
-    lb_protocol       = "http"
-  }
-
-  listener {
-    lb_port           = 6443
-    lb_protocol       = "tcp"
-    instance_port     = 6443
-    instance_protocol = "tcp"
-  }
-
-  # we must use really flexible timeouts in order to give
-  # some time until the API server is up and running...
-  health_check {
-    healthy_threshold   = 2
-    unhealthy_threshold = 10
-    timeout             = 10
-    target              = "TCP:6443"
-    interval            = 25
-  }
-  depends_on = ["aws_instance.k8s_master"]
-  tags       = "${merge(local.tags, map("Class", "PrivateSubnet"))}"
-}
-
-resource "aws_security_group" "allow_k8s_elb" {
-  name        = "allow_k8s_elb"
-  description = "Allow trafic to K8S controllers"
-  vpc_id      = "${aws_vpc.vpc.id}"
-
-  ingress {
-    from_port   = 6443
-    to_port     = 6443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  part {
+    content_type = "text/cloud-config"
+    content      = "${data.template_file.cloud-init.rendered}"
   }
 }
 
-resource "aws_security_group" "allow_ssh_to_public" {
-  name        = "allow_ssh_public"
-  description = "Allow SSH from internet to the public subnet"
-  vpc_id      = "${aws_vpc.vpc.id}"
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "allow_any_public_to_private" {
-  name        = "allow_ssh_public_to_private_net"
-  description = "Allow any traffic from public subnet and elb to the private subnet"
-  vpc_id      = "${aws_vpc.vpc.id}"
-
-  ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["${aws_subnet.public_subnet.cidr_block}"]
-  }
-
-  ingress {
-    from_port       = 0
-    to_port         = 0
-    protocol        = "-1"
-    security_groups = ["${aws_security_group.allow_k8s_elb.id}"]
-  }
-
-  ingress {
-    from_port = 0
-    to_port   = 0
-    protocol  = "-1"
-    self      = true
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-data "aws_ami" "image" {
+data "aws_ami" "latest_ami" {
   most_recent = true
 
   owners = ["${local.ami_owner}"]
@@ -375,80 +85,326 @@ data "aws_ami" "image" {
   }
 }
 
-resource "aws_key_pair" "kp" {
-  key_name   = "${var.stack_name}"
-  public_key = "${file("${var.private_key}.pub")}"
+###########################################
+# networking
+###########################################
+resource "aws_vpc" "platform" {
+  cidr_block           = "${var.vpc_cidr}"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+  tags                 = "${merge(local.tags, map("Class", "VPC"))}"
 }
 
-data "template_file" "cloud-init" {
-  template = "${file("cloud-init/cloud-init.yaml.tpl")}"
+// list of az which can be access from the current region
+data "aws_availability_zones" "az" {
+  state = "available"
+}
 
-  vars {
-    public_key = "${file("${var.private_key}.pub")}"
+resource "aws_vpc_dhcp_options" "platform" {
+  domain_name         = "${var.aws_region}.compute.internal"
+  domain_name_servers = ["AmazonProvidedDNS"]
+  tags                = "${merge(local.tags, map("Class", "VPCDHCP"))}"
+}
+
+resource "aws_vpc_dhcp_options_association" "dns_resolver" {
+  dhcp_options_id = "${aws_vpc_dhcp_options.platform.id}"
+  vpc_id          = "${aws_vpc.platform.id}"
+}
+
+resource "aws_internet_gateway" "platform" {
+  tags       = "${merge(local.tags, map("Class", "Gateway"))}"
+  vpc_id     = "${aws_vpc.platform.id}"
+  depends_on = ["aws_vpc.platform"]
+}
+
+resource "aws_subnet" "public" {
+  availability_zone       = "${element(data.aws_availability_zones.az.names, 0)}"
+  cidr_block              = "${var.public_subnet}"
+  depends_on              = ["aws_main_route_table_association.main"]
+  map_public_ip_on_launch = true
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-subnet-public-${element(data.aws_availability_zones.az.names, 0)}",
+    "Class", "VPC"))}"
+
+  vpc_id = "${aws_vpc.platform.id}"
+}
+
+resource "aws_subnet" "private" {
+  availability_zone       = "${element(data.aws_availability_zones.az.names, 0)}"
+  cidr_block              = "${var.private_subnet}"
+  map_public_ip_on_launch = true
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-subnet-private-${element(data.aws_availability_zones.az.names, 0)}",
+    "Class", "Subnet"))}"
+
+  vpc_id = "${aws_vpc.platform.id}"
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = "${aws_vpc.platform.id}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-route-table-public",
+    "Class", "RouteTable"))}"
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = "${aws_internet_gateway.platform.id}"
   }
 }
 
-resource "aws_instance" "bastion" {
-  ami                         = "${data.aws_ami.image.id}"
-  instance_type               = "t2.micro"
-  availability_zone           = "${var.aws_az}"
-  subnet_id                   = "${aws_subnet.public_subnet.id}"
-  private_ip                  = "${cidrhost(aws_subnet.public_subnet.cidr_block, 10)}"
-  vpc_security_group_ids      = ["${aws_security_group.allow_ssh_to_public.id}"]
-  key_name                    = "${aws_key_pair.kp.key_name}"
-  associate_public_ip_address = true
-  user_data                   = "${data.template_file.cloud-init.rendered}"
-  tags                        = "${merge(local.tags, map("Name", format("%s-bastion", var.stack_name), "Class", "Instance"))}"
+resource "aws_route_table" "private" {
+  vpc_id = "${aws_vpc.platform.id}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-route-table-private",
+    "Class", "RouteTable"))}"
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = "${aws_nat_gateway.nat_gw.id}"
+  }
 }
 
-resource "aws_instance" "k8s_master" {
-  count                       = "${var.masters}"
-  ami                         = "${data.aws_ami.image.id}"
-  instance_type               = "${var.master_size}"
-  availability_zone           = "${var.aws_az}"
-  subnet_id                   = "${aws_subnet.private_subnet.id}"
-  private_ip                  = "${cidrhost(aws_subnet.private_subnet.cidr_block, 10 + count.index)}"
-  vpc_security_group_ids      = ["${aws_security_group.allow_any_public_to_private.id}"]
-  key_name                    = "${aws_key_pair.kp.key_name}"
-  associate_public_ip_address = false
-  user_data                   = "${data.template_file.cloud-init.rendered}"
-
-  # iam_instance_profile        = "${aws_iam_instance_profile.k8s_master.name}"
-  depends_on = ["aws_nat_gateway.nat_gw"]
-  tags       = "${merge(local.tags, map("Name", format("%s-master-%d", var.stack_name, count.index), "Class", "Instance"))}"
+resource "aws_main_route_table_association" "main" {
+  route_table_id = "${aws_route_table.public.id}"
+  vpc_id         = "${aws_vpc.platform.id}"
 }
 
-resource "aws_instance" "k8s_worker" {
-  count                       = "${var.workers}"
-  ami                         = "${data.aws_ami.image.id}"
-  instance_type               = "${var.worker_size}"
-  availability_zone           = "${var.aws_az}"
-  subnet_id                   = "${aws_subnet.private_subnet.id}"
-  private_ip                  = "${cidrhost(aws_subnet.private_subnet.cidr_block, 30 + count.index)}"
-  vpc_security_group_ids      = ["${aws_security_group.allow_any_public_to_private.id}"]
-  key_name                    = "${aws_key_pair.kp.key_name}"
-  associate_public_ip_address = false
-  user_data                   = "${data.template_file.cloud-init.rendered}"
+resource "aws_route_table_association" "private" {
+  route_table_id = "${aws_route_table.private.id}"
+  subnet_id      = "${aws_subnet.private.id}"
+}
 
-  # iam_instance_profile        = "${aws_iam_instance_profile.k8s_worker.name}"
-  depends_on = ["aws_nat_gateway.nat_gw"]
-  tags       = "${merge(local.tags, map("Name", format("%s-worker-%d", var.stack_name, count.index), "Class", "Instance"))}"
+resource "aws_route_table_association" "public" {
+  route_table_id = "${aws_route_table.public.id}"
+  subnet_id      = "${aws_subnet.public.id}"
+}
+
+resource "aws_eip" "nat_eip" {
+  vpc        = true
+  depends_on = ["aws_internet_gateway.platform"]
+}
+
+resource "aws_nat_gateway" "nat_gw" {
+  allocation_id = "${aws_eip.nat_eip.id}"
+  subnet_id     = "${aws_subnet.public.id}"
+  depends_on    = ["aws_eip.nat_eip"]
+}
+
+###########################################
+# load balancer
+###########################################
+resource "aws_elb" "kube_api" {
+  connection_draining       = false
+  cross_zone_load_balancing = true
+  idle_timeout              = 400
+  name                      = "${var.stack_name}-elb"
+  security_groups           = ["${aws_security_group.elb.id}"]
+  subnets                   = ["${aws_subnet.public.0.id}"]
+  instances                 = ["${aws_instance.masters.id}"]
+
+  listener {
+    instance_port     = 6443
+    instance_protocol = "tcp"
+    lb_port           = 6443
+    lb_protocol       = "tcp"
+  }
+
+  listener {
+    instance_port     = 6443
+    instance_protocol = "tcp"
+    lb_port           = 6443
+    lb_protocol       = "tcp"
+  }
+
+  health_check {
+    healthy_threshold   = 2
+    interval            = 30
+    target              = "TCP:6443"
+    timeout             = 3
+    unhealthy_threshold = 6
+  }
+}
+
+output "elb_address" {
+  value = "${aws_elb.kube_api.dns_name}"
+}
+
+###########################################
+# security
+###########################################
+resource "aws_security_group" "ssh" {
+  description = "allow ssh traffic"
+  name        = "${var.stack_name}-ssh"
+  vpc_id      = "${aws_vpc.platform.id}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-ssh",
+    "Class", "SecurityGroup"))}"
+
+  // allow traffic for TCP 22
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "LBPorts" {
+  description = "allow load balancers to hit high ports"
+  name        = "${var.stack_name}-lbports"
+  vpc_id      = "${aws_vpc.platform.id}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-lbport",
+    "Class", "SecurityGroup"))}"
+
+  // allow traffic for TCP 22
+  ingress {
+    from_port   = 30000
+    to_port     = 32767
+    protocol    = "tcp"
+    cidr_blocks = ["10.1.0.0/16"]
+  }
+}
+
+resource "aws_security_group" "icmp" {
+  description = "allow ping between instances"
+  name        = "${var.stack_name}-icmp"
+  vpc_id      = "${aws_vpc.platform.id}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-icmp",
+    "Class", "SecurityGroup"))}"
+
+  ingress {
+    from_port       = -1
+    to_port         = -1
+    protocol        = "icmp"
+    security_groups = []
+    self            = true
+  }
+
+  egress {
+    from_port       = -1
+    to_port         = -1
+    protocol        = "icmp"
+    security_groups = []
+    cidr_blocks     = ["${var.vpc_cidr}"]
+  }
+}
+
+resource "aws_security_group" "egress" {
+  description = "egress traffic"
+  name        = "${var.stack_name}-egress"
+  vpc_id      = "${aws_vpc.platform.id}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-egress",
+    "Class", "SecurityGroup"))}"
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "kube" {
+  description = "give access to everything for now"
+  name        = "${var.stack_name}-kube"
+  vpc_id      = "${aws_vpc.platform.id}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-kube",
+    "Class", "SecurityGroup"))}"
+
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["${var.vpc_cidr}"]
+  }
+
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["${var.private_subnet}"]
+  }
+}
+
+resource "aws_security_group" "allow_https" {
+  description = "give access to 6443 port"
+  name        = "${var.stack_name}-allow-https-to-kubeapi"
+  vpc_id      = "${aws_vpc.platform.id}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-https",
+    "Class", "SecurityGroup"))}"
+
+  ingress {
+    from_port   = 6443
+    to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# A security group for the ELB so it is accessible via the web
+resource "aws_security_group" "elb" {
+  name        = "${var.stack_name}-kube-api"
+  description = "give access to kube api server"
+  vpc_id      = "${aws_vpc.platform.id}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-elb",
+    "Class", "SecurityGroup"))}"
+
+  # HTTP access from anywhere
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 6443
+    to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # outbound internet access
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_key_pair" "kube" {
+  key_name   = "${var.stack_name}-keypair"
+  public_key = "${local.ssh_key}"
 }
 
 ###########################################
 # Kubeadm
 ###########################################
 
-# we must do all the kubeadm stuff _after_ we have created the Load Balancer
-# and the Load Balancer is going to be created _after_ the masters.
-# so our `kubeadm` data/provisioners must be done at the end,
-# in some `null_resources`
-
 data "kubeadm" "main" {
   config_path = "${var.kubeconfig}"
 
   api {
-    external = "${aws_elb.k8s_master_elb.dns_name}"
+    # the Load Balancer external, public DNS name
+    external = "${aws_elb.kube_api.dns_name}"
   }
 
   network {
@@ -470,15 +426,106 @@ data "kubeadm" "main" {
   }
 }
 
-resource "null_resource" "master" {
-  count      = "${var.masters}"
-  depends_on = ["aws_instance.k8s_master"]
+###########################################
+# bastion host
+###########################################
+resource "aws_instance" "bastion" {
+  ami                         = "${data.aws_ami.latest_ami.id}"
+  associate_public_ip_address = true
+  count                       = "${var.masters}"
+  instance_type               = "${var.master_size}"
+  key_name                    = "${aws_key_pair.kube.key_name}"
+  source_dest_check           = false
+  subnet_id                   = "${aws_subnet.public.0.id}"
+  user_data                   = "${data.template_cloudinit_config.cfg.rendered}"
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-master-${count.index}",
+    "Class", "Instance"))}"
+
+  vpc_security_group_ids = [
+    "${aws_security_group.ssh.id}",
+    "${aws_security_group.icmp.id}",
+    "${aws_security_group.egress.id}",
+    "${aws_security_group.kube.id}",
+    "${aws_security_group.allow_https.id}",
+  ]
+
+  lifecycle {
+    create_before_destroy = true
+
+    # ignore_changes = ["associate_public_ip_address"]
+  }
+
+  root_block_device {
+    volume_type           = "gp2"
+    volume_size           = 20
+    delete_on_termination = true
+  }
+}
+
+###########################################
+# master
+###########################################
+resource "aws_instance" "masters" {
+  ami               = "${data.aws_ami.latest_ami.id}"
+  count             = "${var.masters}"
+  instance_type     = "${var.master_size}"
+  key_name          = "${aws_key_pair.kube.key_name}"
+  source_dest_check = false
+  subnet_id         = "${aws_subnet.private.0.id}"
+  user_data         = "${data.template_cloudinit_config.cfg.rendered}"
+  depends_on        = ["aws_instance.bastion"]
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-master-${count.index}",
+    "Class", "Instance"))}"
+
+  vpc_security_group_ids = [
+    "${aws_security_group.ssh.id}",
+    "${aws_security_group.icmp.id}",
+    "${aws_security_group.egress.id}",
+    "${aws_security_group.kube.id}",
+    "${aws_security_group.allow_https.id}",
+  ]
+
+  lifecycle {
+    create_before_destroy = true
+
+    # ignore_changes = ["associate_public_ip_address"]
+  }
+
+  root_block_device {
+    volume_type           = "gp2"
+    volume_size           = 20
+    delete_on_termination = true
+  }
+}
+
+## note: in AWS, the masters must be provisioned in a separate null_resource,
+##       as we have the following dependencies:
+##
+##          aws_instance.masters / provisioner "kubeadm" -> data.kubeadm.main.config
+##          data.kubeadm.main -> aws_elb.kube_api.dns_name
+##          aws_elb.kube_api.instances -> aws_instance.masters
+##
+##       so we have a circular dependency: we need the Load Balancer in order to
+##       provision instances with kubeadm (as kubeadm tries to access the LB address),
+##       and we need the instances in order to add them to the Load Balancer
+##
+resource "null_resource" "masters" {
+  count = "${var.masters}"
+
+  depends_on = [
+    "aws_instance.masters",
+    "aws_elb.kube_api",
+  ]
 
   connection {
     type         = "ssh"
     user         = "${local.ssh_user}"
-    private_key  = "${file(var.private_key)}"
-    host         = "${element(aws_instance.k8s_master.*.private_ip, count.index)}"
+    agent        = true
+    host         = "${element(aws_instance.masters.*.private_ip, count.index)}"
     bastion_host = "${aws_instance.bastion.public_ip}"
   }
 
@@ -487,7 +534,8 @@ resource "null_resource" "master" {
 
     # we must overwrite the nodename with the AWS private DNS name
     # because the kubelet cannot prooperly detect a valid hostname
-    nodename = "${aws_instance.k8s_master.private_dns}"
+    #nodename = "${aws_instance.masters.private_dns}"
+    nodename = "${element(aws_instance.masters.*.private_dns, count.index)}"
 
     install {
       auto = true
@@ -495,25 +543,67 @@ resource "null_resource" "master" {
   }
 }
 
-resource "null_resource" "worker" {
-  count      = "${var.workers}"
-  depends_on = ["aws_instance.k8s_worker", "null_resource.master"]
+output "master.public_ip" {
+  value = "${aws_instance.masters.*.private_ip}"
+}
+
+output "master.private_dns" {
+  value = "${aws_instance.masters.*.private_dns}"
+}
+
+###########################################
+# workers
+###########################################
+
+resource "aws_instance" "workers" {
+  ami               = "${data.aws_ami.latest_ami.id}"
+  count             = "${var.workers}"
+  instance_type     = "${var.worker_size}"
+  key_name          = "${aws_key_pair.kube.key_name}"
+  source_dest_check = false
+  subnet_id         = "${aws_subnet.private.0.id}"
+  user_data         = "${data.template_cloudinit_config.cfg.rendered}"
+  depends_on        = ["null_resource.masters"]
+
+  tags = "${merge(local.tags, map(
+    "Name", "${var.stack_name}-node-${count.index}",
+    "Class", "Instance"))}"
+
+  security_groups = [
+    "${aws_security_group.ssh.id}",
+    "${aws_security_group.icmp.id}",
+    "${aws_security_group.egress.id}",
+    "${aws_security_group.kube.id}",
+    "${aws_security_group.LBPorts.id}",
+  ]
+
+  lifecycle {
+    create_before_destroy = true
+
+    # ignore_changes = ["associate_public_ip_address"]
+  }
+
+  root_block_device {
+    volume_type           = "gp2"
+    volume_size           = 20
+    delete_on_termination = true
+  }
 
   connection {
     type         = "ssh"
     user         = "${local.ssh_user}"
-    private_key  = "${file(var.private_key)}"
-    host         = "${element(aws_instance.k8s_worker.*.private_ip, count.index)}"
+    agent        = true
+    host         = "${self.private_ip}"
     bastion_host = "${aws_instance.bastion.public_ip}"
   }
 
   provisioner "kubeadm" {
     config = "${data.kubeadm.main.config}"
-    join   = "${element(aws_instance.k8s_master.*.private_ip, 0)}"
+    join   = "${element(aws_instance.masters.*.private_ip, 0)}"
 
     # we must overwrite the nodename with the AWS private DNS name
-    # because the kubelet cannot prooperly detect a valid hostname
-    nodename = "${aws_instance.k8s_worker.private_dns}"
+    # because the kubelet cannot properly detect a valid hostname
+    nodename = "${self.private_dns}"
 
     install {
       auto = true
@@ -521,26 +611,10 @@ resource "null_resource" "worker" {
   }
 }
 
-###########################################
-# output
-###########################################
-
-output "ip_bastion" {
-  value = "${aws_instance.bastion.public_ip}"
+output "workers.public_ip" {
+  value = "${aws_instance.workers.*.public_ip}"
 }
 
-output "dns_lb" {
-  value = "${aws_elb.k8s_master_elb.dns_name}"
-}
-
-output "ip_masters" {
-  value = [
-    "${aws_instance.k8s_master.*.private_ip}",
-  ]
-}
-
-output "ip_workers" {
-  value = [
-    "${aws_instance.k8s_worker.*.private_ip}",
-  ]
+output "workers.private_dns" {
+  value = "${aws_instance.workers.*.private_dns}"
 }
