@@ -92,18 +92,18 @@ func applyFn(ctx context.Context) error {
 			doLoadHelm(d),
 			doLoadManifests(d),
 		}, o, comm, useSudo)
-	} else {
-		_, kubeadmConfig, err := unmarshallJoinConfig(d)
-		if err != nil {
-			return err
-		}
-
-		o.Output(fmt.Sprintf("Joining the cluster with 'kubadm join'"))
-		return ssh.ApplyList([]ssh.Applyer{
-			doCommonProvisioning(),
-			doKubeadmJoin(d, kubeadmConfig),
-		}, o, comm, useSudo)
 	}
+
+	_, kubeadmConfig, err := unmarshallJoinConfig(d)
+	if err != nil {
+		return err
+	}
+
+	o.Output(fmt.Sprintf("Joining the cluster with 'kubadm join'"))
+	return ssh.ApplyList([]ssh.Applyer{
+		doCommonProvisioning(),
+		doKubeadmJoin(d, kubeadmConfig),
+	}, o, comm, useSudo)
 }
 
 // doCommonProvisioning are the common provisioning things, for the `init` as well

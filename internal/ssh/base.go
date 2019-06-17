@@ -24,8 +24,8 @@ func (f ApplyFunc) Apply(o terraform.UIOutput, comm communicator.Communicator, u
 	return f(o, comm, useSudo)
 }
 
-// EmptyAction is a dummy action
-func EmptyAction() ApplyFunc {
+// DoNothing is a dummy action
+func DoNothing() ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		return nil
 	})
@@ -109,11 +109,10 @@ func ApplyIfElse(condition Checker, actionIf Applyer, actionElse Applyer) ApplyF
 	})
 }
 
-// ApplyTry tries to run an action, but it is ok if
-// the action fails
+// ApplyTry tries to run an action, but it is ok if the action fails
 func ApplyTry(action Applyer) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		action.Apply(o, comm, useSudo)
+		_ = action.Apply(o, comm, useSudo)
 		return nil
 	})
 }

@@ -43,7 +43,7 @@ func doDownloadKubeconfig(d *schema.ResourceData) ssh.ApplyFunc {
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
 		log.Printf("[DEBUG] [KUBEADM] no config_path specified: will not download kubeconfig")
-		return ssh.EmptyAction()
+		return ssh.DoNothing()
 	}
 	return ssh.DoDownloadFile(common.DefAdminKubeconfig, kubeconfig)
 }
@@ -86,7 +86,7 @@ func doLoadCNI(d *schema.ResourceData) ssh.ApplyFunc {
 func doLoadManifests(d *schema.ResourceData) ssh.ApplyFunc {
 	manifestsOpt, ok := d.GetOk("manifests")
 	if !ok {
-		return ssh.EmptyAction()
+		return ssh.DoNothing()
 	}
 	manifests := []string{}
 	for _, v := range manifestsOpt.([]interface{}) {

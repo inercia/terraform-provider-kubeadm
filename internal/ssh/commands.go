@@ -14,13 +14,17 @@ import (
 	"github.com/mitchellh/go-linereader"
 )
 
+const (
+	sudoArgs = "--non-interactive"
+)
+
 // DoExecList is a runner for a list of remote commands
 func DoExecList(commands []string) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		for _, command := range commands {
 			var err error
 			if useSudo {
-				command = "sudo " + command
+				command = "sudo " + sudoArgs + " " + command
 			}
 
 			log.Printf("[DEBUG] [KUBEADM] running '%s'", command)

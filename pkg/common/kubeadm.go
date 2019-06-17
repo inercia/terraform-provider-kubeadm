@@ -50,7 +50,10 @@ func YAMLToInitConfig(configBytes []byte) (*kubeadmapiv1beta1.InitConfiguration,
 			clusterConfig = cfg2
 		}
 	}
-	initConfig.ClusterConfiguration = *clusterConfig
+
+	if initConfig != nil && clusterConfig != nil {
+		initConfig.ClusterConfiguration = *clusterConfig
+	}
 
 	return initConfig, nil
 }
