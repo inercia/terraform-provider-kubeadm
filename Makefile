@@ -122,11 +122,13 @@ ci-save-env:
 	@cat /tmp/environment
 	@sudo mv -f /tmp/environment /etc/environment
 
-ci-tests: 
+ci-tests: ci-tests-unit
+
+ci-tests-unit: 
 	@make build test vet
 
-ci-deploy-lxd:
-	@make -C docs/examples/lxd ci
+ci-deploy-e2e:
+	@E2E_ENV=docs/examples/lxd make -C tests
 
 ci-local:
 	@echo "Running Travis locally..."
