@@ -90,16 +90,13 @@ check_distrobuilder() {
         return
     fi
 
-    echo ">>> downloading distrobuilde with 'go get'..."
-    mkdir -p $FIRST_GOPATH/src/github.com/
-    GO111MODULE=off go get -d github.com/lxc/distrobuilder
-    echo ">>> building distrobuilder..."
-    GO111MODULE=off make -C $FIRST_GOPATH/src/github.com/lxc/distrobuilder
+    echo ">>> downloading 'distrobuilder' with 'go get'..."
+    GO111MODULE=on go get github.com/lxc/distrobuilder/distrobuilder
     if [ ! -x $GOBIN/distrobuilder ] ; then
-      echo "distrobuildr could not be built"
+      echo "distrobuilder could not be built"
       exit 1
     fi
-    echo ">>> distrobuilder installed at $GOBIN/distrobuilder"
+    echo ">>> 'distrobuilder' installed at $GOBIN/distrobuilder"
     DISTROBUILDER=$GOBIN/distrobuilder
 }
 
