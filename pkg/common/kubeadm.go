@@ -10,9 +10,9 @@ import (
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 )
 
-/////////////
+//
 // Init
-/////////////
+//
 
 // YAMLToInitConfig converts a YAML to InitConfiguration
 func YAMLToInitConfig(configBytes []byte) (*kubeadmapiv1beta1.InitConfiguration, error) {
@@ -79,9 +79,9 @@ func InitConfigToYAML(initConfig *kubeadmapiv1beta1.InitConfiguration) ([]byte, 
 	return bytes.Join(allFiles, []byte(kubeadmconstants.YAMLDocumentSeparator)), nil
 }
 
-/////////////
+//
 // Join
-/////////////
+//
 
 // YAMLToJoinConfig converts a YAML to JoinConfiguration
 func YAMLToJoinConfig(configBytes []byte) (*kubeadmapiv1beta1.JoinConfiguration, error) {
