@@ -13,18 +13,22 @@ GOFMT_FILES    ?= $$(find . -name '*.go' |grep -v vendor)
 WEBSITE_REPO   = github.com/hashicorp/terraform-website
 WIKI_REPO      = $(shell echo `pwd`.wiki)
 
+# for some unknown reason, "provisioners" are only recognized in this directory
+PLUGINS_DIR    = $$HOME/.terraform.d/plugins
+
 TRAVIS_BUILDID := $(shell echo "build-$$RANDOM")
 # from https://hub.docker.com/r/travisci/ci-garnet/tags/
 TRAVIS_INSTANCE := "travisci/ci-garnet:packer-1515445631-7dfb2e1"
 
+# the deployment used for running the E2E tests
+E2E_ENV         := $(shell echo `pwd`)/docs/examples/lxd
+
 export GOPATH
 export GOBIN
-
 export TRAVIS_BUILDID
 export TRAVIS_INSTANCE
+export E2E_ENV
 
-# for some unknown reason, "provisioners" are only recognized in this directory
-PLUGINS_DIR    = $$HOME/.terraform.d/plugins
 
 all: build
 
@@ -45,6 +49,10 @@ generate:
 	cd pkg/provisioner && $(GO) generate -x
 
 install: build-forced
+
+.PHONY: vendor
+vendor:
+	$(GO) mod vendor
 
 ################################################
 
@@ -122,21 +130,13 @@ ci-save-env:
 	@cat /tmp/environment
 	@sudo mv -f /tmp/environment /etc/environment
 
-ci-tests: ci-tests-unit
+ci-tests: ci-tests-unit ci-tests-e2e
 
 ci-tests-unit: 
 	@make build test vet
 
-ci-deploy-e2e:
-	@E2E_ENV=docs/examples/lxd make -C tests
-
-ci-local:
-	@echo "Running Travis locally..."
-	docker run --name $(TRAVIS_BUILDID) \
-		-v ${PWD}:/src \
-		-v ${PWD}/utils/travis.sh:/usr/bin/travis.sh \
-		-dit $(TRAVIS_INSTANCE) /sbin/init
-	docker exec -it $(TRAVIS_BUILDID) /usr/bin/travis.sh
+ci-tests-e2e:
+	@make -C tests/e2e
 
 ################################################
 
