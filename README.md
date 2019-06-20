@@ -130,6 +130,7 @@ instructions.
   * [AWS](docs/examples/aws/README.md)
   * [libvirt](docs/examples/libvirt/README.md)
   * [lxd](docs/examples/lxd/README.md)
+  * [Docker-in-Docker](docs/examples/dnd/README.md)
 * [Roadmap, TODO and vision](../../wiki/Roadmap).
 
 ## Running acceptance tests
