@@ -1,13 +1,13 @@
 package ssh
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"log"
-	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/go-cmd/cmd"
 	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/communicator/remote"
 	"github.com/hashicorp/terraform/terraform"
@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	// arguments for "sudo"
 	sudoArgs = "--non-interactive"
 )
 
@@ -91,48 +92,50 @@ func DoExecScript(contents io.Reader, prefix string) ApplyFunc {
 }
 
 // DoLocalExec executes a local command
-func DoLocalExec(cmd string, args ...string) ApplyFunc {
+func DoLocalExec(command string, args ...string) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		o.Output(fmt.Sprintf("Running local command %s...", cmd))
+		fullCmd := fmt.Sprintf("%s %s", command, strings.Join(args, " "))
+		o.Output(fmt.Sprintf("Running local command %q...", fullCmd))
 
-		command := exec.Command(cmd, args...)
-		cmdReader, err := command.StdoutPipe()
-		if err != nil {
-			o.Output(fmt.Sprintf("Error creating pipe for %s: %s", cmd, err))
-			return err
+		// Disable output buffering, enable streaming
+		cmdOptions := cmd.Options{
+			Buffered:  false,
+			Streaming: true,
 		}
 
-		scanner := bufio.NewScanner(cmdReader)
+		envCmd := cmd.NewCmdOptions(cmdOptions, command, args...)
+
 		go func() {
-			for scanner.Scan() {
-				o.Output(fmt.Sprintf("%s\n", scanner.Text()))
+			for {
+				select {
+				case line := <-envCmd.Stdout:
+					o.Output(line)
+				case line := <-envCmd.Stderr:
+					o.Output("ERROR: " + line)
+				}
 			}
 		}()
 
-		err = command.Start()
-		if err != nil {
-			o.Output(fmt.Sprintf("Error running local command %s: %s", cmd, err))
-			return err
+		// Run and wait for Cmd to return
+		status := <-envCmd.Start()
+
+		// Cmd has finished but wait for goroutine to print all lines
+		for len(envCmd.Stdout) > 0 || len(envCmd.Stderr) > 0 {
+			time.Sleep(10 * time.Millisecond)
 		}
 
-		err = command.Wait()
-		if err != nil {
-			o.Output(fmt.Sprintf("Error waiting for %s: %s", cmd, err))
-			stdoutStderr, err := command.CombinedOutput()
-			if err != nil {
-				o.Output("Could not obtain stderr for process")
-				return err
-			}
-			o.Output(fmt.Sprintf("%s\n", stdoutStderr))
-			return err
+		if status.Exit != 0 {
+			o.Output(fmt.Sprintf("Error waiting for %q: %s [%d]",
+				command, status.Error.Error(), status.Exit))
+			return status.Error
 		}
 
 		return nil
 	})
 }
 
-// CheckCondition checks if bash command/condition succeedes or not
-func CheckCondition(cmd string) CheckerFunc {
+// CheckExec checks if bash command succeedes or not
+func CheckExec(cmd string) CheckerFunc {
 	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
 		success := "CONDITION_SUCCEEDED"
 		failure := "CONDITION_FAILED"

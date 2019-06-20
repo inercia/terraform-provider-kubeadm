@@ -159,7 +159,7 @@ func DoDownloadFile(remote, local string) ApplyFunc {
 
 // CheckFileExists checks that a remote file exists
 func CheckFileExists(path string) CheckerFunc {
-	return CheckCondition(fmt.Sprintf("[ -f '%s' ]", path))
+	return CheckExec(fmt.Sprintf("[ -f '%s' ]", path))
 }
 
 // CheckFileAbsent checks that a remote file does not exists

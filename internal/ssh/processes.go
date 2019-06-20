@@ -10,7 +10,7 @@ import (
 //        of `ps`, and that string can be part of some other command...
 func CheckProcessRunning(process string) CheckerFunc {
 	check := fmt.Sprintf(`[ -n "$(ps ax | grep %s | grep -v grep)" ]`, process)
-	return CheckCondition(check)
+	return CheckExec(check)
 }
 
 // DoRestartService restart a systemctl service
@@ -28,7 +28,7 @@ func DoEnableService(service string) ApplyFunc {
 func CheckServiceExists(service string) CheckerFunc {
 	log.Printf("[DEBUG] Checking if service '%s' exists", service)
 	exists := fmt.Sprintf("systemctl --no-pager status '%s' 2>/dev/null", service)
-	return CheckCondition(exists)
+	return CheckExec(exists)
 }
 
 // CheckServiceActive checks that service exists and is active
@@ -36,5 +36,5 @@ func CheckServiceActive(service string) CheckerFunc {
 	inactive := fmt.Sprintf("systemctl --no-pager status '%s' 2>/dev/null | grep Active | grep -q inactive", service)
 	return CheckNot(
 		CheckAnd(CheckServiceExists(service),
-			CheckCondition(inactive)))
+			CheckExec(inactive)))
 }
