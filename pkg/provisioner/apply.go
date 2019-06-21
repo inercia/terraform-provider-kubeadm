@@ -69,8 +69,8 @@ func applyFn(ctx context.Context) error {
 		//  with `d.HasChange("config")`...
 	}
 
-	// run kubeadm init/join
 	if len(join) == 0 {
+		// run "kubeadm init"
 		_, kubeadmConfig, err := unmarshallInitConfig(d)
 		if err != nil {
 			return err
@@ -87,6 +87,7 @@ func applyFn(ctx context.Context) error {
 				),
 			),
 			doDownloadKubeconfig(d),
+			doPrintEtcdMembers(d),
 			doLoadCNI(d),
 			doLoadDashboard(d),
 			doLoadHelm(d),
@@ -94,6 +95,7 @@ func applyFn(ctx context.Context) error {
 		}, o, comm, useSudo)
 	}
 
+	// run "kubeadm join"
 	_, kubeadmConfig, err := unmarshallJoinConfig(d)
 	if err != nil {
 		return err
