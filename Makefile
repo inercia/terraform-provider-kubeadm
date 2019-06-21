@@ -21,7 +21,7 @@ TRAVIS_BUILDID := $(shell echo "build-$$RANDOM")
 TRAVIS_INSTANCE := "travisci/ci-garnet:packer-1515445631-7dfb2e1"
 
 # the deployment used for running the E2E tests
-E2E_ENV         := $(shell echo `pwd`)/docs/examples/lxd
+E2E_ENV         := $(shell echo `pwd`)/docs/examples/dnd
 
 export GOPATH
 export GOBIN
@@ -129,6 +129,8 @@ ci-save-env:
 	@echo ">>> Current environment:"
 	@cat /tmp/environment
 	@sudo mv -f /tmp/environment /etc/environment
+
+ci: ci-tests
 
 ci-tests: ci-tests-unit ci-tests-e2e
 

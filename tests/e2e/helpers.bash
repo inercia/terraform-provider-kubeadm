@@ -1,2 +1,0 @@
-# helpers functions for bats
-
