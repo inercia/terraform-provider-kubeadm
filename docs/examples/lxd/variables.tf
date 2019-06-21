@@ -67,12 +67,6 @@ variable "domain_name" {
 
 variable "manifests" {
   type = "list"
-
-  default = [
-    "https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/mandatory.yaml",
-    "https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/cloud-generic.yaml",
-    "https://raw.githubusercontent.com/kubernetes/dashboard/master/aio/deploy/recommended/kubernetes-dashboard.yaml",
-  ]
-
+  default = []
   description = "List of manifests to load after setting up the first master"
 }
