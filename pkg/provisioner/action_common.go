@@ -1,6 +1,8 @@
 package provisioner
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -8,12 +10,15 @@ import (
 	// "k8s.io/client-go/kubernetes"
 	// "k8s.io/client-go/tools/clientcmd"
 
+	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
-//
-// kubeadm
-//
+var (
+	errNoInitConfigFound = errors.New("no init configuration obtained")
+	errNoJoinConfigFound = errors.New("no join configuration obtained")
+)
 
 // getKubeadmIgnoredChecksArg returns the kubeadm arguments for the ignored checks
 func getKubeadmIgnoredChecksArg(d *schema.ResourceData) string {
@@ -46,18 +51,48 @@ func getKubeconfig(d *schema.ResourceData) string {
 	return kubeconfigOpt.(string)
 }
 
-// getClientset gets a clientset, or "nil" if no "kubeconfig" has been provided
-// Usage:
-//      clientset := getClientset(d)
-// 		pods, _ := clientset.CoreV1().Nodes().List(metav1.ListOptions{})
-// 		fmt.Printf("There are %d pods in the cluster\n", len(pods.Items))
-//
-// func getClientset(d *schema.ResourceData) (*kubernetes.Clientset, error) {
-// 	if kubeconfigOpt, ok := d.GetOk("kubeconfig"); ok {
-// 		kubeconfig := kubeconfigOpt.(string)
+// doExecKubeadmWithConfig runs a `kubeadm` command in the remote host
+// this functions creates a `kubeadm` executor using some default values for some arguments.
+func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string, args ...string) ssh.ApplyFunc {
+	allArgs := []string{}
+	switch command {
+	case "init", "join":
+		allArgs = append(allArgs, getKubeadmIgnoredChecksArg(d))
+		allArgs = append(allArgs, getKubeadmNodenameArg(d))
+		allArgs = append(allArgs, fmt.Sprintf("--config=%s", cfg))
+	}
 
-// 		config, _ := clientcmd.BuildConfigFromFlags("", kubeconfig)
-// 		return kubernetes.NewForConfig(config)
-// 	}
-// 	return nil, nil
-// }
+	allArgs = append(allArgs, args...)
+	return ssh.DoExec(fmt.Sprintf("kubeadm %s %s", command, strings.Join(allArgs, " ")))
+}
+
+// doKubeadm are the common provisioning things, for the `init` as well
+// as for the `join`.
+func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, args ...string) ssh.ApplyFunc {
+	kubeadmConfigFilename := ""
+	switch command {
+	case "init":
+		kubeadmConfigFilename = common.DefKubeadmInitConfPath
+	case "join":
+		kubeadmConfigFilename = common.DefKubeadmJoinConfPath
+	}
+
+	return ssh.ApplyComposed(
+		doPrepareCRI(),
+		ssh.DoEnableService("kubelet.service"),
+		ssh.DoUploadFile(strings.NewReader(assets.KubeletSysconfigCode), "/etc/sysconfig/kubelet"),
+		ssh.DoUploadFile(strings.NewReader(assets.KubeletServiceCode), "/usr/lib/systemd/system/kubelet.service"),
+		ssh.DoUploadFile(strings.NewReader(assets.KubeadmDropinCode), common.DefKubeadmDropinPath),
+		ssh.ApplyComposed(
+			ssh.ApplyIf(
+				ssh.CheckFileExists(kubeadmConfigFilename),
+				ssh.ApplyComposed(
+					doExecKubeadmWithConfig(d, "reset", "", "--force"),
+					ssh.DoDeleteFile(kubeadmConfigFilename),
+				)),
+			ssh.DoUploadFile(bytes.NewReader(kubeadmConfig), kubeadmConfigFilename),
+			doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
+			ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak"),
+		),
+	)
+}

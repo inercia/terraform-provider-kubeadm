@@ -25,11 +25,7 @@ func doLoadHelm(d *schema.ResourceData) ssh.ApplyFunc {
 	if common.DefHelmManifest == "" {
 		return ssh.DoMessage("no manifest for Helm: Helm will not be loaded")
 	}
-	kubeconfig := getKubeconfig(d)
-	if kubeconfig == "" {
-		return ssh.DoAbort("cannot not load Helm: no 'config_path' has been specified")
-	}
-	return ssh.DoLocalKubectlApply(kubeconfig, []string{common.DefHelmManifest})
+	return doLocalKubectlApply(d, []string{common.DefHelmManifest})
 }
 
 // doLoadDashboard loads the dashboard (if enabled)
@@ -48,11 +44,7 @@ func doLoadDashboard(d *schema.ResourceData) ssh.ApplyFunc {
 	if common.DefDashboardManifest == "" {
 		return ssh.DoMessage("no manifest for Dashboard: the Dashboard will not be loaded")
 	}
-	kubeconfig := getKubeconfig(d)
-	if kubeconfig == "" {
-		return ssh.DoAbort("cannot not load the Dashboard: no 'config_path' has been specified")
-	}
-	return ssh.DoLocalKubectlApply(kubeconfig, []string{common.DefDashboardManifest})
+	return doLocalKubectlApply(d, []string{common.DefDashboardManifest})
 }
 
 // doLoadManifests loads some extra manifests
@@ -65,10 +57,5 @@ func doLoadManifests(d *schema.ResourceData) ssh.ApplyFunc {
 	for _, v := range manifestsOpt.([]interface{}) {
 		manifests = append(manifests, v.(string))
 	}
-
-	kubeconfig := getKubeconfig(d)
-	if kubeconfig == "" {
-		return ssh.DoMessage("ERROR: will not load manifests as no 'config_path' has been specified")
-	}
-	return ssh.DoLocalKubectlApply(kubeconfig, manifests)
+	return doLocalKubectlApply(d, manifests)
 }

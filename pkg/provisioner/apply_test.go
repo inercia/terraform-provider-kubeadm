@@ -9,7 +9,7 @@ import (
 )
 
 func TestResourceProvisioner_impl(t *testing.T) {
-	var _ terraform.ResourceProvisioner = Provisioner()
+	var _ = Provisioner()
 }
 
 func TestProvisioner(t *testing.T) {

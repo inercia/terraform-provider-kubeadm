@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
 
-	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
@@ -81,10 +79,7 @@ func applyFn(ctx context.Context) error {
 			ssh.ApplyIfElse(
 				ssh.CheckFileExists(common.DefAdminKubeconfig),
 				ssh.DoMessage("admin.conf already exists: skipping `kubeadm init`"),
-				ssh.ApplyComposed(
-					doCommonProvisioning(),
-					doKubeadmInit(d, kubeadmConfig),
-				),
+				doKubeadm(d, "init", kubeadmConfig, "--experimental-upload-certs"),
 			),
 			doDownloadKubeconfig(d),
 			doPrintEtcdMembers(d),
@@ -102,34 +97,15 @@ func applyFn(ctx context.Context) error {
 	}
 
 	o.Output(fmt.Sprintf("Joining the cluster with 'kubadm join'"))
-	return ssh.ApplyList([]ssh.Applyer{
-		doCommonProvisioning(),
-		doKubeadmJoin(d, kubeadmConfig),
-	}, o, comm, useSudo)
+	return doKubeadm(d, "join", kubeadmConfig).Apply(o, comm, useSudo)
 }
 
-// doCommonProvisioning are the common provisioning things, for the `init` as well
-// as for the `join`.
-func doCommonProvisioning() ssh.ApplyFunc {
-	return ssh.ApplyComposed(
-		doPrepareCRI(),
-		ssh.DoEnableService("kubelet.service"),
-		ssh.DoUploadFile(strings.NewReader(assets.KubeletSysconfigCode), "/etc/sysconfig/kubelet"),
-		ssh.DoUploadFile(strings.NewReader(assets.KubeletServiceCode), "/usr/lib/systemd/system/kubelet.service"),
-		ssh.DoUploadFile(strings.NewReader(assets.KubeadmDropinCode), common.DefKubeadmDropinPath),
-	)
-}
-
-// doPrepareCRI preparse the CRI in the target node
-func doPrepareCRI() ssh.ApplyFunc {
-	return ssh.ApplyComposed(
-		ssh.DoUploadFile(strings.NewReader(assets.CNIDefConfCode), common.DefCniLookbackConfPath),
-		// we must reload the containers runtime engine after changing the CNI configuration
-		ssh.ApplyIf(
-			ssh.CheckServiceExists("crio.service"),
-			ssh.DoRestartService("crio.service")),
-		ssh.ApplyIf(
-			ssh.CheckServiceExists("docker.service"),
-			ssh.DoRestartService("docker.service")),
-	)
+// doDownloadKubeconfig downloads a kubeconfig from the remote master
+func doDownloadKubeconfig(d *schema.ResourceData) ssh.ApplyFunc {
+	kubeconfig := getKubeconfig(d)
+	if kubeconfig == "" {
+		log.Printf("[DEBUG] [KUBEADM] no config_path specified: will not download kubeconfig")
+		return ssh.DoNothing()
+	}
+	return ssh.DoDownloadFile(common.DefAdminKubeconfig, kubeconfig)
 }
