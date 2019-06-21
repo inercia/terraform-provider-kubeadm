@@ -15,6 +15,10 @@ Terraform cluster definition leveraging the libvirt provider.
   Follow the instuctions for installing
   the [Terraform/libvirt provider](https://github.com/dmacvicar/terraform-provider-libvirt)
 
+* `kubectl`
+
+  A local kubectl executable.
+
 ## Contents
 
 * [Cluster definition](cluster.tf)
@@ -30,7 +34,7 @@ By default all the machines will have the following users:
 
 The cluster will be made by these machines:
 
-  * X master nodes: have `kubeadm`, `kubelet` and `kubectl` preinstalled
-  * Y worker nodes: have `kubeadm`, `kubelet` and `kubectl` preinstalled
+  * `${var.master_count}` master nodes, with `kubeadm` and the `kubelet` pre-installed.
+  * `${var.worker_count}` worker nodes, with `kubeadm` and the `kubelet` pre-installed.
 
-All node should be able to ping each other and resolve their FQDN.
+You should be able to `ssh` these machines, and all of them should be able to ping each other.

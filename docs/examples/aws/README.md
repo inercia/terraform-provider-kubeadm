@@ -5,8 +5,12 @@ help of the kubeadm provider.
 
 ## Pre-requisites
 
-* Some valid credentials (key and secret) for accessing AWS.
+ * Some valid credentials (key and secret) for accessing AWS.
  
+ * `kubectl`
+ 
+   A local kubectl executable.
+
 ## Contents
 
 * [Cluster definition](cluster.tf)
