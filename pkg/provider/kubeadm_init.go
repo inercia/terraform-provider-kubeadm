@@ -8,25 +8,25 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
 // dataSourceToInitConfig copies some settings from the
 // Terraform `data` definition to a kubeadm Init configuration
-func dataSourceToInitConfig(d *schema.ResourceData, token string) ([]byte, error) {
+func dataSourceToInitConfig(d *schema.ResourceData, token string) (*kubeadmapi.InitConfiguration, error) {
 	log.Printf("[DEBUG] [KUBEADM] creating initialization configuration...")
 
-	initConfig := &kubeadmapiv1beta1.InitConfiguration{
-		ClusterConfiguration: kubeadmapiv1beta1.ClusterConfiguration{
+	initConfig := &kubeadmapi.InitConfiguration{
+		ClusterConfiguration: kubeadmapi.ClusterConfiguration{
 			// FeatureGates:         featureGates,
-			APIServer: kubeadmapiv1beta1.APIServer{
+			APIServer: kubeadmapi.APIServer{
 				CertSANs: []string{},
 			},
 			UseHyperKubeImage: true,
 		},
-		NodeRegistration: kubeadmapiv1beta1.NodeRegistrationOptions{
+		NodeRegistration: kubeadmapi.NodeRegistrationOptions{
 			KubeletExtraArgs: common.DefKubeletSettings,
 		},
 	}
@@ -87,9 +87,9 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) ([]byte, error
 		etcd_repo := d.Get("images.0.etcd_repo").(string)
 		etcd_version := d.Get("images.0.etcd_version").(string)
 		if etcd_version != "" || etcd_repo != "" {
-			initConfig.ClusterConfiguration.Etcd = kubeadmapiv1beta1.Etcd{
-				Local: &kubeadmapiv1beta1.LocalEtcd{
-					ImageMeta: kubeadmapiv1beta1.ImageMeta{
+			initConfig.ClusterConfiguration.Etcd = kubeadmapi.Etcd{
+				Local: &kubeadmapi.LocalEtcd{
+					ImageMeta: kubeadmapi.ImageMeta{
 						ImageRepository: etcd_repo,
 						ImageTag:        etcd_version,
 					},
@@ -105,7 +105,7 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) ([]byte, error
 				initConfig.NodeRegistration.KubeletExtraArgs["container-runtime-endpoint"] = fmt.Sprintf("unix://%s", socket)
 				initConfig.NodeRegistration.CRISocket = socket
 			} else {
-				return []byte{}, fmt.Errorf("unknown runtime engine %s", runtimeEngineOpt.(string))
+				return nil, fmt.Errorf("unknown runtime engine %s", runtimeEngineOpt.(string))
 			}
 		}
 
@@ -141,7 +141,7 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) ([]byte, error
 	if _, ok := d.GetOk("etcd.0"); ok {
 		if etcdServersLst, ok := d.GetOk("etcd.0.endpoints"); ok {
 			if initConfig.Etcd.External == nil {
-				initConfig.Etcd.External = &kubeadmapiv1beta1.ExternalEtcd{}
+				initConfig.Etcd.External = &kubeadmapi.ExternalEtcd{}
 			}
 			initConfig.Etcd.External.Endpoints = etcdServersLst.([]string)
 		}
@@ -149,13 +149,13 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) ([]byte, error
 
 	if len(token) > 0 {
 		var err error
-		bto := kubeadmapiv1beta1.BootstrapToken{}
-		bto.Token, err = kubeadmapiv1beta1.NewBootstrapTokenString(token)
+		bto := kubeadmapi.BootstrapToken{}
+		bto.Token, err = kubeadmapi.NewBootstrapTokenString(token)
 		if err != nil {
 			return nil, err
 		}
-		initConfig.BootstrapTokens = []kubeadmapiv1beta1.BootstrapToken{bto}
+		initConfig.BootstrapTokens = []kubeadmapi.BootstrapToken{bto}
 	}
 
-	return common.InitConfigToYAML(initConfig)
+	return initConfig, nil
 }

@@ -6,3 +6,5 @@ terraform.tfstate*
 *.auto.tfvars
 
 *.local
+*.bak
+crash.log

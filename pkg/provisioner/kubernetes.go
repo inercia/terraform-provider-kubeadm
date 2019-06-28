@@ -3,45 +3,23 @@ package provisioner
 import (
 	"fmt"
 
+	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform/terraform"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clientset "k8s.io/client-go/kubernetes"
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
-	kubeconfigutil "k8s.io/kubernetes/cmd/kubeadm/app/util/kubeconfig"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
+	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
-// getClientset gets a clientset, or "nil" if no "kubeconfig" has been provided
-// Usage:
-//      clientset := getClientset(d)
-// 		pods, _ := clientset.CoreV1().Nodes().List(metav1.ListOptions{})
-// 		fmt.Printf("There are %d pods in the cluster\n", len(pods.Items))
-//
-// func getClientset(d *schema.ResourceData) (*kubernetes.Clientset, error) {
-// 	if kubeconfigOpt, ok := d.GetOk("kubeconfig"); ok {
-// 		kubeconfig := kubeconfigOpt.(string)
-
-// 		config, _ := clientcmd.BuildConfigFromFlags("", kubeconfig)
-// 		return kubernetes.NewForConfig(config)
-// 	}
-// 	return nil, nil
-// }
-
-func GetAdminClientSet(kubeconfig string) (*clientset.Clientset, error) {
-	client, err := kubeconfigutil.ClientSetFromFile(kubeconfig)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not load admin kubeconfig file")
-	}
-	return client, nil
-}
-
 func getMasterNodes(kubeconfig string) (*v1.NodeList, error) {
-	clientSet, err := GetAdminClientSet(kubeconfig)
+	clientSet, err := common.GetClientSet(kubeconfig)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to get admin clinet set")
+		return nil, errors.Wrap(err, "unable to get admin client set")
 	}
 
 	return clientSet.CoreV1().Nodes().List(metav1.ListOptions{
@@ -57,9 +35,6 @@ func isMaster(node *v1.Node) bool {
 // doLocalKubectl runs a local kubectl with the kubeconfig specified in the schema
 func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.ApplyFunc {
 	kubeconfig := getKubeconfig(d)
-	if kubeconfig == "" {
-		return ssh.DoAbort("no 'config_path' has been specified")
-	}
 	return ssh.DoLocalKubectl(kubeconfig, args...)
 }
 
@@ -70,4 +45,59 @@ func doLocalKubectlApply(d *schema.ResourceData, manifests []string) ssh.ApplyFu
 		return ssh.DoAbort("no 'config_path' has been specified")
 	}
 	return ssh.DoLocalKubectlApply(kubeconfig, manifests)
+}
+
+// doRefreshToken uses the kubeconfig for connecting to the API server and refreshing the token
+func doRefreshToken(d *schema.ResourceData) ssh.ApplyFunc {
+	token, ok := d.GetOk("config.token")
+	if !ok {
+		panic("there should be a token")
+	}
+
+	return ssh.DoIfElse(
+		checkKubeconfigAlive(d),
+		ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+			// load the existing kubeconfig and use it for refreshing the token
+			client, err := common.GetClientSet(getKubeconfig(d))
+			if err != nil {
+				return err
+			}
+
+			err = common.CreateOrRefreshToken(client, token.(string))
+			if err != nil {
+				return err
+			}
+			return nil
+		}),
+		ssh.DoAbort("no valid kubeconfig exists or the cluster is not alive/reachable: the token not refreshed, so the node cannot join the cluster"),
+	)
+}
+
+// doMaybePublishCertificates publishes the certificates (if needed)
+func doMaybePublishCertificates(d *schema.ResourceData, initConfig *kubeadmapi.InitConfiguration) ssh.ApplyFunc {
+	return ssh.DoIfElse(
+		checkKubeconfigAlive(d),
+		ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+			if err := RetrieveAndUploadCerts(d, initConfig); err != nil {
+				return err
+			}
+			return nil
+		}),
+		ssh.DoAbort("no valid kubeconfig exists or the cluster is not alive/reachable: certificates cannot be uploaded to the API server"),
+	)
+}
+
+// checkKubeconfigExists checks if the kubeconfig exists
+func checkKubeconfigExists(d *schema.ResourceData) ssh.CheckerFunc {
+	return ssh.CheckLocalFileExists(getKubeconfig(d))
+}
+
+// checkKubeconfigAlive checks if the kubeconfig exists and is alive
+func checkKubeconfigAlive(d *schema.ResourceData) ssh.CheckerFunc {
+	kubeconfig := getKubeconfig(d)
+	return ssh.CheckAnd(
+		checkKubeconfigExists(d),
+		ssh.CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+			return common.IsClusterAlive(kubeconfig), nil
+		}))
 }

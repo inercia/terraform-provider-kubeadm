@@ -399,7 +399,7 @@ resource "aws_key_pair" "kube" {
 # Kubeadm
 ###########################################
 
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   config_path = "${var.kubeconfig}"
 
   api {
@@ -530,7 +530,7 @@ resource "null_resource" "masters" {
   }
 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
 
     # we must overwrite the nodename with the AWS private DNS name
     # because the kubelet cannot prooperly detect a valid hostname
@@ -598,7 +598,7 @@ resource "aws_instance" "workers" {
   }
 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
     join   = "${element(aws_instance.masters.*.private_ip, 0)}"
 
     # we must overwrite the nodename with the AWS private DNS name

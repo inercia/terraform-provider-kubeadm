@@ -73,7 +73,9 @@ ENV container docker
 
 # systemd exits on SIGRTMIN+3, not SIGTERM (which re-executes it)
 # https://bugzilla.redhat.com/show_bug.cgi?id=1201657
-STOPSIGNAL SIGRTMIN+3
+# "--stop-signal=$(kill -l RTMIN+3)
+#STOPSIGNAL SIGRTMIN+3
+STOPSIGNAL 37
 
 # wrap systemd with our special entrypoint, see pkg/build for how this is built
 # basically this just lets us set up some things before continuing on to systemd
@@ -92,11 +94,13 @@ STOPSIGNAL SIGRTMIN+3
 VOLUME [ "/var/lib/docker" ]
 
 VOLUME ["/sys/fs/cgroup"]
-VOLUME ["/run"]
+# VOLUME ["/run"]
 
 # TODO(bentheelder): deal with systemd MAC address assignment
 # https://github.com/systemd/systemd/issues/3374#issuecomment-288882355
 # https://github.com/systemd/systemd/issues/3374#issuecomment-339258483
 
 # Workaround for docker/docker#27202, technique based on comments from docker/docker#9212
-ENTRYPOINT ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
+#ENTRYPOINT ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
+ENTRYPOINT ["/sbin/init"]
+

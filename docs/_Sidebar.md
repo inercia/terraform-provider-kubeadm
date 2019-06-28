@@ -1,7 +1,8 @@
 
 * [Installation](Installation)
 * Configuration
-  * [`data "kubeadm"`](Data_kubeadm)
+  * [`resource "kubeadm"`](Resource_kubeadm)
   * [`provisioner "kubeadm"`](Provisioner_kubeadm)
-* [Additional stuff](Additional_tasks)
+* [Additional tasks](Additional_tasks)
 * [Roadmap, TODO and vision](Roadmap)
+* [Examples](examples/README.md)

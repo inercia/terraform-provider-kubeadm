@@ -52,6 +52,7 @@ install: build-forced
 
 .PHONY: vendor
 vendor:
+	$(GO) mod tidy
 	$(GO) mod vendor
 
 ################################################

@@ -85,7 +85,7 @@ func DoExecScript(contents io.Reader, prefix string) ApplyFunc {
 		panic(err)
 	}
 
-	return ApplyComposed(
+	return DoComposed(
 		doRealUploadFile(contents, path),
 		DoExec(fmt.Sprintf("sh %s", path)),
 	)

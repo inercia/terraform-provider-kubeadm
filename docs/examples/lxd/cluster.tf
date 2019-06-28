@@ -11,7 +11,7 @@ provider "lxd" {
 # Kubeadm #
 ##########################
 
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   config_path = "${var.kubeconfig}"
 
   network {
@@ -176,7 +176,7 @@ resource "lxd_container" "master" {
   }
 
   provisioner "kubeadm" {
-    config     = "${data.kubeadm.main.config}"
+    config     = "${kubeadm.main.config}"
     manifests  = "${var.manifests}"
     # ignore_checks = [
     #   "NumCPU",
@@ -213,7 +213,7 @@ resource "lxd_container" "worker" {
   }
 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
     join   = "${lxd_container.master.0.ip_address}"
   }
 }

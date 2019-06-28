@@ -15,6 +15,7 @@ run:
 		-v $$HOME/.ssh/id_rsa.pub:/root/.ssh/authorized_keys:ro \
 		-v /sys/fs/cgroup:/sys/fs/cgroup:ro \
 		-p 8022:22 \
+		--name $(IMAGE) \
 		$(IMAGE)
 
 ###################################################################

@@ -20,7 +20,7 @@ variable "master_count" {
 }
 
 variable "worker_count" {
-  default     = 1
+  default     = 2
   description = "Number of workers to be created"
 }
 

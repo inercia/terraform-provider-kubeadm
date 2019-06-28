@@ -67,3 +67,14 @@ func ReadLocalFile(sourcePath string) (string, error) {
 	}
 	return string(bytes), nil
 }
+
+// GetSafeTempDirectory returns a temporary, safe directory
+func GetSafeTempDirectory() (string, error) {
+	// create a temporary directory for the certificates and try to download them
+	// TODO: maybe we should use os.UserCacheDir() for the dir...
+	t, err := ioutil.TempDir("", "terraform")
+	if err != nil {
+		return "", err
+	}
+	return t, nil
+}

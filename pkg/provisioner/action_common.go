@@ -2,22 +2,16 @@ package provisioner
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
+	"log"
+	"path"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	// "k8s.io/client-go/kubernetes"
-	// "k8s.io/client-go/tools/clientcmd"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
-)
-
-var (
-	errNoInitConfigFound = errors.New("no init configuration obtained")
-	errNoJoinConfigFound = errors.New("no join configuration obtained")
 )
 
 // getKubeadmIgnoredChecksArg returns the kubeadm arguments for the ignored checks
@@ -77,22 +71,41 @@ func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, arg
 		kubeadmConfigFilename = common.DefKubeadmJoinConfPath
 	}
 
-	return ssh.ApplyComposed(
+	return ssh.DoComposed(
 		doPrepareCRI(),
 		ssh.DoEnableService("kubelet.service"),
-		ssh.DoUploadFile(strings.NewReader(assets.KubeletSysconfigCode), "/etc/sysconfig/kubelet"),
-		ssh.DoUploadFile(strings.NewReader(assets.KubeletServiceCode), "/usr/lib/systemd/system/kubelet.service"),
-		ssh.DoUploadFile(strings.NewReader(assets.KubeadmDropinCode), common.DefKubeadmDropinPath),
-		ssh.ApplyComposed(
-			ssh.ApplyIf(
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletSysconfigCode), "/etc/sysconfig/kubelet"),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), "/usr/lib/systemd/system/kubelet.service"),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), common.DefKubeadmDropinPath),
+		ssh.DoComposed(
+			ssh.DoIf(
 				ssh.CheckFileExists(kubeadmConfigFilename),
-				ssh.ApplyComposed(
+				ssh.DoComposed(
 					doExecKubeadmWithConfig(d, "reset", "", "--force"),
 					ssh.DoDeleteFile(kubeadmConfigFilename),
 				)),
-			ssh.DoUploadFile(bytes.NewReader(kubeadmConfig), kubeadmConfigFilename),
+			ssh.DoUploadReaderToFile(bytes.NewReader(kubeadmConfig), kubeadmConfigFilename),
 			doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
 			ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak"),
 		),
 	)
+}
+
+// doUploadCerts upload the certificates from the serialized `d.config` to the remote machine
+// we only do this on the control plane machines
+func doUploadCerts(d *schema.ResourceData) ssh.ApplyFunc {
+	certsConfig := &common.CertsConfig{}
+	if err := certsConfig.FromResourceData(d); err != nil {
+		return ssh.DoAbort("no certificates data in config")
+	}
+
+	actions := []ssh.Applyer{}
+	for baseName, cert := range certsConfig.DistributionMap() {
+		fullPath := path.Join(certsConfig.Dir, baseName)
+		log.Printf("[DEBUG] [KUBEADM] will upload certificate %q", fullPath)
+		upload := ssh.DoUploadReaderToFile(strings.NewReader(*cert), fullPath)
+		actions = append(actions, upload)
+	}
+
+	return ssh.DoComposed(actions...)
 }

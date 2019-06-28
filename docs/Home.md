@@ -5,7 +5,7 @@ The kubeadm provider is used for interacting with kubeadm for creating Kubernete
 ## Example Usage
 
 ```hcl
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   api {
     external = "loadbalancer.external.com"
   }
@@ -22,7 +22,7 @@ resource "libvirt_domain" "master" {
   memory = 1024
   ...
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config.init}"
+    config = "${kubeadm.main.config}"
   }
 }
 
@@ -32,7 +32,7 @@ resource "libvirt_domain" "minion" {
   name       = "minion${count.index}"
   ...
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config.join}"
+    config = "${kubeadm.main.config}"
     join = "${libvirt_domain.master.network_interface.0.addresses.0}"
   }
 }
@@ -42,11 +42,11 @@ resource "libvirt_domain" "minion" {
 
 * [Installation](Installation) instructions.
 * Using `kubeadm` in your Terraform scripts:
-  * The [`data "kubeadm"`](Data_kubeadm) configuration block.
+  * The [`resource "kubeadm"`](Resource_kubeadm) configuration block.
   * The [`provisioner "kubeadm"`](Provisioner_kubeadm) block.
-  * [Additional stuff](Additional_tasks) ncessary for having a
-  fully functional Kubernetes cluster, like installing CNI,
-  the dashboard, etc...
+  * [Additional tasks](Additional_tasks) necessary for having a
+  fully functional Kubernetes cluster, like installing some Pods
+  Security Policy...
 * [Roadmap, TODO and vision](Roadmap).
 * [Examples](examples/README.md) for several providers like
-_libvirt_, _LXD_, etc.
+_libvirt_, _LXD_, _AWS_, etc.

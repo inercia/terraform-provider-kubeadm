@@ -6,7 +6,7 @@ provider "docker" {
 # Kubeadm #
 ##########################
 
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   config_path = "${var.kubeconfig}"
 
   network {
@@ -95,20 +95,14 @@ resource "docker_container" "master" {
   }
 
   provisioner "kubeadm" {
-    config    = "${data.kubeadm.main.config}"
+    config    = "${kubeadm.main.config}"
+    role      = "master"
+    # join      = "${docker_container.master.0.ip_address}"
     manifests = "${var.manifests}"
-
-    # ignore_checks = [
-    #   "NumCPU",
-    #   "FileContent--proc-sys-net-bridge-bridge-nf-call-iptables",
-    #   "Swap",
-    # ]
   }
 
   lifecycle {
     create_before_destroy = true
-
-    # ignore_changes = ["associate_public_ip_address"]
   }
 }
 
@@ -153,14 +147,13 @@ resource "docker_container" "worker" {
   }
 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
     join   = "${lookup(docker_container.master.0.network_data[0], "ip_address")}"
+    role   = "worker"
   }
 
   lifecycle {
     create_before_destroy = true
-
-    # ignore_changes = ["associate_public_ip_address"]
   }
 }
 

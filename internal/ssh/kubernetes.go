@@ -3,8 +3,20 @@ package ssh
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os/exec"
+	"strings"
 )
+
+// isValidUrl tests a string to determine if it is a url or not.
+func isValidUrl(toTest string) bool {
+	_, err := url.ParseRequestURI(toTest)
+	if err != nil {
+		return false
+	} else {
+		return true
+	}
+}
 
 // DoLocalKubectl runs a local kubectl command
 func DoLocalKubectl(kubeconfig string, args ...string) ApplyFunc {
@@ -17,6 +29,12 @@ func DoLocalKubectl(kubeconfig string, args ...string) ApplyFunc {
 	return DoLocalExec(kubectl, f...)
 }
 
+// DoRemoteKubectl runs a local kubectl command in a remote machine
+func DoRemoteKubectl(kubeconfig string, args ...string) ApplyFunc {
+	cmd := append([]string{"kubectl", fmt.Sprintf("--kubeconfig=%s", kubeconfig)}, args...)
+	return DoExec(strings.Join(cmd, " "))
+}
+
 // DoLocalKubectlApply applies some manifests with a local kubectl
 func DoLocalKubectlApply(kubeconfig string, manifests []string) ApplyFunc {
 	loaders := []Applyer{}
@@ -26,5 +44,39 @@ func DoLocalKubectlApply(kubeconfig string, manifests []string) ApplyFunc {
 		}
 		loaders = append(loaders, DoLocalKubectl(kubeconfig, "apply", "-f", manifest))
 	}
-	return ApplyComposed(loaders...)
+	return DoComposed(loaders...)
+}
+
+// DoRemoteKubectlApply applies some manifests with a remote kubectl
+func DoRemoteKubectlApply(kubeconfig string, manifests []string) ApplyFunc {
+	actions := []Applyer{}
+
+	// upload the local kubeconfig to some temporary remote file
+	remoteKubeconfig, err := randomPath("tmpfile", "tmp")
+	if err != nil {
+		panic(err)
+	}
+	actions = append(actions, DoUploadFileToFile(kubeconfig, remoteKubeconfig))
+
+	for _, manifest := range manifests {
+		if len(manifest) == 0 {
+			continue
+		}
+
+		if isValidUrl(manifest) {
+			// it is an URL: just run the `kubectl apply`
+			actions = append(actions, DoRemoteKubectl(remoteKubeconfig, "apply", "-f", manifest))
+		} else {
+			// it is a file: upload the file to a temporary, remote file and then `kubectl apply -f` it
+			remoteManifest, err := randomPath("tmpfile", "tmp")
+			if err != nil {
+				panic(err)
+			}
+
+			actions = append(actions,
+				DoUploadFileToFile(manifest, remoteManifest),
+				DoRemoteKubectl(remoteKubeconfig, "apply", "-f", remoteManifest))
+		}
+	}
+	return DoComposed(actions...)
 }

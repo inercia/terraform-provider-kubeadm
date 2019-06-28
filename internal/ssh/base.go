@@ -24,6 +24,18 @@ func (f ApplyFunc) Apply(o terraform.UIOutput, comm communicator.Communicator, u
 	return f(o, comm, useSudo)
 }
 
+// Apply applies a list of actions
+func Apply(actions []Applyer, o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+	for _, action := range actions {
+		if action != nil {
+			if err := action.Apply(o, comm, useSudo); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // DoNothing is a dummy action
 func DoNothing() ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
@@ -47,23 +59,6 @@ func DoAbort(msg string) ApplyFunc {
 	})
 }
 
-// ApplyList applies a list of actions
-func ApplyList(actions []Applyer, o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-	for _, action := range actions {
-		if err := action.Apply(o, comm, useSudo); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// ApplyComposed composes from a list of actions a single ApplyFunc
-func ApplyComposed(actions ...Applyer) ApplyFunc {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		return ApplyList(actions, o, comm, useSudo)
-	})
-}
-
 // ///////////////////////////////////////////////////////////////////////////////////
 
 // Checker implements a Check method
@@ -79,8 +74,15 @@ func (f CheckerFunc) Check(o terraform.UIOutput, comm communicator.Communicator,
 	return f(o, comm, useSudo)
 }
 
-// ApplyIf runs an action iff the condition is true
-func ApplyIf(condition Checker, action Applyer) ApplyFunc {
+// DoComposed composes from a list of actions a single ApplyFunc
+func DoComposed(actions ...Applyer) ApplyFunc {
+	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+		return Apply(actions, o, comm, useSudo)
+	})
+}
+
+// DoIf runs an action iff the condition is true
+func DoIf(condition Checker, action Applyer) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		res, err := condition.Check(o, comm, useSudo)
 		if err != nil {
@@ -94,8 +96,8 @@ func ApplyIf(condition Checker, action Applyer) ApplyFunc {
 	})
 }
 
-// ApplyIfElse runs an action iff the condition is true, otherwise runs a different action
-func ApplyIfElse(condition Checker, actionIf Applyer, actionElse Applyer) ApplyFunc {
+// DoIfElse runs an action iff the condition is true, otherwise runs a different action
+func DoIfElse(condition Checker, actionIf Applyer, actionElse Applyer) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		res, err := condition.Check(o, comm, useSudo)
 		if err != nil {
@@ -109,8 +111,8 @@ func ApplyIfElse(condition Checker, actionIf Applyer, actionElse Applyer) ApplyF
 	})
 }
 
-// ApplyTry tries to run an action, but it is ok if the action fails
-func ApplyTry(action Applyer) ApplyFunc {
+// DoTry tries to run an action, but it is ok if the action fails
+func DoTry(action Applyer) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		_ = action.Apply(o, comm, useSudo)
 		return nil
