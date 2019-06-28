@@ -9,7 +9,6 @@ import (
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
@@ -63,6 +62,7 @@ func doRefreshToken(d *schema.ResourceData) ssh.ApplyFunc {
 				return err
 			}
 
+			o.Output(fmt.Sprintf("Refreshing token %s", token.(string)))
 			err = common.CreateOrRefreshToken(client, token.(string))
 			if err != nil {
 				return err
@@ -70,20 +70,6 @@ func doRefreshToken(d *schema.ResourceData) ssh.ApplyFunc {
 			return nil
 		}),
 		ssh.DoAbort("no valid kubeconfig exists or the cluster is not alive/reachable: the token not refreshed, so the node cannot join the cluster"),
-	)
-}
-
-// doMaybePublishCertificates publishes the certificates (if needed)
-func doMaybePublishCertificates(d *schema.ResourceData, initConfig *kubeadmapi.InitConfiguration) ssh.ApplyFunc {
-	return ssh.DoIfElse(
-		checkKubeconfigAlive(d),
-		ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-			if err := RetrieveAndUploadCerts(d, initConfig); err != nil {
-				return err
-			}
-			return nil
-		}),
-		ssh.DoAbort("no valid kubeconfig exists or the cluster is not alive/reachable: certificates cannot be uploaded to the API server"),
 	)
 }
 

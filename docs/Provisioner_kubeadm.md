@@ -13,7 +13,7 @@ resource "libvirt_domain" "minion" {
   name       = "master"
   ...
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
     install {
       auto = true
     }
@@ -30,7 +30,7 @@ resource "libvirt_domain" "minion" {
   name       = "minion${count.index}"
   ...
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
     join = "${libvirt_domain.master.network_interface.0.addresses.0}"
   }
 }
@@ -41,7 +41,7 @@ resource "libvirt_domain" "minion" {
   * `role` - (Optional) defines the role of the machine: `master` or `worker`.
   If `join` is empty, it defaults to the `master` role, otherwise it defaults
   to the `worker` role. 
-  * `config` - a reference to the `data_source.config` attribute of the _provider_.
+  * `config` - a reference to the `kubeadm.<resource-name>.config` attribute of the _provider_.
   * `join` - (Optional) the address (either a resolvable DNS name or an IP) of the
   node in the cluster to join. The absence of a `join` indicates that this node 
   will be used for bootstrapping the cluster and will be the seeder for the other
@@ -77,7 +77,7 @@ resource "libvirt_domain" "master" {
   name       = "master${count.index}"
   ...
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
     install {
       # try to install `kubeadm` automatically with the builin script
       auto = true
@@ -98,7 +98,7 @@ in some directory available in the default `$PATH`.
       name       = "master${count.index}"
       ...
       provisioner "kubeadm" {
-        config = "${data.kubeadm.main.config}"
+        config = "${kubeadm.main.config}"
         install {
           auto = true
           inline = <<-EOT

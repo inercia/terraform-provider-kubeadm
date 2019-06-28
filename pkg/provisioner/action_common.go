@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os"
 	"path"
 	"strings"
 
@@ -48,6 +49,7 @@ func getKubeconfig(d *schema.ResourceData) string {
 // doExecKubeadmWithConfig runs a `kubeadm` command in the remote host
 // this functions creates a `kubeadm` executor using some default values for some arguments.
 func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string, args ...string) ssh.ApplyFunc {
+	kubeadm_path := d.Get("install.0.kubeadm_path").(string)
 	allArgs := []string{}
 	switch command {
 	case "init", "join":
@@ -56,8 +58,13 @@ func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string,
 		allArgs = append(allArgs, fmt.Sprintf("--config=%s", cfg))
 	}
 
+	// increase kubeadm verbosity if we are debugging at the Terraform level
+	if _, ok := os.LookupEnv("TF_LOG"); ok {
+		allArgs = append(allArgs, "-v3")
+	}
+
 	allArgs = append(allArgs, args...)
-	return ssh.DoExec(fmt.Sprintf("kubeadm %s %s", command, strings.Join(allArgs, " ")))
+	return ssh.DoExec(fmt.Sprintf("%s %s %s", kubeadm_path, command, strings.Join(allArgs, " ")))
 }
 
 // doKubeadm are the common provisioning things, for the `init` as well
@@ -71,12 +78,16 @@ func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, arg
 		kubeadmConfigFilename = common.DefKubeadmJoinConfPath
 	}
 
+	sysconfigPath := d.Get("install.0.sysconfig_path").(string)
+	servicePath := d.Get("install.0.service_path").(string)
+	dropinPath := d.Get("install.0.dropin_path").(string)
+
 	return ssh.DoComposed(
 		doPrepareCRI(),
 		ssh.DoEnableService("kubelet.service"),
-		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletSysconfigCode), "/etc/sysconfig/kubelet"),
-		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), "/usr/lib/systemd/system/kubelet.service"),
-		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), common.DefKubeadmDropinPath),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletSysconfigCode), sysconfigPath),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), servicePath),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), dropinPath),
 		ssh.DoComposed(
 			ssh.DoIf(
 				ssh.CheckFileExists(kubeadmConfigFilename),

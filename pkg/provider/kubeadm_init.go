@@ -148,13 +148,11 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) (*kubeadmapi.I
 	}
 
 	if len(token) > 0 {
-		var err error
-		bto := kubeadmapi.BootstrapToken{}
-		bto.Token, err = kubeadmapi.NewBootstrapTokenString(token)
+		t, err := common.NewBootstrapToken(token)
 		if err != nil {
 			return nil, err
 		}
-		initConfig.BootstrapTokens = []kubeadmapi.BootstrapToken{bto}
+		initConfig.BootstrapTokens = []kubeadmapi.BootstrapToken{t}
 	}
 
 	return initConfig, nil

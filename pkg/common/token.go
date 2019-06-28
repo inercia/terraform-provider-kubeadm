@@ -1,9 +1,11 @@
-package provider
+package common
 
 import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 )
 
 const (
@@ -35,4 +37,22 @@ func GetRandomToken() (string, error) {
 	}
 
 	return fmt.Sprintf("%s.%s", tokenID, tokenSecret), nil
+}
+
+func NewBootstrapToken(token string) (kubeadmapi.BootstrapToken, error) {
+	var err error
+	bto := kubeadmapi.BootstrapToken{}
+	bto.Token, err = kubeadmapi.NewBootstrapTokenString(token)
+	if err != nil {
+		return kubeadmapi.BootstrapToken{}, err
+	}
+	return bto, err
+}
+
+func NewRandomBootstrapToken() (kubeadmapi.BootstrapToken, error) {
+	t, err := GetRandomToken()
+	if err != nil {
+		return kubeadmapi.BootstrapToken{}, err
+	}
+	return NewBootstrapToken(t)
 }

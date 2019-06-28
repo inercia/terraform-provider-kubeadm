@@ -49,8 +49,9 @@ func CreateOrRefreshToken(client *clientset.Clientset, token string) error {
 	}
 	tokens := []kubeadmapi.BootstrapToken{bto}
 
-	log.Printf("[token] creating (or refreshing an existing) token")
+	log.Printf("[DEBUG] [KUBEADM] creating (or refreshing an existing) token")
 	if err := tokenphase.UpdateOrCreateTokens(client, false, tokens); err != nil {
+		log.Printf("[DEBUG] [KUBEADM] error when refreshing token: %s", err)
 		return err
 	}
 

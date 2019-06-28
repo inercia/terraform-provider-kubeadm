@@ -98,7 +98,7 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 	var err error
 
 	log.Printf("[DEBUG] [KUBEADM] generating a random token...")
-	token, err := GetRandomToken()
+	token, err := common.GetRandomToken()
 	if err != nil {
 		return err
 	}

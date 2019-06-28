@@ -1,6 +1,8 @@
 package provisioner
 
 import (
+	"fmt"
+
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/helper/validation"
 	"github.com/hashicorp/terraform/terraform"
@@ -89,6 +91,30 @@ func Provisioner() terraform.ResourceProvisioner {
 							Type:        schema.TypeString,
 							Optional:    true,
 							Description: "kubeadm version to install.",
+						},
+						"sysconfig_path": {
+							Type:        schema.TypeString,
+							Default:     common.DefKubeletSysconfigPath,
+							Optional:    true,
+							Description: fmt.Sprintf("full path for the uploaded kubelet sysconfig file (defaults to %s).", common.DefKubeletSysconfigPath),
+						},
+						"service_path": {
+							Type:        schema.TypeString,
+							Default:     common.DefKubeletServicePath,
+							Optional:    true,
+							Description: fmt.Sprintf("full path for the uploaded kubelet.service file (defaults to %s).", common.DefKubeletServicePath),
+						},
+						"dropin_path": {
+							Type:        schema.TypeString,
+							Default:     common.DefKubeadmDropinPath,
+							Optional:    true,
+							Description: fmt.Sprintf("full path for the uploaded kubeadm dropin file (defaults to %s).", common.DefKubeadmDropinPath),
+						},
+						"kubeadm_path": {
+							Type:        schema.TypeString,
+							Default:     common.DefKubeadmPath,
+							Optional:    true,
+							Description: "full path where kubeadm should be present (if no absolute path is provided, it will use the defaultt PATH for finding it).",
 						},
 					},
 				},

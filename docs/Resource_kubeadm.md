@@ -5,7 +5,7 @@ The resource provides the global configuration for the cluster.
 ## Example Usage
 
 ```hcl
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   # the kubeconfig file created
   config_path = "/home/myself/.kube/config"
   
@@ -85,7 +85,7 @@ the former one is ignored.
 
 Example:
 ```hcl
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   network {
     dns_domain = "mycluster.com"
     services   = "10.25.0.0/16"
@@ -111,7 +111,7 @@ data "kubeadm" "main" {
 
 Example:
 ```hcl
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   etcd {
     endpoints = ["server1.com:2379", "server2.com:2379"]
   }
@@ -133,7 +133,7 @@ data "kubeadm" "main" {
 
 Example:
 ```hcl
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   runtime {
     engine = "crio"
     extra_args {
@@ -177,9 +177,9 @@ but can also be directly accessible in case you need it.
       EOT
     
       vars {
-        # NOTE: we don't need to do a "${base64decode(data.kubeadm.main.config.init)}"
+        # NOTE: we don't need to do a "${base64decode(kubeadm.main.config.init)}"
         # beacuse cloud-init can decode base64 for us.
-        kubeadm_config = "${data.kubeadm.main.config.init}"
+        kubeadm_config = "${kubeadm.main.config.init}"
       }
     }
     ```
@@ -190,14 +190,14 @@ but can also be directly accessible in case you need it.
   * `cert_etcd_crt`
   * `cert_etcd_key`
   * `cert_proxy_crt`
-  * `cert_proxy_key` - the certificates generated for the kubernetes cluster. They can be
+  * `cert_proxy_key` - certificates generated for the kubernetes cluster. They can be
   used in some other Terraform resources, for example you could use the certificate
   generated for the front proxy and assign it to the AWS load balancer:
       ```hcl
       resource "aws_iam_server_certificate" "front-proxy" {
         name             = "front-proxy"
-        certificate_body = "${data.kubeadm.main.config.cert_proxy_crt}"
-        private_key      = "${data.kubeadm.main.config.cert_proxy_key}"
+        certificate_body = "${kubeadm.main.config.cert_proxy_crt}"
+        private_key      = "${kubeadm.main.config.cert_proxy_key}"
       }
     
       resource "aws_elb" "my-application" {
@@ -206,7 +206,7 @@ but can also be directly accessible in case you need it.
         cross_zone_load_balancing = true
       
         listener {
-          instance_port      = 8000
+          instance_port      = 80
           instance_protocol  = "http"
           lb_port            = 443
           lb_protocol        = "https"

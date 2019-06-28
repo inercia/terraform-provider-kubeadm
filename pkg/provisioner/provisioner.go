@@ -59,7 +59,7 @@ func applyFn(ctx context.Context) error {
 	// determine what to do (init, join or join --control-plane) depending on the argument provided
 	join := strings.TrimSpace(d.Get("join").(string))
 	role := strings.TrimSpace(strings.ToLower(d.Get("role").(string)))
-	log.Printf("[DEBUG] [KUBEADM] join %q, role %q", join, role)
+	log.Printf("[DEBUG] [KUBEADM] will join %q, with role %q", join, role)
 
 	var action ssh.Applyer
 	if len(join) == 0 {
@@ -74,6 +74,8 @@ func applyFn(ctx context.Context) error {
 		case "master":
 			action = doKubeadmJoin(d, true)
 		case "worker":
+			action = doKubeadmJoin(d, false)
+		case "":
 			action = doKubeadmJoin(d, false)
 		default:
 			o.Output(fmt.Sprintf("Unknown provisioning profile: join is %q and role is %q", join, role))
@@ -114,7 +116,6 @@ func doKubeadmInit(d *schema.ResourceData) ssh.ApplyFunc {
 
 // doKubeadmJoin runs the `kubeadm join`
 func doKubeadmJoin(d *schema.ResourceData, controlPlane bool) ssh.ApplyFunc {
-	// run "kubeadm join"
 	_, joinConfigBytes, err := common.JoinConfigFromResourceData(d)
 	if err != nil {
 		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
@@ -132,7 +133,6 @@ func doKubeadmJoin(d *schema.ResourceData, controlPlane bool) ssh.ApplyFunc {
 	actions := []ssh.Applyer{
 		ssh.DoMessage("Joining the cluster with 'kubadm join'"),
 		controlPlaneAction,
-		doRefreshToken(d),
 		doKubeadm(d, "join", joinConfigBytes, extraArgs...),
 	}
 	return ssh.DoComposed(actions...)
