@@ -82,6 +82,11 @@ func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, arg
 	servicePath := d.Get("install.0.service_path").(string)
 	dropinPath := d.Get("install.0.dropin_path").(string)
 
+	if len(sysconfigPath) == 0 {
+		return ssh.DoAbort("empty install.sysconfig_path in provisioner")
+	}
+
+
 	return ssh.DoComposed(
 		doPrepareCRI(),
 		ssh.DoEnableService("kubelet.service"),

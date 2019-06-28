@@ -78,7 +78,7 @@ func DoExec(command string) ApplyFunc {
 	return DoExecList([]string{command})
 }
 
-// DoExecScript is a runner for a script
+// DoExecScript is a runner for a script (with some random path in /tmp)
 func DoExecScript(contents io.Reader, prefix string) ApplyFunc {
 	path, err := randomPath(prefix, "sh")
 	if err != nil {
