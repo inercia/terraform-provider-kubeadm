@@ -1,4 +1,4 @@
-# kubeadm data
+# kubeadm resource
 
 The resource provides the global configuration for the cluster.
 

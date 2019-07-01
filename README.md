@@ -15,13 +15,15 @@ the `data` block.
 * Easy deployment of kubernetes clusters in any platform supported
 by Terraform, just adding our `provisioner "kubeadm"` in the machines
 you want to be part of the cluster.
+* Multi-master deployments. Just add a Load Balancer that points
+to your masters and you will have a HA cluster!.  
 * Easy _scale-up_/_scale-down_ of the cluster by just changing the
 `count` of your masters or workers.
 * Automatic rolling upgrade of the cluster by just changing the base
 image of your machines. Terraform will take care of replacing old
 nodes with upgraded ones...
-* Automatic deployment of CNI drivers and addons
-like Dashboard, Ingress Controller, etc.  
+* Automatic deployment of some addons, like CNI drivers, the Dashboard,
+Helm, etc.  
 
 (check the [TODO](../../wiki/Roadmap) for an updated list of features).  
 
@@ -133,13 +135,17 @@ instructions.
   * [Docker-in-Docker](docs/examples/dnd/README.md)
 * [Roadmap, TODO and vision](../../wiki/Roadmap).
 
-## Running acceptance tests
+## Running the tests
 
-You need to define the TF_ACC variables:
+```console
+make test
+```
+
+In order to run the acceptance tests you need to define the TF_ACC variables:
 
 ```console
 export TF_ACC=1
-go test ./...
+make test
 ```
 
 ## Author(s)
