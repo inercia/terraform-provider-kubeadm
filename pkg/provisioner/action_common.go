@@ -19,8 +19,9 @@ import (
 func getKubeadmIgnoredChecksArg(d *schema.ResourceData) string {
 	ignoredChecks := common.DefIgnorePreflightChecks[:]
 	if checksOpt, ok := d.GetOk("ignore_checks"); ok {
-		ignoredChecks = checksOpt.([]string)
+		ignoredChecks = append(ignoredChecks, checksOpt.([]string)...)
 	}
+	ignoredChecks = common.StringSliceUnique(ignoredChecks) // remove all the duplicates
 
 	if len(ignoredChecks) > 0 {
 		return fmt.Sprintf("--ignore-preflight-errors=%s", strings.Join(ignoredChecks, ","))
