@@ -1,4 +1,10 @@
 provider "docker" {
+  # Travis-CI runs an "old" version of Docker
+  # so we must force a version that uses a compatible API
+  # see https://releases.hashicorp.com/terraform-provider-docker/
+  # see https://www.terraform.io/docs/configuration/providers.html#version-provider-versions
+  # version = "~> 1.2.0"
+
   host = "${var.daemon}"
 }
 

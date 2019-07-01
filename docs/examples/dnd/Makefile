@@ -22,14 +22,19 @@ run:
 # CI
 ###################################################################
 
-ci-setup:
-	@echo "No setup is necessary"
+# entrypoints: ci-setup
 
-ci: ci-setup
-	@echo ">>> Deploying in Docker"
-	terraform --version
-	terraform init
-	terraform apply -auto-approve
-	terraform output
-	terraform destroy -auto-approve
-	# TODO: do a `kubectl get nodes`
+# install the requiirements for the CI environment
+# this assumes we are running in Travis, in a Ubuntu distro
+ci-setup:
+	@echo ">>> Making sure Docker is not running..."
+	sudo systemctl stop docker || /bin/true
+
+	@echo ">>> Installing a more modern Docker version..."
+	curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+	sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu `lsb_release -cs` stable"
+	sudo apt-get update
+	sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
+
+	@echo ">>> Re-enabling the Docker service..."
+	sudo systemctl enable --now docker

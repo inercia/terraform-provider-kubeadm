@@ -1,25 +1,25 @@
 dist: xenial
 sudo: required
+
 language: go
-
-services:
-  - docker
-
 go:
   - 1.11.x
 
 cache:
   directories:
-    - $HOME/.cache/go-build
-    - $HOME/gopath/pkg/mod
-    - $HOME/.terraform.d/plugins
     # https://docs.travis-ci.com/user/caching/
     # "If you store archives larger than a few hundred megabytes
     # in the cache, it is unlikely that you’ll see a big
     # speed improvement".
+    #
+    # this list of directories seems to speedup things:
+    #
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
+    - $HOME/.terraform.d/plugins
 
 before_install:
-  - make ci-install-deps
+  - make ci-setup
 
 env:
   global:
@@ -34,7 +34,6 @@ jobs:
   include:
     - stage: Build and test the code
       script:
-        - make ci-save-env
         # NOTE: use this `sudo .. su` trick in order to use
         #       the `usermod -a -G lxd` we did on the `before_install`
         - sudo -E su $USER -c "make ci-tests"

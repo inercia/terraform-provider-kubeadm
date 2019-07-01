@@ -36,8 +36,11 @@ Helm, etc.
 
 ## Status
 
-This `provider`/`provisioner` is still being actively developed. To see what is left
-or planned, see the [issues list](https://github.com/inercia/terraform-provider-kubeadm/issues).
+This `provider`/`provisioner` is being actively developed, but I would still consider
+it **ALPHA**, so there can be many rough edges and some things can change without
+any previous notice. To see what is left or planned, see the
+[issues list](https://github.com/inercia/terraform-provider-kubeadm/issues) and the
+[roadmap](../../wiki/Roadmap).
 
 ## Requirements
 
@@ -89,10 +92,10 @@ resource "libvirt_domain" "master" {
   # this provisioner will start a Kubernetes master in this machine,
   # with the help of "kubeadm" 
   provisioner "kubeadm" {
-    # there is no "join", so this will be the first node in the cluster
+    # there is no "join", so this will be the first node in the cluster: the seeder
     config = "${data.kubeadm.main.config}"
-    # this will try to install "kubeadm" in this machine
     install {
+      # this will try to install "kubeadm" automatically in this machine
       auto = true
     }
   }
@@ -108,10 +111,10 @@ resource "libvirt_domain" "minion" {
   provisioner "kubeadm" {
     config = "${data.kubeadm.main.config}"
 
-    # this will make this minion _join_ the cluster started by the "master"
+    # this will make this minion "join" the cluster started by the "master"
     join = "${libvirt_domain.master.network_interface.0.addresses.0}"
-    # this will try to install "kubeadm" in this machine
     install {
+      # this will try to install "kubeadm" automatically in this machine
       auto = true
     }
   }
@@ -120,8 +123,8 @@ resource "libvirt_domain" "minion" {
 
 Note well that:
 
-* all the `provisioners` must specify the `config = ${XXX.config}`,
-* any other nodes that _joins_ the _seeder_ must specify the
+* all the `provisioners` must specify the `config = ${kubeadm.XXX.config}`,
+* any other nodes that _join_ the _seeder_ must specify the
 `join` attribute pointing to the `<IP/name>` they must _join_.
 
 Now you can see the plan, apply it, and then destroy the
@@ -140,7 +143,7 @@ You can find examples of the privider/provisioner in other environments like Ope
 * More details on the [installation](../../wiki/Installation) 
 instructions.
 * Using `kubeadm` in your Terraform scripts:
-  * The [`data "kubeadm"`](../../wiki/Data_kubeadm) configuration
+  * The [`resource "kubeadm"`](../../wiki/Resource_kubeadm) configuration
   block.
   * The [`provisioner "kubeadm"`](../../wiki/Provisioner_kubeadm)
   block.

@@ -97,30 +97,6 @@ errcheck:
 ################################################
 # CI targets (mainly for Travis)
 
-ci-install-deps:
-	# LXD version in Xenial is too old (2.0): we must use the snap
-	@echo ">>> Installing LXD snap..."
-	sudo apt remove -y --purge lxd lxd-client
-	sudo snap install lxd
-	sudo sh -c 'echo PATH=/snap/bin:${PATH} >> /etc/environment'
-	sudo lxd waitready
-	sudo lxd init --auto
-	sudo usermod -a -G lxd travis
-
-	mkdir -p "$TRAVIS_BUILD_DIR/snaps-cache"
-
-	@echo ">>> Installing other dependencies, like kubectl..."
-	sudo apt-get update && sudo apt-get install -y apt-transport-https
-	curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
-	echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
-	sudo apt-get update
-	sudo apt install -y kubectl unzip
-
-	# install Terraform
-	@echo ">>> Installing Terraform..."
-	wget https://releases.hashicorp.com/terraform/0.11.13/terraform_0.11.13_linux_amd64.zip
-	unzip terraform_0.11.13_linux_amd64.zip
-	sudo mv terraform /usr/local/bin/
 
 ci-save-env:
 	# NOTE: "sudo" in travis resets the environment to "safe" values
@@ -133,13 +109,19 @@ ci-save-env:
 
 ci: ci-tests
 
-ci-tests: ci-tests-unit ci-tests-e2e
-
-ci-tests-unit: 
+ci-tests-unit:
 	@make build test vet
 
 ci-tests-e2e:
-	@make -C tests/e2e
+	@make -C tests/e2e ci-tests
+
+# entrypoints: ci-tests and ci-setup
+
+ci-tests: ci-tests-unit ci-tests-e2e
+
+ci-setup:
+	@make -C tests/e2e ci-setup
+	@make              ci-save-env
 
 ################################################
 

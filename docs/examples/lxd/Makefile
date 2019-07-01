@@ -32,6 +32,16 @@ $(PLUGINS_DIR):
 # CI
 ###################################################################
 
+ci-install-lxd:
+	# LXD version in Xenial is too old (2.0): we must use the snap
+	@echo ">>> Installing LXD snap..."
+	sudo apt remove -y --purge lxd lxd-client
+	sudo snap install lxd
+	sudo sh -c 'echo PATH=/snap/bin:${PATH} >> /etc/environment'
+	sudo lxd waitready
+	sudo lxd init --auto
+	sudo usermod -a -G lxd `whoami`
+
 ci-install-tf-lxd-from-srcs: $(PLUGINS_DIR)
 	GO111MODULE=on go get -u $(TF_LXD_PROV_GOGET)
 	cd $(GOPATH_FIRST)/src/$(TF_LXD_PROV_GOGET)
@@ -59,14 +69,7 @@ ci-check-env:
 	[ -e /dev/mem     ] || exit 1
 	[ -d /lib/modules ] || exit 1
 
-ci-setup: ci-check-env ci-install-tf-lxd $(TF_SSH_KEY)
+# entrypoints: ci-setup
 
-ci: ci-setup
-	@echo ">>> Deploying in LXD"
-	terraform --version
-	terraform init
-	ls -lisah $(PLUGINS_DIR)
-	terraform apply -auto-approve
-	terraform output
-	terraform destroy -auto-approve
-	# TODO: do a `kubectl get nodes`
+ci-setup: ci-check-env ci-install-tf-lxd ci-install-lxd $(TF_SSH_KEY)
+

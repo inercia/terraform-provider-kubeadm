@@ -8,7 +8,7 @@ help of the kubeadm provider.
  * Some valid credentials (key and secret) for accessing AWS.
  
  * `kubectl`
- 
+  
    A local kubectl executable.
 
 ## Contents
@@ -84,10 +84,13 @@ and workers.
 
 The cluster will be made by these machines:
 
-  * a bastion host, with a public IP, used for accesing
-  the nodes in the cluster.
-  * `var.masters` master nodes (by default, one) 
-  * `var.workers` worker nodes (by default, one)
+  * a Load Balancer that redirects requests to the masters.
+  * a bastion host, used for accessing the machines though `ssh`,
+  with a public IP and port 22 open.
+  * `var.masters` master nodes (by default, two), not accessible
+  from the outside.
+  * `var.workers` worker nodes (by default, two), not accessible
+  from the outside.
 
 ## Some notes on the Terraform code
 
