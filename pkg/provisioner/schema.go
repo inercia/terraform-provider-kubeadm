@@ -39,8 +39,7 @@ func Provisioner() terraform.ResourceProvisioner {
 				Optional:    true,
 				Description: "list of preflight checks to ignore by kubeadm",
 			},
-			// not sure really necessary: maybe we can get Changes('count'):
-			"remove": {
+			"drain": {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Default:     false,
@@ -51,6 +50,12 @@ func Provisioner() terraform.ResourceProvisioner {
 				Optional:    true,
 				Default:     "",
 				Description: "name used for registering the node in the kubernetes cluster (defaults to the hostname)",
+			},
+			"listen": {
+				Type:         schema.TypeString,
+				Optional:     true,
+				Description:  "for masters, IP/DNS:port to listen at",
+				ValidateFunc: common.ValidateHostPort,
 			},
 			"prevent_sudo": {
 				Type:        schema.TypeBool,
@@ -65,6 +70,8 @@ func Provisioner() terraform.ResourceProvisioner {
 				Description: "list of manifests to load in the API server once the master is setup",
 			},
 			"install": {
+				// NOTE: default values for nested blocks are not available if the "install" block
+				// has not been provided at all.
 				Type:     schema.TypeList,
 				Optional: true,
 				ForceNew: true,

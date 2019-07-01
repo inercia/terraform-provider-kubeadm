@@ -32,6 +32,9 @@ const (
 	// Full path where we should upload the kubeadm dropin file
 	DefKubeadmDropinPath = "/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf"
 
+	// Default PKI dir
+	DefPKIDir = "/etc/kubernetes/pki"
+
 	DefAPIServerPort = 6443
 
 	// TODO: add a manifest for loading Helm

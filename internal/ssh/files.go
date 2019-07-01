@@ -86,6 +86,10 @@ func DoUploadReaderToFile(contents io.Reader, remote string) ApplyFunc {
 		panic(err)
 	}
 
+	if len(remote) == 0 {
+		panic("empty remote path")
+	}
+
 	return DoComposed(
 		doRealUploadFile(contents, tmpPath),
 		DoMkdir(filepath.Dir(remote)),

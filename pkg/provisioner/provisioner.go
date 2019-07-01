@@ -10,6 +10,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
@@ -72,11 +73,11 @@ func applyFn(ctx context.Context) error {
 	} else {
 		switch role {
 		case "master":
-			action = doKubeadmJoin(d, true)
+			action = doKubeadmJoinControlPlane(d)
 		case "worker":
-			action = doKubeadmJoin(d, false)
+			action = doKubeadmJoinWorker(d)
 		case "":
-			action = doKubeadmJoin(d, false)
+			action = doKubeadmJoinWorker(d)
 		default:
 			o.Output(fmt.Sprintf("Unknown provisioning profile: join is %q and role is %q", join, role))
 			return ErrUnknownProvisioningProfile
@@ -114,8 +115,8 @@ func doKubeadmInit(d *schema.ResourceData) ssh.ApplyFunc {
 	return ssh.DoComposed(actions...)
 }
 
-// doKubeadmJoin runs the `kubeadm join`
-func doKubeadmJoin(d *schema.ResourceData, controlPlane bool) ssh.ApplyFunc {
+// doKubeadmJoinWorker runs the `kubeadm join`
+func doKubeadmJoinWorker(d *schema.ResourceData) ssh.ApplyFunc {
 	_, joinConfigBytes, err := common.JoinConfigFromResourceData(d)
 	if err != nil {
 		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
@@ -123,16 +124,51 @@ func doKubeadmJoin(d *schema.ResourceData, controlPlane bool) ssh.ApplyFunc {
 
 	// check if we are joining the Control Plane: we must upload the certificates and
 	// use the '--control-plane' flag
-	extraArgs := []string{}
-	controlPlaneAction := ssh.DoNothing()
-	if controlPlane {
-		controlPlaneAction = doUploadCerts(d)
-		extraArgs = append(extraArgs, "--experimental-control-plane")
-	}
-
 	actions := []ssh.Applyer{
 		ssh.DoMessage("Joining the cluster with 'kubadm join'"),
-		controlPlaneAction,
+		doKubeadm(d, "join", joinConfigBytes),
+	}
+	return ssh.DoComposed(actions...)
+}
+
+// doKubeadmJoinWorker runs the `kubeadm join`
+func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.ApplyFunc {
+	joinConfig, _, err := common.JoinConfigFromResourceData(d)
+	if err != nil {
+		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+	}
+
+	// check that we have a stable control plane endpoint
+	initConfig, _, err := common.InitConfigFromResourceData(d)
+	if err != nil {
+		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+	}
+	if len(initConfig.ClusterConfiguration.ControlPlaneEndpoint) == 0 {
+		return ssh.DoAbort("Cannot create additional masters when the 'kubeadm.<name>.api.external' is empty")
+	}
+
+	// add a local Control-Plane section to the JoinConfiguration
+	endpoint := kubeadmapi.APIEndpoint{}
+	if hp, ok := d.GetOk("listen"); ok {
+		h, p, err := common.SplitHostPort(hp.(string), common.DefAPIServerPort)
+		if err != nil {
+			return ssh.DoAbort(fmt.Sprintf("could not parse listen address %q: %s", hp.(string), err))
+		}
+		endpoint = kubeadmapi.APIEndpoint{AdvertiseAddress: h, BindPort: int32(p)}
+	} else {
+		endpoint = kubeadmapi.APIEndpoint{AdvertiseAddress: "", BindPort: common.DefAPIServerPort}
+	}
+	joinConfig.ControlPlane = &kubeadmapi.JoinControlPlane{LocalAPIEndpoint: endpoint}
+
+	joinConfigBytes, err := common.JoinConfigToYAML(joinConfig)
+	if err != nil {
+		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+	}
+
+	extraArgs := []string{}
+	actions := []ssh.Applyer{
+		ssh.DoMessage("Joining the cluster with 'kubadm join'"),
+		doUploadCerts(d),
 		doKubeadm(d, "join", joinConfigBytes, extraArgs...),
 	}
 	return ssh.DoComposed(actions...)

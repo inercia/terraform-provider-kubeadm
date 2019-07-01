@@ -53,6 +53,8 @@ func doRefreshToken(d *schema.ResourceData) ssh.ApplyFunc {
 		panic("there should be a token")
 	}
 
+	// TODO: we should (re)create the token by ssh'ing and doing a 'kubeadm token create'
+
 	return ssh.DoIfElse(
 		checkKubeconfigAlive(d),
 		ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {

@@ -2,6 +2,7 @@ package common
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -24,6 +25,12 @@ func ValidateAbsPath(v interface{}, k string) (ws []string, errors []error) {
 	if !filepath.IsAbs(v.(string)) {
 		errors = append(errors, fmt.Errorf("%q is not an absolute path", k))
 	}
+	return
+}
+
+func ValidateHostPort(v interface{}, k string) (ws []string, errors []error) {
+	_, _, err := net.SplitHostPort(v.(string))
+	errors = append(errors, fmt.Errorf("%q is not an valid 'expectedHost:expectedPort': %s", k, err))
 	return
 }
 

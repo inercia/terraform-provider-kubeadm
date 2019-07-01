@@ -208,6 +208,9 @@ func CreateCerts(d *schema.ResourceData, initCfg *kubeadmapi.InitConfiguration) 
 
 	// restore the certificates directory before creating the map
 	certsConfig.Dir = initCfg.CertificatesDir
+	if len(certsConfig.Dir) == 0 {
+		certsConfig.Dir = DefPKIDir
+	}
 
 	// ... and create the map with the config for the provisioner
 	m, err := certsConfig.ToMap()

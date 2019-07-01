@@ -11,8 +11,8 @@ import (
 
 func TestKubeadm_basic(t *testing.T) {
 	const testAccKubeadm_basic = `
-        data "kubeadm" "k8s" {
-        	config_path = "/root/.kube/config"
+        resource "kubeadm" "k8s" {
+        	config_path = "/tmp/kubeconfig"
         	
         	network {
         		services = "10.25.0.0/16"
@@ -34,16 +34,16 @@ func TestKubeadm_basic(t *testing.T) {
 			{
 				Config: testAccKubeadm_basic,
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckState("data.kubeadm.k8s"),
-					resource.TestCheckResourceAttr("data.kubeadm.k8s",
+					testAccCheckState("kubeadm.k8s"),
+					resource.TestCheckResourceAttr("kubeadm.k8s",
 						"config.config_path",
-						"/root/.kube/config"),
-					resource.TestCheckResourceAttr("data.kubeadm.k8s",
+						"/tmp/kubeconfig"),
+					resource.TestCheckResourceAttr("kubeadm.k8s",
 						"config.cni_plugin",
 						"flannel"),
-					resource.TestCheckResourceAttrSet("data.kubeadm.k8s",
+					resource.TestCheckResourceAttrSet("kubeadm.k8s",
 						"config.init"),
-					resource.TestCheckResourceAttrSet("data.kubeadm.k8s",
+					resource.TestCheckResourceAttrSet("kubeadm.k8s",
 						"config.join"),
 				),
 			},

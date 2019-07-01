@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -13,19 +15,16 @@ import (
 
 // dataSourceKubeadmCreate is responsible for creating the kubeadm configuration and certificates
 func dataSourceKubeadmCreate(d *schema.ResourceData, meta interface{}) error {
-	// NOTE: this function is called even for doing a "terraform plan"
-
 	log.Printf("[DEBUG] [KUBEADM] dataSourceKubeadmRead: new resource = %v", d.IsNewResource())
 
-	token := d.Get("token").(string)
-	// FIXME: users can provide their own token: we should detect we need to initialize all the other things
-	if token == "" {
+	_, ok := d.GetOk("config")
+	if !ok {
 		log.Printf("[DEBUG] [KUBEADM] no previous configuration found: creating new configuration...")
 		if err := createConfigForProvisioner(d); err != nil {
 			return err
 		}
 	} else {
-		log.Printf("[DEBUG] [KUBEADM] using previous kubeadm token = %s", token)
+		log.Printf("[DEBUG] [KUBEADM] using previous config")
 	}
 
 	if err := dataSourceVerify(d); err != nil {
@@ -55,24 +54,18 @@ func dataSourceKubeadmDelete(d *schema.ResourceData, meta interface{}) error {
 	return nil
 }
 
+// dataSourceKubeadmUpdate is responsible for updating things
+func dataSourceKubeadmUpdate(d *schema.ResourceData, meta interface{}) error {
+	// TODO: pass the responsability for creating the new token to the provisioner
+	return nil
+}
+
 // dataSourceKubeadmExists checks if the kubeadm configuration already exists
 func dataSourceKubeadmExists(d *schema.ResourceData, meta interface{}) (bool, error) {
 	log.Printf("[DEBUG] [KUBEADM] checking if kubeadm configuration already exists...")
 
-	// check we have the token
-	token, ok := d.GetOk("token")
-	if !ok {
-		log.Printf("[DEBUG] [KUBEADM] does not exist: no token")
-		return false, nil
-	}
-
-	if token.(string) == "" {
-		log.Printf("[DEBUG] [KUBEADM] does not exist: no token")
-		return false, nil
-	}
-
 	// check we have the certificates
-	_, ok = d.GetOk("config")
+	_, ok := d.GetOk("config")
 	if !ok {
 		log.Printf("[DEBUG] [KUBEADM] does not exist: no config section")
 		return false, nil
@@ -102,21 +95,13 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("[DEBUG] [KUBEADM] setting %s as the ID for the kubeadm 'data'", token)
-	d.SetId(token)
-
 	log.Printf("[DEBUG] [KUBEADM] kubeadm token = %s", token)
-	if err = d.Set("token", token); err != nil {
-		return err
-	}
 
-	log.Printf("[DEBUG] [KUBEADM] creating kubeadm configuration")
-
+	log.Printf("[DEBUG] [KUBEADM] creating kubeadm configuration for init and join")
 	initConfig, err := dataSourceToInitConfig(d, token)
 	if err != nil {
 		return err
 	}
-
 	joinConfig, err := dataSourceToJoinConfig(d, token)
 	if err != nil {
 		return err
@@ -178,6 +163,12 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 	log.Printf("[DEBUG] [KUBEADM] %s", spew.Sdump(provConfig))
 	log.Printf("[DEBUG] [KUBEADM] end of provisioner config.")
 	log.Printf("[DEBUG] [KUBEADM] -------------------------------------------------------------------------")
+
+	// create the ID as the hash of the init and join configurations
+	hasher := md5.New()
+	hasher.Write(initConfigBytes[:])
+	hasher.Write(joinConfigBytes[:])
+	d.SetId(hex.EncodeToString(hasher.Sum(nil)))
 
 	return nil
 }

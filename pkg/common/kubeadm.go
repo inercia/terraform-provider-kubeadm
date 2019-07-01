@@ -77,10 +77,8 @@ func YAMLToInitConfig(configBytes []byte) (*kubeadmapi.InitConfiguration, error)
 
 // InitConfigToYAML converts a InitConfiguration to YAML
 func InitConfigToYAML(initConfig *kubeadmapi.InitConfiguration) ([]byte, error) {
-	log.Printf("[DEBUG] [KUBEADM] creating initialization configuration...")
-
+	log.Printf("[DEBUG] [KUBEADM] initialization configuration to YAML")
 	kubeadmscheme.Scheme.Default(initConfig)
-
 	return config.MarshalInitConfigurationToBytes(initConfig, apiVersion)
 }
 
@@ -152,6 +150,7 @@ func YAMLToJoinConfig(configBytes []byte) (*kubeadmapi.JoinConfiguration, error)
 
 // JoinConfigToYAML converts a JoinConfiguration to YAML
 func JoinConfigToYAML(joinConfig *kubeadmapi.JoinConfiguration) ([]byte, error) {
+	log.Printf("[DEBUG] [KUBEADM] join configuration to YAML")
 	kubeadmscheme.Scheme.Default(joinConfig)
 	nodebytes, err := kubeadmutil.MarshalToYamlForCodecs(joinConfig, apiVersion, kubeadmscheme.Codecs)
 	if err != nil {

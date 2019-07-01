@@ -50,6 +50,10 @@ func getKubeconfig(d *schema.ResourceData) string {
 // this functions creates a `kubeadm` executor using some default values for some arguments.
 func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string, args ...string) ssh.ApplyFunc {
 	kubeadm_path := d.Get("install.0.kubeadm_path").(string)
+	if len(kubeadm_path) == 0 {
+		kubeadm_path = common.DefKubeadmPath
+	}
+
 	allArgs := []string{}
 	switch command {
 	case "init", "join":
@@ -78,14 +82,22 @@ func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, arg
 		kubeadmConfigFilename = common.DefKubeadmJoinConfPath
 	}
 
+	// NOTE: the "install" block is optional, so there will be no
+	// default values for "install.0.XXX" if the "install" block has not been given...
 	sysconfigPath := d.Get("install.0.sysconfig_path").(string)
-	servicePath := d.Get("install.0.service_path").(string)
-	dropinPath := d.Get("install.0.dropin_path").(string)
-
 	if len(sysconfigPath) == 0 {
-		return ssh.DoAbort("empty install.sysconfig_path in provisioner")
+		sysconfigPath = common.DefKubeletSysconfigPath
 	}
 
+	servicePath := d.Get("install.0.service_path").(string)
+	if len(servicePath) == 0 {
+		servicePath = common.DefKubeletServicePath
+	}
+
+	dropinPath := d.Get("install.0.dropin_path").(string)
+	if len(dropinPath) == 0 {
+		dropinPath = common.DefKubeadmDropinPath
+	}
 
 	return ssh.DoComposed(
 		doPrepareCRI(),
@@ -118,7 +130,7 @@ func doUploadCerts(d *schema.ResourceData) ssh.ApplyFunc {
 	actions := []ssh.Applyer{}
 	for baseName, cert := range certsConfig.DistributionMap() {
 		fullPath := path.Join(certsConfig.Dir, baseName)
-		log.Printf("[DEBUG] [KUBEADM] will upload certificate %q", fullPath)
+		log.Printf("[DEBUG] [KUBEADM] will upload certificate to %q", fullPath)
 		upload := ssh.DoUploadReaderToFile(strings.NewReader(*cert), fullPath)
 		actions = append(actions, upload)
 	}

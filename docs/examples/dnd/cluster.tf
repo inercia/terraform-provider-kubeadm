@@ -71,15 +71,15 @@ resource "docker_container" "master" {
   }
 
   # API server
-  ports {
-    external = "6443"
-    internal = 6443
-  }
-
-  ports {
-    external = "1080"
-    internal = 80
-  }
+  #ports {
+  #  external = "6443"
+  #  internal = 6443
+  #}
+  #
+  #ports {
+  #  external = "1080"
+  #  internal = 80
+  #}
 
   volumes {
     host_path      = "/sys/fs/cgroup"
@@ -97,7 +97,7 @@ resource "docker_container" "master" {
   provisioner "kubeadm" {
     config    = "${kubeadm.main.config}"
     role      = "master"
-    # join      = "${docker_container.master.0.ip_address}"
+    join      = "${count.index == 0 ? "" : docker_container.master.0.ip_address}"
     manifests = "${var.manifests}"
   }
 
