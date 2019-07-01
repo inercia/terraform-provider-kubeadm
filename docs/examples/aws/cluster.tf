@@ -204,7 +204,7 @@ resource "aws_elb" "kube_api" {
   name                      = "${var.stack_name}-elb"
   security_groups           = ["${aws_security_group.elb.id}"]
   subnets                   = ["${aws_subnet.public.0.id}"]
-  instances                 = ["${aws_instance.masters.id}"]
+  instances                 = ["${aws_instance.masters.*.id}"]
 
   listener {
     instance_port     = 6443
@@ -399,7 +399,7 @@ resource "aws_key_pair" "kube" {
 # Kubeadm
 ###########################################
 
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   config_path = "${var.kubeconfig}"
 
   api {
@@ -432,7 +432,6 @@ data "kubeadm" "main" {
 resource "aws_instance" "bastion" {
   ami                         = "${data.aws_ami.latest_ami.id}"
   associate_public_ip_address = true
-  count                       = "${var.masters}"
   instance_type               = "${var.master_size}"
   key_name                    = "${aws_key_pair.kube.key_name}"
   source_dest_check           = false
@@ -475,7 +474,6 @@ resource "aws_instance" "masters" {
   source_dest_check = false
   subnet_id         = "${aws_subnet.private.0.id}"
   user_data         = "${data.template_cloudinit_config.cfg.rendered}"
-  depends_on        = ["aws_instance.bastion"]
 
   tags = "${merge(local.tags, map(
     "Name", "${var.stack_name}-master-${count.index}",
@@ -505,13 +503,16 @@ resource "aws_instance" "masters" {
 ## note: in AWS, the masters must be provisioned in a separate null_resource,
 ##       as we have the following dependencies:
 ##
-##          aws_instance.masters / provisioner "kubeadm" -> data.kubeadm.main.config
-##          data.kubeadm.main -> aws_elb.kube_api.dns_name
+##          aws_instance.masters / provisioner "kubeadm" -> kubeadm.main.config
+##          kubeadm.main -> aws_elb.kube_api.dns_name
 ##          aws_elb.kube_api.instances -> aws_instance.masters
 ##
 ##       so we have a circular dependency: we need the Load Balancer in order to
 ##       provision instances with kubeadm (as kubeadm tries to access the LB address),
 ##       and we need the instances in order to add them to the Load Balancer
+##
+## TODO: maybe we could break this dependency by using a
+##       DNS record (https://www.terraform.io/docs/providers/aws/r/route53_record.html)
 ##
 resource "null_resource" "masters" {
   count = "${var.masters}"
@@ -519,6 +520,7 @@ resource "null_resource" "masters" {
   depends_on = [
     "aws_instance.masters",
     "aws_elb.kube_api",
+    "aws_instance.bastion",
   ]
 
   connection {
@@ -530,12 +532,18 @@ resource "null_resource" "masters" {
   }
 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
+
+    ignore_checks = [
+      "KubeletVersion",  // the kubelet version in the base image can be very different
+    ]
 
     # we must overwrite the nodename with the AWS private DNS name
     # because the kubelet cannot prooperly detect a valid hostname
     #nodename = "${aws_instance.masters.private_dns}"
     nodename = "${element(aws_instance.masters.*.private_dns, count.index)}"
+    role      = "master"
+    join      = "${count.index == 0 ? "" : aws_instance.masters.0.private_ip}"
 
     install {
       auto = true
@@ -598,12 +606,16 @@ resource "aws_instance" "workers" {
   }
 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
     join   = "${element(aws_instance.masters.*.private_ip, 0)}"
 
     # we must overwrite the nodename with the AWS private DNS name
     # because the kubelet cannot properly detect a valid hostname
     nodename = "${self.private_dns}"
+
+    ignore_checks = [
+      "KubeletVersion",  // the kubelet version in the base image can be very different
+    ]
 
     install {
       auto = true

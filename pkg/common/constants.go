@@ -23,7 +23,17 @@ const (
 
 	DefCniBinDir = "/opt/cni/bin"
 
+	// Full path where we should upload the kubelet sysconfig file
+	DefKubeletSysconfigPath = "/etc/sysconfig/kubelet"
+
+	// Full path where we should upload the kubelet.service file
+	DefKubeletServicePath = "/usr/lib/systemd/system/kubelet.service"
+
+	// Full path where we should upload the kubeadm dropin file
 	DefKubeadmDropinPath = "/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf"
+
+	// Default PKI dir
+	DefPKIDir = "/etc/kubernetes/pki"
 
 	DefAPIServerPort = 6443
 
@@ -32,6 +42,9 @@ const (
 
 	// manifest for loading the dashboard
 	DefDashboardManifest = "https://raw.githubusercontent.com/kubernetes/dashboard/master/aio/deploy/recommended/kubernetes-dashboard.yaml"
+
+	// kubeadm executable in the machines (we assume it is in some standard path)
+	DefKubeadmPath = "kubeadm"
 )
 
 var (

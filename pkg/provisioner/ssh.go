@@ -7,8 +7,6 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 )
 
-// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 // getCommunicator gets a new communicator for the remote machine
 func getCommunicator(ctx context.Context, o terraform.UIOutput, s *terraform.InstanceState) (communicator.Communicator, error) {
 	// Get a new communicator

@@ -28,6 +28,10 @@ $(TF_SSH_KEY):
 $(PLUGINS_DIR):
 	mkdir -p $(PLUGINS_DIR)
 
+###################################################################
+# CI
+###################################################################
+
 ci-install-tf-lxd-from-srcs: $(PLUGINS_DIR)
 	GO111MODULE=on go get -u $(TF_LXD_PROV_GOGET)
 	cd $(GOPATH_FIRST)/src/$(TF_LXD_PROV_GOGET)
@@ -55,7 +59,9 @@ ci-check-env:
 	[ -e /dev/mem     ] || exit 1
 	[ -d /lib/modules ] || exit 1
 
-ci: ci-check-env ci-install-tf-lxd $(TF_SSH_KEY)
+ci-setup: ci-check-env ci-install-tf-lxd $(TF_SSH_KEY)
+
+ci: ci-setup
 	@echo ">>> Deploying in LXD"
 	terraform --version
 	terraform init

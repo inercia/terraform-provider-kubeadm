@@ -76,22 +76,34 @@ func doRealUploadFile(contents io.Reader, remote string) ApplyFunc {
 	})
 }
 
-// DoUploadFile uploads a file to a remote path, using a temporary file in /tmp
+// DoUploadReaderToFile uploads a file to a remote path, using a temporary file in /tmp
 // and then moving it to the final destination with `sudo`.
 // It is important to use a temporary file as uploads are performed as a regular
 // user, while the `mv` is done with `sudo`
-func DoUploadFile(contents io.Reader, remote string) ApplyFunc {
+func DoUploadReaderToFile(contents io.Reader, remote string) ApplyFunc {
 	tmpPath, err := randomPath("tmpfile", "tmp")
 	if err != nil {
 		panic(err)
 	}
 
-	return ApplyComposed(
+	if len(remote) == 0 {
+		panic("empty remote path")
+	}
+
+	return DoComposed(
 		doRealUploadFile(contents, tmpPath),
 		DoMkdir(filepath.Dir(remote)),
 		DoMessage(fmt.Sprintf("Moving to final destination %s", remote)),
 		DoMoveFile(tmpPath, remote),
 	)
+}
+
+func DoUploadFileToFile(local string, remote string) ApplyFunc {
+	f, err := os.Open(local)
+	if err != nil {
+		return DoAbort(fmt.Sprintf("could not open local file %q for uploading to %q", local, remote))
+	}
+	return DoUploadReaderToFile(f, remote)
 }
 
 // DoDownloadFileToWriter downloads a file to a writer
@@ -135,13 +147,23 @@ func DoDownloadFileToWriter(remote string, contents io.WriteCloser) ApplyFunc {
 }
 
 // DoDeleteFile removes a file
-func DoDeleteFile(remote string) ApplyFunc {
-	return DoExec(fmt.Sprintf("rm -f %s", remote))
+func DoDeleteFile(path string) ApplyFunc {
+	return DoExec(fmt.Sprintf("rm -f %s", path))
 }
 
-// DoMoveFile removes a file
+// DoDeleteLocalFile removes a local file
+func DoDeleteLocalFile(path string) ApplyFunc {
+	return DoLocalExec("rm", "-f", path)
+}
+
+// DoMoveFile moves a file
 func DoMoveFile(src, dst string) ApplyFunc {
 	return DoExec(fmt.Sprintf("mv -f %s %s", src, dst))
+}
+
+// DoMoveLocalFile moves a local file
+func DoMoveLocalFile(src, dst string) ApplyFunc {
+	return DoLocalExec("mv", "-f", src, dst)
 }
 
 // DoDownloadFile downloads a remote file to a local file
@@ -159,10 +181,19 @@ func DoDownloadFile(remote, local string) ApplyFunc {
 
 // CheckFileExists checks that a remote file exists
 func CheckFileExists(path string) CheckerFunc {
-	return CheckCondition(fmt.Sprintf("[ -f '%s' ]", path))
+	return CheckExec(fmt.Sprintf("[ -f '%s' ]", path))
 }
 
 // CheckFileAbsent checks that a remote file does not exists
 func CheckFileAbsent(path string) CheckerFunc {
 	return CheckNot(CheckFileExists(path))
+}
+
+func CheckLocalFileExists(path string) CheckerFunc {
+	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+		if _, err := os.Stat(path); err == nil {
+			return true, nil
+		}
+		return false, nil
+	})
 }

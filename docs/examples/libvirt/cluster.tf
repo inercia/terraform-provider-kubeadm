@@ -27,7 +27,7 @@ data "template_file" "cloud_init_user_data" {
 # Kubeadm #
 ##########################
 
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   network {
     dns_domain = "mycluster.com"
     services   = "10.25.0.0/16"
@@ -79,7 +79,7 @@ resource "libvirt_domain" "master" {
   }
 
   provisioner "kubeadm" {
-    config     = "${data.kubeadm.main.config}"
+    config     = "${kubeadm.main.config}"
     kubeconfig = "${var.kubeconfig}"
     manifests  = "${var.manifests}"
   }
@@ -124,7 +124,7 @@ resource "libvirt_domain" "minion" {
   }
 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
     join   = "${libvirt_domain.master.network_interface.0.addresses.0}"
 
     #ignore_checks = [

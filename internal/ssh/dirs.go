@@ -11,7 +11,7 @@ import (
 // DoMkdir creates a remote directory
 func DoMkdir(path string) ApplyFunc {
 	mkdirCmd := fmt.Sprintf("mkdir -p %s", path)
-	return ApplyComposed(
+	return DoComposed(
 		DoMessage(fmt.Sprintf("Creating directory %s", path)),
 		DoExec(mkdirCmd),
 	)

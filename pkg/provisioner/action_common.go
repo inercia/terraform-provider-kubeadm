@@ -1,26 +1,27 @@
 package provisioner
 
 import (
+	"bytes"
 	"fmt"
+	"log"
+	"os"
+	"path"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
-	// "k8s.io/client-go/kubernetes"
-	// "k8s.io/client-go/tools/clientcmd"
 
+	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
-
-//
-// kubeadm
-//
 
 // getKubeadmIgnoredChecksArg returns the kubeadm arguments for the ignored checks
 func getKubeadmIgnoredChecksArg(d *schema.ResourceData) string {
 	ignoredChecks := common.DefIgnorePreflightChecks[:]
 	if checksOpt, ok := d.GetOk("ignore_checks"); ok {
-		ignoredChecks = checksOpt.([]string)
+		ignoredChecks = append(ignoredChecks, checksOpt.([]string)...)
 	}
+	ignoredChecks = common.StringSliceUnique(ignoredChecks) // remove all the duplicates
 
 	if len(ignoredChecks) > 0 {
 		return fmt.Sprintf("--ignore-preflight-errors=%s", strings.Join(ignoredChecks, ","))
@@ -46,18 +47,94 @@ func getKubeconfig(d *schema.ResourceData) string {
 	return kubeconfigOpt.(string)
 }
 
-// getClientset gets a clientset, or "nil" if no "kubeconfig" has been provided
-// Usage:
-//      clientset := getClientset(d)
-// 		pods, _ := clientset.CoreV1().Nodes().List(metav1.ListOptions{})
-// 		fmt.Printf("There are %d pods in the cluster\n", len(pods.Items))
-//
-// func getClientset(d *schema.ResourceData) (*kubernetes.Clientset, error) {
-// 	if kubeconfigOpt, ok := d.GetOk("kubeconfig"); ok {
-// 		kubeconfig := kubeconfigOpt.(string)
+// doExecKubeadmWithConfig runs a `kubeadm` command in the remote host
+// this functions creates a `kubeadm` executor using some default values for some arguments.
+func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string, args ...string) ssh.ApplyFunc {
+	kubeadm_path := d.Get("install.0.kubeadm_path").(string)
+	if len(kubeadm_path) == 0 {
+		kubeadm_path = common.DefKubeadmPath
+	}
 
-// 		config, _ := clientcmd.BuildConfigFromFlags("", kubeconfig)
-// 		return kubernetes.NewForConfig(config)
-// 	}
-// 	return nil, nil
-// }
+	allArgs := []string{}
+	switch command {
+	case "init", "join":
+		allArgs = append(allArgs, getKubeadmIgnoredChecksArg(d))
+		allArgs = append(allArgs, getKubeadmNodenameArg(d))
+		allArgs = append(allArgs, fmt.Sprintf("--config=%s", cfg))
+	}
+
+	// increase kubeadm verbosity if we are debugging at the Terraform level
+	if _, ok := os.LookupEnv("TF_LOG"); ok {
+		allArgs = append(allArgs, "-v3")
+	}
+
+	allArgs = append(allArgs, args...)
+	return ssh.DoExec(fmt.Sprintf("%s %s %s", kubeadm_path, command, strings.Join(allArgs, " ")))
+}
+
+// doKubeadm are the common provisioning things, for the `init` as well
+// as for the `join`.
+func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, args ...string) ssh.ApplyFunc {
+	kubeadmConfigFilename := ""
+	switch command {
+	case "init":
+		kubeadmConfigFilename = common.DefKubeadmInitConfPath
+	case "join":
+		kubeadmConfigFilename = common.DefKubeadmJoinConfPath
+	}
+
+	// NOTE: the "install" block is optional, so there will be no
+	// default values for "install.0.XXX" if the "install" block has not been given...
+	sysconfigPath := d.Get("install.0.sysconfig_path").(string)
+	if len(sysconfigPath) == 0 {
+		sysconfigPath = common.DefKubeletSysconfigPath
+	}
+
+	servicePath := d.Get("install.0.service_path").(string)
+	if len(servicePath) == 0 {
+		servicePath = common.DefKubeletServicePath
+	}
+
+	dropinPath := d.Get("install.0.dropin_path").(string)
+	if len(dropinPath) == 0 {
+		dropinPath = common.DefKubeadmDropinPath
+	}
+
+	return ssh.DoComposed(
+		doPrepareCRI(),
+		ssh.DoEnableService("kubelet.service"),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletSysconfigCode), sysconfigPath),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), servicePath),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), dropinPath),
+		ssh.DoComposed(
+			ssh.DoIf(
+				ssh.CheckFileExists(kubeadmConfigFilename),
+				ssh.DoComposed(
+					doExecKubeadmWithConfig(d, "reset", "", "--force"),
+					ssh.DoDeleteFile(kubeadmConfigFilename),
+				)),
+			ssh.DoUploadReaderToFile(bytes.NewReader(kubeadmConfig), kubeadmConfigFilename),
+			doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
+			ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak"),
+		),
+	)
+}
+
+// doUploadCerts upload the certificates from the serialized `d.config` to the remote machine
+// we only do this on the control plane machines
+func doUploadCerts(d *schema.ResourceData) ssh.ApplyFunc {
+	certsConfig := &common.CertsConfig{}
+	if err := certsConfig.FromResourceData(d); err != nil {
+		return ssh.DoAbort("no certificates data in config")
+	}
+
+	actions := []ssh.Applyer{}
+	for baseName, cert := range certsConfig.DistributionMap() {
+		fullPath := path.Join(certsConfig.Dir, baseName)
+		log.Printf("[DEBUG] [KUBEADM] will upload certificate to %q", fullPath)
+		upload := ssh.DoUploadReaderToFile(strings.NewReader(*cert), fullPath)
+		actions = append(actions, upload)
+	}
+
+	return ssh.DoComposed(actions...)
+}

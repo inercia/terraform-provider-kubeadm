@@ -2,6 +2,9 @@ dist: xenial
 sudo: required
 language: go
 
+services:
+  - docker
+
 go:
   - 1.11.x
 
@@ -34,7 +37,7 @@ jobs:
         - make ci-save-env
         # NOTE: use this `sudo .. su` trick in order to use
         #       the `usermod -a -G lxd` we did on the `before_install`
-        - sudo -E su $USER -c "make ci-tests ci-deploy-lxd"
+        - sudo -E su $USER -c "make ci-tests"
 
 branches:
   only:

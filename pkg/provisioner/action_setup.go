@@ -2,11 +2,11 @@ package provisioner
 
 import (
 	"fmt"
-	"io"
-	"os"
+	"io/ioutil"
 	"strings"
 
 	"github.com/hashicorp/terraform/communicator"
+	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
@@ -18,23 +18,34 @@ const (
 )
 
 // doKubeadmSetup tries to install kubeadm in the remote machine
-func doKubeadmSetup(o terraform.UIOutput, comm communicator.Communicator, installScript string, useSudo bool) error {
+func doKubeadmSetup(d *schema.ResourceData, o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+	if _, ok := d.GetOk("install"); ok {
+		code := ""
+		descr := ""
+		auto := d.Get("install.0.auto").(bool)
+		inline := d.Get("install.0.inline").(string)
+		script := d.Get("install.0.script").(string)
 
-	var contents io.Reader
-
-	// setup kubeadm
-	if len(installScript) > 0 {
-		o.Output(fmt.Sprintf("Uploading custom kubeadm installation script from %s...", installScript))
-		f, err := os.Open(installScript)
-		if err != nil {
-			return err
+		if auto {
+			descr = "Uploading built-in kubeadm installation script..."
+			code = assets.KubeadmSetupScriptCode
+		} else if len(inline) > 0 {
+			descr = "Uploading inlined installation script..."
+			code = "#!/bin/sh\n" + inline
+		} else if len(script) > 0 {
+			descr = fmt.Sprintf("Uploading custom kubeadm installation script from %s...", script)
+			contents, err := ioutil.ReadFile(script)
+			if err != nil {
+				o.Output(fmt.Sprintf("Error when reading installation script %q", script))
+				return err
+			}
+			code = string(contents)
 		}
-		contents = f
-	} else {
-		o.Output("Uploading built-in kubeadm installation script...")
-		contents = strings.NewReader(assets.KubeadmSetupScriptCode)
-	}
 
-	o.Output("Running kubeadm installation script")
-	return ssh.DoExecScript(contents, defaultKubeadmSetup).Apply(o, comm, useSudo)
+		return ssh.DoComposed(
+			ssh.DoMessage(descr),
+			ssh.DoExecScript(strings.NewReader(code), defaultKubeadmSetup),
+		).Apply(o, comm, useSudo)
+	}
+	return nil
 }

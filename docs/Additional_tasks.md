@@ -1,25 +1,13 @@
 # Additional tasks
 
-## CNI
+Once you have created the cluster with Terraform you should do some other tasks in order
+to have a production-quality cluster:
 
-* `kubeadm` currently does not install any CNI driver
-(ie, `flannel`,`calico`, etc). However, you can use the `manifests`
-in the `provisioner` for loading your preferred CNI manifest once the first master is ready.
-
-```hcl
-variable "manifests" {
-  type = "list"
-  default = [
-    "https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml",
-  ]
-  description = "List of manifests to load after setting up the first master"
-}
-
-resource "..." "master" {
-  provisioner "kubeadm" {
-    config     = "${data.kubeadm.main.config.init}"
-    kubeconfig = "${var.kubeconfig}"
-    manifests  = "${var.manifests}"
-  }
-}
-```
+* create some [Pod Security Policy](https://kubernetes.io/docs/concepts/policy/pod-security-policy/)
+and apply it before running any workload in the cluster. 
+* if the CNI plugin supports it, apply some
+[Network Security Policy](https://kubernetes.io/docs/concepts/services-networking/network-policies/).
+* install [Dex](https://github.com/dexidp/dex/blob/master/Documentation/kubernetes.md)
+for authentication, and connect it to your LDAP servers, SAML providers, or some
+identity provider like GitHub, Google, and Active Directory. Do not distribute the `kubeconfig`
+file created for managing this cluster.   

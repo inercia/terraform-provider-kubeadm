@@ -19,6 +19,11 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		// Computed: true,
 		Optional: true,
 	},
+	"token": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
 	"cni_plugin": {
 		Type: schema.TypeString,
 		// Computed: true,
@@ -40,6 +45,59 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		Optional: true,
 	},
 	"config_path": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	////////////////////////////////////////////////////////////
+	// certificates
+	////////////////////////////////////////////////////////////
+	"certs_secret": {
+		Type:        schema.TypeString,
+		Optional:    true,
+		Description: "the key used for uploading the certificates to the cluster",
+	},
+	"certs_dir": {
+		Type:        schema.TypeString,
+		Optional:    true,
+		Description: "the directory for certificates",
+	},
+	"certs_ca_crt": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"certs_ca_key": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"certs_sa_crt": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"certs_sa_key": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"certs_etcd_crt": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"certs_etcd_key": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"certs_proxy_crt": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"certs_proxy_key": {
 		Type: schema.TypeString,
 		// Computed: true,
 		Optional: true,
