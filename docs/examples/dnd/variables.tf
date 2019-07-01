@@ -15,12 +15,12 @@ variable "img" {
 }
 
 variable "master_count" {
-  default     = 1
+  default     = 2
   description = "Number of masters to be created"
 }
 
 variable "worker_count" {
-  default     = 1
+  default     = 2
   description = "Number of workers to be created"
 }
 
@@ -56,11 +56,17 @@ variable "ssh_pass" {
 variable "domain_name" {
   type        = "string"
   default     = "test.net"
-  description = "The domain name"
+  description = "The domain name for the nodes in the cluster"
 }
 
 variable "manifests" {
-  type = "list"
-  default = []
+  type        = "list"
+  default     = []
   description = "List of manifests to load after setting up the first master"
+}
+
+variable "nodes_network" {
+  type        = "string"
+  default     = "172.20.0.0/16"
+  description = "The network (in CIDR) for the nodes in the cluster"
 }
