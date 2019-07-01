@@ -56,7 +56,7 @@ resource "libvirt_domain" "minion" {
   object that will be created in this `kubeadm init` or `kubeadm join` operation.
   This is also used in the CommonName field of the kubelet's client certificate
   to the API server. Defaults to the hostname of the node if not provided.
-  * `ignore_checks` - (Optional) list of kubeadm preflight checks to ignore
+  * `ignore_checks` - (Optional) list of `kubeadm` preflight checks to ignore
   when provisioning. Example:
     ```hcl
     ignore_checks = [
@@ -65,6 +65,35 @@ resource "libvirt_domain" "minion" {
       "Swap",
     ]
     ```
+
+## Notes on multi-masters
+
+The provisioner can be used for creating more than one master in the Kubernetes control plane.
+This can be achieved by specifying the `role = "master"` in the additional nodes in conjunction
+to a `join` argument for joining the  first master created. We can differentiate the boostrapping
+master from the rest of the additional masters in the same resource with the help of a
+_conditional_ like this:
+ 
+```hcl
+resource "instance_type" "master" {
+  count       = "3"
+  // ...
+
+  provisioner "kubeadm" {
+    config    = "${kubeadm.main.config}"
+    role      = "master"
+    join      = "${count.index == 0 ? "" : instance_type.master.0.ip_address}"
+  }
+}
+```
+
+This way, the first master will have an empty `join`, so it will be provisioned as the
+boostrapping master, while the other masters will have a `join = ${instance_type.master.0.ip_address}`
+and they will join the boostrap master.
+
+Take into account that, in order to support multiple masters, you must have configured an
+external API address (in the `resource kubeadm.api.external`). Otherwise, the provisioner
+will fail when trying to add a second master.
 
 ## Nested Blocks
 
@@ -116,6 +145,14 @@ in some directory available in the default `$PATH`.
 * `version` - (Optional) kubeadm version to install by the auto-installation script.
     * NOTE: this can be ignored by the auto-install script in some OSes
     where there are not so many installation alternatives.
+* `sysconfig_path` - (Optional) full path for the uploaded kubelet sysconfig file
+(defaults to `/etc/sysconfig/kubelet`).
+* `service_path` - (Optional) full path for the uploaded kubelet.service file
+(defaults to `/usr/lib/systemd/system/kubelet.service`).
+* `dropin_path` - (Optional) full path for the uploaded kubeadm dropin file
+(defaults to `/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf`).
+* `kubeadm_path` - (Optional) full path where `kubeadm` should be found (if 
+no absolute path is provided, it will use the default `PATH` for finding it).
 
 ### Known limitations
 
