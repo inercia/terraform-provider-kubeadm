@@ -1,6 +1,6 @@
 # Terraform kubeadm plugin
 
-[![Build Status](https://travis-ci.org/inercia/terraform-kubeadm.svg?branch=master)](https://travis-ci.org/inercia/terraform-provider-kubeadm)
+[![Build Status](https://travis-ci.org/inercia/terraform-provider-kubeadm.svg?branch=master)](https://travis-ci.org/inercia/terraform-provider-kubeadm)
 
 This is a [Terraform](https://terraform.io/) _data_ definition and _provisioner_
 that lets you install Kubernetes on a cluster. The underlying _resources_ could
@@ -19,6 +19,13 @@ you want to be part of the cluster.
 to your masters and you will have a HA cluster!.  
 * Easy _scale-up_/_scale-down_ of the cluster by just changing the
 `count` of your masters or workers.
+* Use the [`kubeadm` attributes](../../wiki/Resource_kubeadm#attributes-reference)
+in other parts of your Terraform script. This makes it easy to:
+  * enable SSL termination, by using the certificates in the code you have
+  for creating a Load Balancer.
+  * create machine _templates_ (for example, `cloud-init` code) that can 
+  be used for creating machines dynamically when Terraform is not involved
+  (like _autoscaling groups_).
 * Automatic rolling upgrade of the cluster by just changing the base
 image of your machines. Terraform will take care of replacing old
 nodes with upgraded ones...
@@ -78,10 +85,16 @@ data "kubeadm" "main" {
 resource "libvirt_domain" "master" {
   name = "master"
   memory = 1024
-  ...
+  
+  # this provisioner will start a Kubernetes master in this machine,
+  # with the help of "kubeadm" 
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
     # there is no "join", so this will be the first node in the cluster
+    config = "${data.kubeadm.main.config}"
+    # this will try to install "kubeadm" in this machine
+    install {
+      auto = true
+    }
   }
 }
 
@@ -89,12 +102,18 @@ resource "libvirt_domain" "master" {
 resource "libvirt_domain" "minion" {
   count      = 3
   name       = "minion${count.index}"
-  ...
+  
+  # this provisioner will start a Kubernetes worker in this machine,
+  # with the help of "kubeadm"
   provisioner "kubeadm" {
     config = "${data.kubeadm.main.config}"
 
     # this will make this minion _join_ the cluster started by the "master"
     join = "${libvirt_domain.master.network_interface.0.addresses.0}"
+    # this will try to install "kubeadm" in this machine
+    install {
+      auto = true
+    }
   }
 }
 ```
