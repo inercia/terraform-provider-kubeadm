@@ -36,7 +36,8 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 	"token": {
 		Type: schema.TypeString,
 		// Computed: true,
-		Optional: true,
+		Optional:  true,
+		Sensitive: true,
 	},
 	"cni_plugin": {
 		Type: schema.TypeString,
@@ -63,57 +64,60 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		// Computed: true,
 		Optional: true,
 	},
-	////////////////////////////////////////////////////////////
-	// certificates
-	////////////////////////////////////////////////////////////
-	"certs_secret": {
-		Type:        schema.TypeString,
-		Optional:    true,
-		Description: "the key used for uploading the certificates to the cluster",
-	},
 	"certs_dir": {
 		Type:        schema.TypeString,
 		Optional:    true,
 		Description: "the directory for certificates",
 	},
-	"certs_ca_crt": {
+	////////////////////////////////////////////////////////////
+	// certificates
+	////////////////////////////////////////////////////////////
+	"ca_crt": {
 		Type: schema.TypeString,
 		// Computed: true,
-		Optional: true,
+		Optional:  true,
+		Sensitive: true,
 	},
-	"certs_ca_key": {
+	"ca_key": {
 		Type: schema.TypeString,
 		// Computed: true,
-		Optional: true,
+		Optional:  true,
+		Sensitive: true,
 	},
-	"certs_sa_crt": {
+	"sa_crt": {
 		Type: schema.TypeString,
 		// Computed: true,
-		Optional: true,
+		Optional:  true,
+		Sensitive: true,
 	},
-	"certs_sa_key": {
+	"sa_key": {
 		Type: schema.TypeString,
 		// Computed: true,
-		Optional: true,
+		Optional:  true,
+		Sensitive: true,
 	},
-	"certs_etcd_crt": {
+	"etcd_crt": {
 		Type: schema.TypeString,
 		// Computed: true,
-		Optional: true,
+		Optional:  true,
+		Sensitive: true,
 	},
-	"certs_etcd_key": {
+	"etcd_key": {
 		Type: schema.TypeString,
 		// Computed: true,
-		Optional: true,
+		Optional:  true,
+		Sensitive: true,
 	},
-	"certs_proxy_crt": {
+	"proxy_crt": {
 		Type: schema.TypeString,
 		// Computed: true,
-		Optional: true,
+		Optional:  true,
+		Sensitive: true,
 	},
-	"certs_proxy_key": {
+	"proxy_key": {
 		Type: schema.TypeString,
 		// Computed: true,
-		Optional: true,
+		Optional:  true,
+		Sensitive: true,
 	},
 }

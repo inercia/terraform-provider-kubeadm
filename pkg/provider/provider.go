@@ -86,13 +86,13 @@ func dataSourceKubeadmExists(d *schema.ResourceData, meta interface{}) (bool, er
 	}
 
 	certsConfig := common.CertsConfig{}
-	err := certsConfig.FromResourceData(d)
+	err := certsConfig.FromResourceDataConfig(d)
 	if err != nil {
 		log.Printf("[DEBUG] [KUBEADM] does not exist: no certs config")
 		return false, err
 	}
 
-	if !certsConfig.IsFilled() {
+	if !certsConfig.HasAllCertificates() {
 		log.Printf("[DEBUG] [KUBEADM] does not exist: empty certs")
 		return false, nil
 	}
@@ -140,6 +140,7 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 	log.Printf("[DEBUG] [KUBEADM] ------------------------")
 
 	kubeconfig := d.Get("config_path").(string)
+	certsDir := initConfig.CertificatesDir
 
 	// we must just copy some arguments from the provider configuration
 	// to the provisioner configuration
@@ -155,11 +156,11 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 		"cni_plugin_manifest": d.Get("cni.0.plugin_manifest").(string),
 		"helm_enabled":        fmt.Sprintf("%t", d.Get("addons.0.helm").(bool)),
 		"dashboard_enabled":   fmt.Sprintf("%t", d.Get("addons.0.dashboard").(bool)),
+		"certs_dir":           certsDir,
 	}
 
-	// create all the certs and set them in the `d.config`, so the provisioner
-	// will configure kubeadm for uploading them to the API server once the cluster
-	// is running. We will also set the encryption key here.
+	// create all the certs and set them in some `d.config` fields, so the provisioner
+	// can upload them to the machines in the Control Plane
 	certConfig, err := common.CreateCerts(d, initConfig)
 	if err != nil {
 		return err

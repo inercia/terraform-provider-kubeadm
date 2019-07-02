@@ -34,6 +34,7 @@ administrative privileges.
   of the operation.
 * `addons` - (Optional) Addons to deploy (see section below).
 * `api` - (Optional) API server configuration (see section below).
+* `certs` - (Optional) user-provided certificates (see section below).
 * `cni` - (Optional) CNI configuration (see section below).
 * `network` - (Optional) network configuration (see section below).
 * `images`  - (Optional) images used for running the different services (see section below).
@@ -81,6 +82,52 @@ the provided manifest. When both `plugin` and `plugin_manifest` are provided,
 the former one is ignored.
 * `bin_dir` - (Optional) binaries directory for CNI.
 * `conf_dir` - (Optional) configuration directory for CNI.
+
+### `certs`
+
+#### Arguments
+
+Example:
+
+```hcl
+        
+resource "kubeadm" "k8s" {
+  config_path = "/tmp/kubeconfig"
+
+  # provided a specific CA certificate/key inlined in the "certs" block
+  certs {
+	ca_crt =<<EOF
+-----BEGIN CERTIFICATE-----
+MIICwjCCAaqgAwIBAgIBADANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDEwdldGNk
+LWNhMB4XDTE5MDYyODE1NTM1M1oXDTI5MDYyNTE1NTM1M1owEjEQMA4GA1UEAxMH
+...
+QasRiemsP8IWvOwcKGViNUC2Ag5EEh8S8PMlLP+3/pzkEPfIHgk=
+-----END CERTIFICATE-----
+EOF
+
+	ca_key =<<EOF
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpQIBAAKCAQEAzU/cJiB3/Fr85gW6dpCbDQTyZpVuB8LtyfwFHhsUrCpVJ/U0
+B4lfH2n8E8VB62SeGtaXcbYnScNgkaDgQ+SvkHlIDjp16Z3cFjHLOUyF3cVOBbDs
+...
+OflxkYMD4H/BuT3uuX4BR0Ko32wAyNn/AJmgekiPjQ/NGfwG0CS2fGY= 
+-----END RSA PRIVATE KEY-----
+EOF
+  }
+}
+```
+
+* `ca_crt` - (Optional) user-provided CA certificate.
+* `ca_key` - (Optional) user-provided CA key.
+* `sa_crt` - (Optional) user-provided Service Account certificate.
+* `sa_key` - (Optional) user-provided Service Account key.
+* `etcd_crt` - (Optional) user-provided `etcd` certificate.
+* `etcd_key` - (Optional) user-provided `etcd` key.
+* `proxy_crt` - (Optional) user-provided front-proxy certificate.
+* `proxy_key`- (Optional) user-provided front-proxy key.
+
+Note well: all these certificates are optional: they will be generated  automatically
+if not provided.
 
 ### `network`
 
@@ -186,21 +233,21 @@ but can also be directly accessible in case you need it.
       }
     }
     ```
-  * `cert_ca_crt`
-  * `cert_ca_key`
-  * `cert_sa_crt`
-  * `cert_sa_key`
-  * `cert_etcd_crt`
-  * `cert_etcd_key`
-  * `cert_proxy_crt`
-  * `cert_proxy_key` - certificates generated for the kubernetes cluster. They can be
+  * `ca_crt`
+  * `ca_key`
+  * `sa_crt`
+  * `sa_key`
+  * `etcd_crt`
+  * `etcd_key`
+  * `proxy_crt`
+  * `proxy_key` - certificates generated for the kubernetes cluster. They can be
   used in some other Terraform resources, for example you could use the certificate
   generated for the front proxy and assign it to the AWS load balancer:
       ```hcl
       resource "aws_iam_server_certificate" "front-proxy" {
         name             = "front-proxy"
-        certificate_body = "${kubeadm.main.config.cert_proxy_crt}"
-        private_key      = "${kubeadm.main.config.cert_proxy_key}"
+        certificate_body = "${kubeadm.main.config.proxy_crt}"
+        private_key      = "${kubeadm.main.config.proxy_key}"
       }
     
       resource "aws_elb" "my-application" {

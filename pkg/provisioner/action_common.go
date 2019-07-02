@@ -138,13 +138,19 @@ func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, arg
 // we only do this on the control plane machines
 func doUploadCerts(d *schema.ResourceData) ssh.ApplyFunc {
 	certsConfig := &common.CertsConfig{}
-	if err := certsConfig.FromResourceData(d); err != nil {
+	if err := certsConfig.FromResourceDataConfig(d); err != nil {
 		return ssh.DoAbort("no certificates data in config")
+	}
+
+	certsDir := common.DefPKIDir
+	certsDirRaw, ok := d.GetOk("config.certs_dir")
+	if ok {
+		certsDir = certsDirRaw.(string)
 	}
 
 	actions := []ssh.Applyer{}
 	for baseName, cert := range certsConfig.DistributionMap() {
-		fullPath := path.Join(certsConfig.Dir, baseName)
+		fullPath := path.Join(certsDir, baseName)
 		log.Printf("[DEBUG] [KUBEADM] will upload certificate to %q", fullPath)
 		upload := ssh.DoUploadReaderToFile(strings.NewReader(*cert), fullPath)
 		actions = append(actions, upload)

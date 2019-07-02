@@ -254,6 +254,64 @@ func dataSourceKubeadm() *schema.Resource {
 					},
 				},
 			},
+			"certs": {
+				Type:     schema.TypeList,
+				Optional: true,
+				ForceNew: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"ca_crt": {
+							Type:      schema.TypeString,
+							Optional:  true,
+							ForceNew:  true,
+							Sensitive: true,
+						},
+						"ca_key": {
+							Type:      schema.TypeString,
+							Optional:  true,
+							ForceNew:  true,
+							Sensitive: true,
+						},
+						"sa_crt": {
+							Type:      schema.TypeString,
+							Optional:  true,
+							ForceNew:  true,
+							Sensitive: true,
+						},
+						"sa_key": {
+							Type:      schema.TypeString,
+							Optional:  true,
+							ForceNew:  true,
+							Sensitive: true,
+						},
+						"etcd_crt": {
+							Type:      schema.TypeString,
+							Optional:  true,
+							ForceNew:  true,
+							Sensitive: true,
+						},
+						"etcd_key": {
+							Type:      schema.TypeString,
+							Optional:  true,
+							ForceNew:  true,
+							Sensitive: true,
+						},
+						"proxy_crt": {
+							Type:      schema.TypeString,
+							Optional:  true,
+							ForceNew:  true,
+							Sensitive: true,
+						},
+						"proxy_key": {
+							Type:      schema.TypeString,
+							Optional:  true,
+							ForceNew:  true,
+							Sensitive: true,
+						},
+					},
+				},
+			},
 			// the "config" must be a map of string that will be passed to the "provisioner"
 			"config": {
 				Type:     schema.TypeMap,

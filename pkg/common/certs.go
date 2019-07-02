@@ -29,7 +29,6 @@ import (
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/certs"
-	"k8s.io/kubernetes/cmd/kubeadm/app/phases/copycerts"
 )
 
 var (
@@ -37,16 +36,14 @@ var (
 )
 
 type CertsConfig struct {
-	Secret   string `json:"certs_secret"` // secret for encrypting certificates (NOTE: currently not used)
-	Dir      string `json:"certs_dir"`
-	CaCrt    string `json:"certs_ca_crt"`
-	CaKey    string `json:"certs_ca_key"`
-	SaCrt    string `json:"certs_sa_crt"`
-	SaKey    string `json:"certs_sa_key"`
-	EtcdCrt  string `json:"certs_etcd_crt"`
-	EtcdKey  string `json:"certs_etcd_key"`
-	ProxyCrt string `json:"certs_proxy_crt"`
-	ProxyKey string `json:"certs_proxy_key"`
+	CaCrt    string `json:"ca_crt"`
+	CaKey    string `json:"ca_key"`
+	SaCrt    string `json:"sa_crt"`
+	SaKey    string `json:"sa_key"`
+	EtcdCrt  string `json:"etcd_crt"`
+	EtcdKey  string `json:"etcd_key"`
+	ProxyCrt string `json:"proxy_crt"`
+	ProxyKey string `json:"proxy_key"`
 }
 
 // List of certificates to distribute to other control plane machines, and a placeholder to the certificates
@@ -78,14 +75,24 @@ func (c *CertsConfig) ToMap() (map[string]string, error) {
 	return inInterface, nil
 }
 
-// IsFilled returns true if the certs are there
-func (c *CertsConfig) IsFilled() bool {
+// HasAllCertificates returns true if ALL the certs are there
+func (c *CertsConfig) HasAllCertificates() bool {
 	for _, cert := range c.DistributionMap() {
 		if len(*cert) == 0 {
 			return false
 		}
 	}
 	return true
+}
+
+// HasSomeCertificates returns true if SOME the certs are there
+func (c *CertsConfig) HasSomeCertificates() bool {
+	for _, cert := range c.DistributionMap() {
+		if len(*cert) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // FromMap loads the certificates config info from a map
@@ -100,8 +107,8 @@ func (c *CertsConfig) FromMap(m map[string]interface{}) error {
 	return nil
 }
 
-// FromResourceData loads the certificates config info from the ResourceData provided
-func (c *CertsConfig) FromResourceData(d *schema.ResourceData) error {
+// FromResourceDataConfig loads the certificates config info from the "config" map in the ResourceData provided
+func (c *CertsConfig) FromResourceDataConfig(d *schema.ResourceData) error {
 	certsMap := d.Get("config").(map[string]interface{})
 	if err := c.FromMap(certsMap); err != nil {
 		return err
@@ -109,6 +116,16 @@ func (c *CertsConfig) FromResourceData(d *schema.ResourceData) error {
 	return nil
 }
 
+// FromResourceDataConfig loads the certificates config info from the "config" map in the ResourceData provided
+func (c *CertsConfig) FromResourceDataCerts(d *schema.ResourceData) error {
+	certsMap := d.Get("certs.0").(map[string]interface{})
+	if err := c.FromMap(certsMap); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ToDisk dumps the certificates to disk
 func (c *CertsConfig) ToDisk(certsDir string) error {
 	writeCertOrKey := func(baseName string, certOrKeyData []byte) error {
 		certOrKeyPath := path.Join(certsDir, baseName)
@@ -121,7 +138,12 @@ func (c *CertsConfig) ToDisk(certsDir string) error {
 	}
 
 	for baseName, cert := range c.DistributionMap() {
-		if err := writeCertOrKey(baseName, []byte(*cert)); err != nil {
+		certContents := []byte(*cert)
+		if len(certContents) == 0 {
+			log.Printf("[DEBUG] [KUBEADM] (empty %q: skipping)", baseName)
+			continue
+		}
+		if err := writeCertOrKey(baseName, certContents); err != nil {
 			log.Printf("[DEBUG] [KUBEADM] could not write certificate %q: %s", baseName, err)
 			return err
 		}
@@ -138,6 +160,10 @@ func (c *CertsConfig) FromDisk(certsDir string) error {
 		log.Printf("[DEBUG] [KUBEADM] loading the certificate %q", fullPath)
 		cert, err := ioutil.ReadFile(fullPath)
 		if err != nil {
+			if os.IsNotExist(err) {
+				log.Printf("[DEBUG] [KUBEADM] (%q does not exist: skipping)", fullPath)
+				continue
+			}
 			return err
 		}
 		log.Printf("[DEBUG] [KUBEADM] ... %d bytes loaded", len(cert))
@@ -158,12 +184,27 @@ func CreateCerts(d *schema.ResourceData, initCfg *kubeadmapi.InitConfiguration) 
 	}
 	defer func() {
 		log.Printf("[DEBUG] [KUBEADM] removing the temporary directory for certificates")
-		os.RemoveAll(certsDir)
+		_ = os.RemoveAll(certsDir)
 	}()
 
 	// set the cfg.CertificatesDir as this temp dir
 	cfgCopy := initCfg.DeepCopy()
 	cfgCopy.CertificatesDir = certsDir
+
+	// load any user-provided certificates
+	userCertsConfig := CertsConfig{}
+	if err := userCertsConfig.FromResourceDataCerts(d); err != nil {
+		log.Printf("[DEBUG] [KUBEADM] could not load user-provided certificates: %s", err)
+		return nil, err
+	}
+	if userCertsConfig.HasSomeCertificates() {
+		log.Printf("[DEBUG] [KUBEADM] user has provided some certificates: saving them to %q", certsDir)
+		// .. and save them to the disk
+		if err := userCertsConfig.ToDisk(certsDir); err != nil {
+			log.Printf("[DEBUG] [KUBEADM] could not save user-provided certificates to %q: %s", certsDir, err)
+			return nil, err
+		}
+	}
 
 	// Some debugging code:
 	//
@@ -202,28 +243,11 @@ func CreateCerts(d *schema.ResourceData, initCfg *kubeadmapi.InitConfiguration) 
 		return nil, err
 	}
 
-	// create and set the key we will use for encrypting the certs
-	key, err := copycerts.CreateCertificateKey()
-	if err != nil {
-		log.Printf("[DEBUG] [KUBEADM] certificates key generation failed: %s", err)
-		return nil, err
-	}
-
 	// load the certs from disk and save (some of them) to the schema, so the provisioner can use them
-	certsConfig := CertsConfig{
-		Secret: key,
-		Dir:    certsDir,
-	}
-
+	certsConfig := CertsConfig{}
 	if err := certsConfig.FromDisk(certsDir); err != nil {
 		log.Printf("[DEBUG] [KUBEADM] certificates load from %q failed: %s", certsDir, err)
 		return nil, err
-	}
-
-	// restore the certificates directory before creating the map
-	certsConfig.Dir = initCfg.CertificatesDir
-	if len(certsConfig.Dir) == 0 {
-		certsConfig.Dir = DefPKIDir
 	}
 
 	// ... and create the map with the config for the provisioner
