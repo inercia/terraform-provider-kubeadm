@@ -127,6 +127,7 @@ ci-setup:
 
 wiki:
 	@echo ">>> Copying markdown file to $(WIKI_REPO)"
+	@rm -rf $(WIKI_REPO)/*
 	@rsync -av --delete \
 		--exclude=.git \
 		--exclude=examples \
