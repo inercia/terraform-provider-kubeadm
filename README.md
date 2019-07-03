@@ -19,7 +19,7 @@ created with the Terraform [libvirt](github.com/dmacvicar/terraform-provider-lib
 provider:
 
 ```hcl
-data "kubeadm" "main" {
+resource "kubeadm" "main" {
   api {
     external = "loadbalancer.external.com"
   }
@@ -49,7 +49,7 @@ resource "libvirt_domain" "master" {
   # with the help of "kubeadm" 
   provisioner "kubeadm" {
     # there is no "join", so this will be the first node in the cluster: the seeder
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
     install {
       # this will try to install "kubeadm" automatically in this machine
       auto = true
@@ -65,7 +65,7 @@ resource "libvirt_domain" "minion" {
   # this provisioner will start a Kubernetes worker in this machine,
   # with the help of "kubeadm"
   provisioner "kubeadm" {
-    config = "${data.kubeadm.main.config}"
+    config = "${kubeadm.main.config}"
 
     # this will make this minion "join" the cluster started by the "master"
     join = "${libvirt_domain.master.network_interface.0.addresses.0}"
