@@ -65,6 +65,7 @@ if [ $CURR_NUM_NODES -ne $EXP_NUM_NODES ] ; then
 fi
 
 EXP_NUM_MASTERS=$NUM_MASTERS
+echo ">>> Checking we have $EXP_NUM_MASTERS masters..."
 CURR_NUM_MASTERS=$(echo "$OUT" | grep -c "node-role.kubernetes.io/master")
 if [ $CURR_NUM_MASTERS -ne $EXP_NUM_MASTERS ] ; then
     echo ">>> FAILED: current number of masters, $CURR_NUM_MASTERS, do not match $EXP_NUM_MASTERS"
