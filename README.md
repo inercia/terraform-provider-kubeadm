@@ -2,61 +2,17 @@
 
 [![Build Status](https://travis-ci.org/inercia/terraform-provider-kubeadm.svg?branch=master)](https://travis-ci.org/inercia/terraform-provider-kubeadm)
 
-This is a [Terraform](https://terraform.io/) _data_ definition and _provisioner_
-that lets you install Kubernetes on a cluster. The underlying _resources_ could
-be things like AWS instances, libvirt machines, LXD containers or any other
-class of object that provides a SSH-like connection. The `kubeadm` `provisioner`
-will run over the SSH connection all the commands necessary for installing
-Kuberentes in those resources, according to the configuration specified in
-the `data` block.
+A [Terraform](https://terraform.io/) `resource` definition and `provisioner`
+that lets you install Kubernetes on a cluster.
 
-## Features
+The underlying `resources` where the `provisioner` runs could be things like
+AWS instances, `libvirt` machines, LXD containers or any other
+resource that supports SSH-like connections. The `kubeadm` `provisioner`
+will run over this SSH connection all the commands necessary for installing
+Kubernetes in those resources, according to the configuration specified in
+the `resource "kubeadm"` block.
 
-* Easy deployment of kubernetes clusters in any platform supported
-by Terraform, just adding our `provisioner "kubeadm"` in the machines
-you want to be part of the cluster.
-* Multi-master deployments. Just add a Load Balancer that points
-to your masters and you will have a HA cluster!.  
-* Easy _scale-up_/_scale-down_ of the cluster by just changing the
-`count` of your masters or workers.
-* Use the [`kubeadm` attributes](../../wiki/Resource_kubeadm#attributes-reference)
-in other parts of your Terraform script. This makes it easy to:
-  * enable SSL termination, by using the certificates in the code you have
-  for creating a Load Balancer.
-  * create machine _templates_ (for example, `cloud-init` code) that can 
-  be used for creating machines dynamically when Terraform is not involved
-  (like _autoscaling groups_).
-* Automatic rolling upgrade of the cluster by just changing the base
-image of your machines. Terraform will take care of replacing old
-nodes with upgraded ones...
-* Automatic deployment of some addons, like CNI drivers, the Dashboard,
-Helm, etc.  
-
-(check the [TODO](../../wiki/Roadmap) for an updated list of features).  
-
-## Status
-
-This `provider`/`provisioner` is being actively developed, but I would still consider
-it **ALPHA**, so there can be many rough edges and some things can change without
-any previous notice. To see what is left or planned, see the
-[issues list](https://github.com/inercia/terraform-provider-kubeadm/issues) and the
-[roadmap](../../wiki/Roadmap).
-
-## Requirements
-
-* Terraform
-
-## Quick start
-
-```console
-$ mkdir -p $HOME/.terraform.d/plugins
-$ go build -v -o $HOME/.terraform.d/plugins/terraform-provider-kubeadm \
-    github.com/inercia/terraform-provider-kubeadm/cmd/terraform-provider-kubeadm
-$ go build -v -o $HOME/.terraform.d/plugins/terraform-provisioner-kubeadm \
-    github.com/inercia/terraform-provider-kubeadm/cmd/terraform-provisioner-kubeadm
-```
-
-## Usage
+## Example
 
 Here is an example that will setup Kubernetes in a cluster
 created with the Terraform [libvirt](github.com/dmacvicar/terraform-provider-libvirt/)
@@ -125,7 +81,9 @@ Note well that:
 
 * all the `provisioners` must specify the `config = ${kubeadm.XXX.config}`,
 * any other nodes that _join_ the _seeder_ must specify the
-`join` attribute pointing to the `<IP/name>` they must _join_.
+`join` attribute pointing to the `<IP/name>` they must _join_. You can use
+the optional `role` parameter for specifying whether it is joining as a
+`master` or as a `worker`. 
 
 Now you can see the plan, apply it, and then destroy the
 infrastructure:
@@ -137,6 +95,52 @@ $ terraform destroy
 ```
 
 You can find examples of the privider/provisioner in other environments like OpenStack, LXD, etc. in the [examples](docs/examples) directory)
+
+## Features
+
+* Easy deployment of kubernetes clusters in any platform supported
+by Terraform, just adding our `provisioner "kubeadm"` in the machines
+you want to be part of the cluster.
+* Multi-master deployments. Just add a Load Balancer that points
+to your masters and you will have a HA cluster!.  
+* Easy _scale-up_/_scale-down_ of the cluster by just changing the
+`count` of your masters or workers.
+* Use the [`kubeadm` attributes](../../wiki/Resource_kubeadm#attributes-reference)
+in other parts of your Terraform script. This makes it easy to:
+  * enable SSL termination, by using the certificates in the code you have
+  for creating a Load Balancer.
+  * create machine _templates_ (for example, `cloud-init` code) that can 
+  be used for creating machines dynamically when Terraform is not involved
+  (like _autoscaling groups_).
+* Automatic rolling upgrade of the cluster by just changing the base
+image of your machines. Terraform will take care of replacing old
+nodes with upgraded ones...
+* Automatic deployment of some addons, like CNI drivers, the Dashboard,
+Helm, etc.  
+
+(check the [TODO](../../wiki/Roadmap) for an updated list of features).  
+
+## Status
+
+This `provider`/`provisioner` is being actively developed, but I would still consider
+it **ALPHA**, so there can be many rough edges and some things can change without
+any previous notice. To see what is left or planned, see the
+[issues list](https://github.com/inercia/terraform-provider-kubeadm/issues) and the
+[roadmap](../../wiki/Roadmap).
+
+## Requirements
+
+* Terraform
+
+## Quick start
+
+```console
+$ mkdir -p $HOME/.terraform.d/plugins
+$ go build -v -o $HOME/.terraform.d/plugins/terraform-provider-kubeadm \
+    github.com/inercia/terraform-provider-kubeadm/cmd/terraform-provider-kubeadm
+$ go build -v -o $HOME/.terraform.d/plugins/terraform-provisioner-kubeadm \
+    github.com/inercia/terraform-provider-kubeadm/cmd/terraform-provisioner-kubeadm
+```
 
 ## Documentation
 
