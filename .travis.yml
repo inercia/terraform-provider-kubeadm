@@ -38,9 +38,9 @@ jobs:
         #       the `usermod -a -G lxd` we did on the `before_install`
         - sudo -E su $USER -c "make ci-tests"
 
-branches:
-  only:
-    - master
+#branches:
+#  only:
+#    - master
 
 after_failure:
   - sudo journalctl -e
