@@ -128,6 +128,9 @@ func (c *CertsConfig) FromResourceDataCerts(d *schema.ResourceData) error {
 // ToDisk dumps the certificates to disk
 func (c *CertsConfig) ToDisk(certsDir string) error {
 	writeCertOrKey := func(baseName string, certOrKeyData []byte) error {
+		if len(certOrKeyData) == 0 {
+			return nil
+		}
 		certOrKeyPath := path.Join(certsDir, baseName)
 		if _, err := keyutil.ParsePublicKeysPEM(certOrKeyData); err == nil {
 			return keyutil.WriteKey(certOrKeyPath, certOrKeyData)

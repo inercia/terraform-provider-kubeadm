@@ -102,19 +102,19 @@ func applyFn(ctx context.Context) error {
 }
 
 // doKubeadmInit runs the `kubeadm init`
-func doKubeadmInit(d *schema.ResourceData) ssh.ApplyFunc {
+func doKubeadmInit(d *schema.ResourceData) ssh.Applyer {
 	_, initConfigBytes, err := common.InitConfigFromResourceData(d)
 	if err != nil {
-		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for init'ing: %s", err))
+		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for init'ing: %s", err))
 	}
-	extraArgs := []string{}
+	extraArgs := []string{"--skip-token-print"}
 
 	actions := []ssh.Applyer{
-		ssh.DoMessage("Initializing the cluster with 'kubadm init'"),
+		ssh.DoMessageInfo("Initializing the cluster with 'kubadm init'"),
 		doDeleteLocalKubeconfig(d),
 		doUploadCerts(d),
 		ssh.DoIfElse(
-			ssh.CheckFileExists(common.DefAdminKubeconfig),
+			ssh.CheckFileExists(ssh.DefAdminKubeconfig),
 			ssh.DoMessage("admin.conf already exists: skipping `kubeadm init`"),
 			doKubeadm(d, "init", initConfigBytes, extraArgs...),
 		),
@@ -130,35 +130,35 @@ func doKubeadmInit(d *schema.ResourceData) ssh.ApplyFunc {
 }
 
 // doKubeadmJoinWorker runs the `kubeadm join`
-func doKubeadmJoinWorker(d *schema.ResourceData) ssh.ApplyFunc {
+func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Applyer {
 	_, joinConfigBytes, err := common.JoinConfigFromResourceData(d)
 	if err != nil {
-		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 	}
 
 	// check if we are joining the Control Plane: we must upload the certificates and
 	// use the '--control-plane' flag
 	actions := []ssh.Applyer{
-		ssh.DoMessage("Joining the cluster with 'kubadm join'"),
+		ssh.DoMessageInfo("Joining the cluster with 'kubadm join'"),
 		doKubeadm(d, "join", joinConfigBytes),
 	}
 	return ssh.DoComposed(actions...)
 }
 
 // doKubeadmJoinWorker runs the `kubeadm join`
-func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.ApplyFunc {
+func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Applyer {
 	joinConfig, _, err := common.JoinConfigFromResourceData(d)
 	if err != nil {
-		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 	}
 
 	// check that we have a stable control plane endpoint
 	initConfig, _, err := common.InitConfigFromResourceData(d)
 	if err != nil {
-		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 	}
 	if len(initConfig.ClusterConfiguration.ControlPlaneEndpoint) == 0 {
-		return ssh.DoAbort("Cannot create additional masters when the 'kubeadm.<name>.api.external' is empty")
+		return ssh.ApplyError("Cannot create additional masters when the 'kubeadm.<name>.api.external' is empty")
 	}
 
 	// add a local Control-Plane section to the JoinConfiguration
@@ -166,7 +166,7 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.ApplyFunc {
 	if hp, ok := d.GetOk("listen"); ok {
 		h, p, err := common.SplitHostPort(hp.(string), common.DefAPIServerPort)
 		if err != nil {
-			return ssh.DoAbort(fmt.Sprintf("could not parse listen address %q: %s", hp.(string), err))
+			return ssh.ApplyError(fmt.Sprintf("could not parse listen address %q: %s", hp.(string), err))
 		}
 		endpoint = kubeadmapi.APIEndpoint{AdvertiseAddress: h, BindPort: int32(p)}
 	} else {
@@ -176,12 +176,12 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.ApplyFunc {
 
 	joinConfigBytes, err := common.JoinConfigToYAML(joinConfig)
 	if err != nil {
-		return ssh.DoAbort(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 	}
 
 	extraArgs := []string{}
 	actions := []ssh.Applyer{
-		ssh.DoMessage("Joining the cluster with 'kubadm join'"),
+		ssh.DoMessageInfo("Joining the cluster with 'kubadm join'"),
 		doUploadCerts(d),
 		doKubeadm(d, "join", joinConfigBytes, extraArgs...),
 	}
@@ -189,7 +189,7 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.ApplyFunc {
 }
 
 // doDeleteLocalKubeconfig deletes the current, local kubeconfig, doing a backup before
-func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.ApplyFunc {
+func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Applyer {
 	kubeconfig := getKubeconfig(d)
 	kubeconfigBak := kubeconfig + ".bak"
 
@@ -202,7 +202,7 @@ func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.ApplyFunc {
 }
 
 // doDownloadKubeconfig downloads a kubeconfig from the remote master
-func doDownloadKubeconfig(d *schema.ResourceData) ssh.ApplyFunc {
+func doDownloadKubeconfig(d *schema.ResourceData) ssh.Applyer {
 	kubeconfig := getKubeconfig(d)
-	return ssh.DoDownloadFile(common.DefAdminKubeconfig, kubeconfig)
+	return ssh.DoDownloadFile(ssh.DefAdminKubeconfig, kubeconfig)
 }

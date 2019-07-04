@@ -67,7 +67,6 @@ resource "docker_container" "haproxy" {
   image                 = "haproxy"
   hostname              = "${var.name_prefix}haproxy"
   start                 = true
-  rm                    = true
   privileged            = true
   must_run              = true
   restart               = "no"
@@ -168,7 +167,6 @@ resource "docker_container" "master" {
   image                 = "${var.img}"
   hostname              = "${var.name_prefix}master-${count.index}"
   start                 = true
-  rm                    = true
   privileged            = true
   must_run              = true
   restart               = "no"
@@ -237,7 +235,6 @@ resource "docker_container" "worker" {
   image                 = "${var.img}"
   hostname              = "${var.name_prefix}worker-${count.index}"
   start                 = true
-  rm                    = true
   privileged            = true
   must_run              = true
   restart               = "no"

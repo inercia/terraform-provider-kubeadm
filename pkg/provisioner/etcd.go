@@ -208,12 +208,12 @@ func getMemberList(o terraform.UIOutput, comm communicator.Communicator, useSudo
 }
 
 // doPrintEtcdMembers prints the list of etcd members in the etcd cluster
-func doPrintEtcdMembers(d *schema.ResourceData) ssh.ApplyFunc {
+func doPrintEtcdMembers(d *schema.ResourceData) ssh.Applyer {
 	return ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		members, err := getMemberList(o, comm, useSudo)
 		if err != nil {
 			if err == ErrNoEtcdContainer {
-				o.Output("info: etcd is not running in this node")
+				o.Output("etcd is not running in this node")
 			} else {
 				return nil
 			}
@@ -223,14 +223,14 @@ func doPrintEtcdMembers(d *schema.ResourceData) ssh.ApplyFunc {
 			return nil
 		}
 		for _, member := range members {
-			o.Output(fmt.Sprintf("info: etcd member '%s' at '%s'", member.ID, member.ClienAddrs))
+			o.Output(fmt.Sprintf("etcd member '%s' at '%s'", member.ID, member.ClienAddrs))
 		}
 		return nil
 	})
 }
 
 // doRemoveIfMember removes this node from the etcd cluster iff it was a member
-func doRemoveIfMember(d *schema.ResourceData) ssh.ApplyFunc {
+func doRemoveIfMember(d *schema.ResourceData) ssh.Applyer {
 	return ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		// TODO: check if there is a etcd container running in this machine
 		// TODO: get the list of endpoints

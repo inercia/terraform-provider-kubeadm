@@ -22,6 +22,10 @@ import (
 	"strings"
 )
 
+const (
+	DefAdminKubeconfig = "/etc/kubernetes/admin.conf"
+)
+
 // isValidUrl tests a string to determine if it is a url or not.
 func isValidUrl(toTest string) bool {
 	_, err := url.ParseRequestURI(toTest)
@@ -33,7 +37,7 @@ func isValidUrl(toTest string) bool {
 }
 
 // DoLocalKubectl runs a local kubectl command
-func DoLocalKubectl(kubeconfig string, args ...string) ApplyFunc {
+func DoLocalKubectl(kubeconfig string, args ...string) Applyer {
 	kubectl, err := exec.LookPath("kubectl")
 	if err != nil {
 		log.Fatal("kubectl not available")
@@ -43,14 +47,26 @@ func DoLocalKubectl(kubeconfig string, args ...string) ApplyFunc {
 	return DoLocalExec(kubectl, f...)
 }
 
-// DoRemoteKubectl runs a local kubectl command in a remote machine
-func DoRemoteKubectl(kubeconfig string, args ...string) ApplyFunc {
-	cmd := append([]string{"kubectl", fmt.Sprintf("--kubeconfig=%s", kubeconfig)}, args...)
-	return DoExec(strings.Join(cmd, " "))
+// DoRemoteKubectl runs a remote kubectl command in a remote machine
+func DoRemoteKubectl(kubeconfig string, args ...string) Applyer {
+	// upload the local kubeconfig to some temporary remote file
+	remoteKubeconfig, err := GetTempFilename()
+	if err != nil {
+		panic(err)
+	}
+
+	return DoIfElse(
+		CheckFileExists(DefAdminKubeconfig),
+		DoExec(fmt.Sprintf("kubectl --kubeconfig=%s %s", DefAdminKubeconfig, strings.Join(args, " "))),
+		DoWithCleanup(
+			DoComposed(
+				DoUploadFileToFile(kubeconfig, remoteKubeconfig),
+				DoExec(fmt.Sprintf("kubectl --kubeconfig=%s %s", remoteKubeconfig, strings.Join(args, " ")))),
+			DoDeleteFile(remoteKubeconfig)))
 }
 
 // DoLocalKubectlApply applies some manifests with a local kubectl
-func DoLocalKubectlApply(kubeconfig string, manifests []string) ApplyFunc {
+func DoLocalKubectlApply(kubeconfig string, manifests []string) Applyer {
 	loaders := []Applyer{}
 	for _, manifest := range manifests {
 		if len(manifest) == 0 {
@@ -62,15 +78,8 @@ func DoLocalKubectlApply(kubeconfig string, manifests []string) ApplyFunc {
 }
 
 // DoRemoteKubectlApply applies some manifests with a remote kubectl
-func DoRemoteKubectlApply(kubeconfig string, manifests []string) ApplyFunc {
+func DoRemoteKubectlApply(kubeconfig string, manifests []string) Applyer {
 	actions := []Applyer{}
-
-	// upload the local kubeconfig to some temporary remote file
-	remoteKubeconfig, err := randomPath("tmpfile", "tmp")
-	if err != nil {
-		panic(err)
-	}
-	actions = append(actions, DoUploadFileToFile(kubeconfig, remoteKubeconfig))
 
 	for _, manifest := range manifests {
 		if len(manifest) == 0 {
@@ -79,18 +88,22 @@ func DoRemoteKubectlApply(kubeconfig string, manifests []string) ApplyFunc {
 
 		if isValidUrl(manifest) {
 			// it is an URL: just run the `kubectl apply`
-			actions = append(actions, DoRemoteKubectl(remoteKubeconfig, "apply", "-f", manifest))
+			actions = append(actions, DoRemoteKubectl(kubeconfig, "apply", "-f", manifest))
 		} else {
 			// it is a file: upload the file to a temporary, remote file and then `kubectl apply -f` it
-			remoteManifest, err := randomPath("tmpfile", "tmp")
+			remoteManifest, err := GetTempFilename()
 			if err != nil {
 				panic(err)
 			}
 
 			actions = append(actions,
-				DoUploadFileToFile(manifest, remoteManifest),
-				DoRemoteKubectl(remoteKubeconfig, "apply", "-f", remoteManifest))
+				DoWithCleanup(
+					DoComposed(
+						DoUploadFileToFile(manifest, remoteManifest),
+						DoRemoteKubectl(kubeconfig, "apply", "-f", remoteManifest)),
+					DoDeleteFile(remoteManifest)))
 		}
 	}
+
 	return DoComposed(actions...)
 }

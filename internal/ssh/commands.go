@@ -34,7 +34,7 @@ const (
 )
 
 // DoExecList is a runner for a list of remote commands
-func DoExecList(commands []string) ApplyFunc {
+func DoExecList(commands []string) Applyer {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		for _, command := range commands {
 			var err error
@@ -88,25 +88,28 @@ func DoExecList(commands []string) ApplyFunc {
 }
 
 // DoExec is a runner for remote Commands
-func DoExec(command string) ApplyFunc {
+func DoExec(command string) Applyer {
 	return DoExecList([]string{command})
 }
 
 // DoExecScript is a runner for a script (with some random path in /tmp)
-func DoExecScript(contents io.Reader, prefix string) ApplyFunc {
-	path, err := randomPath(prefix, "sh")
+func DoExecScript(contents io.Reader, prefix string) Applyer {
+	path, err := GetTempFilename()
 	if err != nil {
 		panic(err)
 	}
 
-	return DoComposed(
-		doRealUploadFile(contents, path),
-		DoExec(fmt.Sprintf("sh %s", path)),
+	return DoWithCleanup(
+		DoComposed(
+			doRealUploadFile(contents, path),
+			DoExec(fmt.Sprintf("sh %s", path)),
+		),
+		DoDeleteFile(path),
 	)
 }
 
 // DoLocalExec executes a local command
-func DoLocalExec(command string, args ...string) ApplyFunc {
+func DoLocalExec(command string, args ...string) Applyer {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 		fullCmd := fmt.Sprintf("%s %s", command, strings.Join(args, " "))
 		o.Output(fmt.Sprintf("Running local command %q...", fullCmd))
