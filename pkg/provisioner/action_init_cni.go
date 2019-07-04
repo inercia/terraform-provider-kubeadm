@@ -25,7 +25,7 @@ import (
 )
 
 // doLoadCNI loads the CNI driver
-func doLoadCNI(d *schema.ResourceData) ssh.ApplyFunc {
+func doLoadCNI(d *schema.ResourceData) ssh.Applyer {
 	manifest := ""
 	if cniPluginManifestOpt, ok := d.GetOk("config.cni_plugin_manifest"); ok {
 		cniPluginManifest := strings.TrimSpace(cniPluginManifestOpt.(string))
@@ -50,5 +50,5 @@ func doLoadCNI(d *schema.ResourceData) ssh.ApplyFunc {
 	if len(manifest) == 0 {
 		return ssh.DoMessage("no CNI driver is going to be loaded")
 	}
-	return doLocalKubectlApply(d, []string{manifest})
+	return doRemoteKubectlApply(d, []string{manifest})
 }

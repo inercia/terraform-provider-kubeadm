@@ -25,8 +25,6 @@ const (
 
 	DefRuntimeEngine = "docker"
 
-	DefAdminKubeconfig = "/etc/kubernetes/admin.conf"
-
 	DefKubeadmInitConfPath = "/etc/kubernetes/kubeadm-init.conf"
 
 	DefKubeadmJoinConfPath = "/etc/kubernetes/kubeadm-join.conf"

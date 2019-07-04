@@ -46,22 +46,37 @@ func isMaster(node *v1.Node) bool {
 }
 
 // doLocalKubectl runs a local kubectl with the kubeconfig specified in the schema
-func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.ApplyFunc {
+func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.Applyer {
+	kubeconfig := getKubeconfig(d)
+	return ssh.DoLocalKubectl(kubeconfig, args...)
+}
+
+// doRemooteKubectl runs a remoote kubectl with the kubeconfig specified in the schema
+func doRemoteKubectl(d *schema.ResourceData, args ...string) ssh.Applyer {
 	kubeconfig := getKubeconfig(d)
 	return ssh.DoLocalKubectl(kubeconfig, args...)
 }
 
 // DoLocalKubectlApply applies some manifests with a local kubectl with the kubeconfig specified in the schema
-func doLocalKubectlApply(d *schema.ResourceData, manifests []string) ssh.ApplyFunc {
+func doLocalKubectlApply(d *schema.ResourceData, manifests []string) ssh.Applyer {
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
-		return ssh.DoAbort("no 'config_path' has been specified")
+		return ssh.ApplyError("no 'config_path' has been specified")
 	}
 	return ssh.DoLocalKubectlApply(kubeconfig, manifests)
 }
 
+// DoRemoteKubectlApply applies some manifests with a remote kubectl, uploading the kubeconfig specified in the schema
+func doRemoteKubectlApply(d *schema.ResourceData, manifests []string) ssh.Applyer {
+	kubeconfig := getKubeconfig(d)
+	if kubeconfig == "" {
+		return ssh.ApplyError("no 'config_path' has been specified")
+	}
+	return ssh.DoRemoteKubectlApply(kubeconfig, manifests)
+}
+
 // doRefreshToken uses the kubeconfig for connecting to the API server and refreshing the token
-func doRefreshToken(d *schema.ResourceData) ssh.ApplyFunc {
+func doRefreshToken(d *schema.ResourceData) ssh.Applyer {
 	token, ok := d.GetOk("config.token")
 	if !ok {
 		panic("there should be a token")
@@ -100,6 +115,9 @@ func checkKubeconfigAlive(d *schema.ResourceData) ssh.CheckerFunc {
 	return ssh.CheckAnd(
 		checkKubeconfigExists(d),
 		ssh.CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-			return common.IsClusterAlive(kubeconfig), nil
+			if err := ssh.DoRemoteKubectl(kubeconfig, "cluster-health").Apply(o, comm, useSudo); err != nil {
+				return false, nil
+			}
+			return true, nil
 		}))
 }

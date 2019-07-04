@@ -24,7 +24,7 @@ import (
 )
 
 // doLoadHelm loads Helm (if enabled)
-func doLoadHelm(d *schema.ResourceData) ssh.ApplyFunc {
+func doLoadHelm(d *schema.ResourceData) ssh.Applyer {
 	opt, ok := d.GetOk("config.helm_enabled")
 	if !ok {
 		return ssh.DoMessage("Helm will not be loaded")
@@ -39,11 +39,11 @@ func doLoadHelm(d *schema.ResourceData) ssh.ApplyFunc {
 	if common.DefHelmManifest == "" {
 		return ssh.DoMessage("no manifest for Helm: Helm will not be loaded")
 	}
-	return doLocalKubectlApply(d, []string{common.DefHelmManifest})
+	return doRemoteKubectlApply(d, []string{common.DefHelmManifest})
 }
 
 // doLoadDashboard loads the dashboard (if enabled)
-func doLoadDashboard(d *schema.ResourceData) ssh.ApplyFunc {
+func doLoadDashboard(d *schema.ResourceData) ssh.Applyer {
 	opt, ok := d.GetOk("config.dashboard_enabled")
 	if !ok {
 		return ssh.DoMessage("the Dashboard will not be loaded")
@@ -58,11 +58,11 @@ func doLoadDashboard(d *schema.ResourceData) ssh.ApplyFunc {
 	if common.DefDashboardManifest == "" {
 		return ssh.DoMessage("no manifest for Dashboard: the Dashboard will not be loaded")
 	}
-	return doLocalKubectlApply(d, []string{common.DefDashboardManifest})
+	return doRemoteKubectlApply(d, []string{common.DefDashboardManifest})
 }
 
 // doLoadManifests loads some extra manifests
-func doLoadManifests(d *schema.ResourceData) ssh.ApplyFunc {
+func doLoadManifests(d *schema.ResourceData) ssh.Applyer {
 	manifestsOpt, ok := d.GetOk("manifests")
 	if !ok {
 		return ssh.DoNothing()
@@ -71,5 +71,5 @@ func doLoadManifests(d *schema.ResourceData) ssh.ApplyFunc {
 	for _, v := range manifestsOpt.([]interface{}) {
 		manifests = append(manifests, v.(string))
 	}
-	return doLocalKubectlApply(d, manifests)
+	return doRemoteKubectlApply(d, manifests)
 }

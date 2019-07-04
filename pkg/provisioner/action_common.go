@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -58,12 +59,16 @@ func getKubeconfig(d *schema.ResourceData) string {
 	if !ok {
 		return ""
 	}
-	return kubeconfigOpt.(string)
+	f, err := filepath.Abs(kubeconfigOpt.(string))
+	if err != nil {
+		return ""
+	}
+	return f
 }
 
 // doExecKubeadmWithConfig runs a `kubeadm` command in the remote host
 // this functions creates a `kubeadm` executor using some default values for some arguments.
-func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string, args ...string) ssh.ApplyFunc {
+func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string, args ...string) ssh.Applyer {
 	kubeadm_path := d.Get("install.0.kubeadm_path").(string)
 	if len(kubeadm_path) == 0 {
 		kubeadm_path = common.DefKubeadmPath
@@ -86,9 +91,8 @@ func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string,
 	return ssh.DoExec(fmt.Sprintf("%s %s %s", kubeadm_path, command, strings.Join(allArgs, " ")))
 }
 
-// doKubeadm are the common provisioning things, for the `init` as well
-// as for the `join`.
-func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, args ...string) ssh.ApplyFunc {
+// doKubeadm is the common kubeadm call, both for the `init` as well as well as for the `join`.
+func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, args ...string) ssh.Applyer {
 	kubeadmConfigFilename := ""
 	switch command {
 	case "init":
@@ -128,6 +132,7 @@ func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, arg
 					ssh.DoDeleteFile(kubeadmConfigFilename),
 				)),
 			ssh.DoUploadReaderToFile(bytes.NewReader(kubeadmConfig), kubeadmConfigFilename),
+			ssh.DoMessageInfo("Starting kubeadm..."),
 			doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
 			ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak"),
 		),
@@ -136,10 +141,10 @@ func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, arg
 
 // doUploadCerts upload the certificates from the serialized `d.config` to the remote machine
 // we only do this on the control plane machines
-func doUploadCerts(d *schema.ResourceData) ssh.ApplyFunc {
+func doUploadCerts(d *schema.ResourceData) ssh.Applyer {
 	certsConfig := &common.CertsConfig{}
 	if err := certsConfig.FromResourceDataConfig(d); err != nil {
-		return ssh.DoAbort("no certificates data in config")
+		return ssh.ApplyError("no certificates data in config")
 	}
 
 	certsDir := common.DefPKIDir

@@ -23,7 +23,7 @@ import (
 )
 
 // doPrepareCRI preparse the CRI in the target node
-func doPrepareCRI() ssh.ApplyFunc {
+func doPrepareCRI() ssh.Applyer {
 	return ssh.DoComposed(
 		ssh.DoUploadReaderToFile(strings.NewReader(assets.CNIDefConfCode), common.DefCniLookbackConfPath),
 		// we must reload the containers runtime engine after changing the CNI configuration
