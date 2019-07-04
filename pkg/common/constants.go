@@ -53,7 +53,7 @@ const (
 	DefHelmManifest = ""
 
 	// manifest for loading the dashboard
-	DefDashboardManifest = "https://raw.githubusercontent.com/kubernetes/dashboard/master/aio/deploy/recommended/kubernetes-dashboard.yaml"
+	DefDashboardManifest = "https://raw.githubusercontent.com/kubernetes/dashboard/v1.10.1/src/deploy/recommended/kubernetes-dashboard.yaml"
 
 	// kubeadm executable in the machines (we assume it is in some standard path)
 	DefKubeadmPath = "kubeadm"

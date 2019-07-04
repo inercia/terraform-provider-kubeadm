@@ -32,9 +32,11 @@ By default all the machines will have the following users:
 
 ## Topology
 
-The cluster will be made by these machines:
+The topology created for libvirt is currently a bit limited:
 
-  * `${var.master_count}` master nodes, with `kubeadm` and the `kubelet` pre-installed.
+  * only one master, with `kubeadm` and the `kubelet` pre-installed.
+  No load balancer is created, so you are limited to only one master.
   * `${var.worker_count}` worker nodes, with `kubeadm` and the `kubelet` pre-installed.
+
 
 You should be able to `ssh` these machines, and all of them should be able to ping each other.

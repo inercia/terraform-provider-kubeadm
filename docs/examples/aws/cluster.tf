@@ -468,7 +468,7 @@ resource "aws_instance" "bastion" {
 ###########################################
 resource "aws_instance" "masters" {
   ami               = "${data.aws_ami.latest_ami.id}"
-  count             = "${var.masters}"
+  count             = "${var.master_count}"
   instance_type     = "${var.master_size}"
   key_name          = "${aws_key_pair.kube.key_name}"
   source_dest_check = false
@@ -515,7 +515,7 @@ resource "aws_instance" "masters" {
 ##       DNS record (https://www.terraform.io/docs/providers/aws/r/route53_record.html)
 ##
 resource "null_resource" "masters" {
-  count = "${var.masters}"
+  count = "${var.master_count}"
 
   depends_on = [
     "aws_instance.masters",
@@ -565,7 +565,7 @@ output "master.private_dns" {
 
 resource "aws_instance" "workers" {
   ami               = "${data.aws_ami.latest_ami.id}"
-  count             = "${var.workers}"
+  count             = "${var.worker_count}"
   instance_type     = "${var.worker_size}"
   key_name          = "${aws_key_pair.kube.key_name}"
   source_dest_check = false

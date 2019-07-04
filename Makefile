@@ -112,6 +112,7 @@ ci: ci-tests
 ci-tests-unit:
 	@make build test vet
 
+tests-e2e: ci-tests-e2e
 ci-tests-e2e:
 	@make -C tests/e2e ci-tests
 
