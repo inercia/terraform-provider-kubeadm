@@ -58,7 +58,7 @@ func doRemoteKubectl(d *schema.ResourceData, args ...string) ssh.Applyer {
 }
 
 // DoLocalKubectlApply applies some manifests with a local kubectl with the kubeconfig specified in the schema
-func doLocalKubectlApply(d *schema.ResourceData, manifests []string) ssh.Applyer {
+func doLocalKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.Applyer {
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
 		return ssh.ApplyError("no 'config_path' has been specified")
@@ -67,7 +67,7 @@ func doLocalKubectlApply(d *schema.ResourceData, manifests []string) ssh.Applyer
 }
 
 // DoRemoteKubectlApply applies some manifests with a remote kubectl, uploading the kubeconfig specified in the schema
-func doRemoteKubectlApply(d *schema.ResourceData, manifests []string) ssh.Applyer {
+func doRemoteKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.Applyer {
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
 		return ssh.ApplyError("no 'config_path' has been specified")

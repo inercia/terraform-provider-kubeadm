@@ -82,6 +82,10 @@ the provided manifest. When both `plugin` and `plugin_manifest` are provided,
 the former one is ignored.
 * `bin_dir` - (Optional) binaries directory for CNI.
 * `conf_dir` - (Optional) configuration directory for CNI.
+* `flannel`  - (Optional) Flannel configuration options:
+  * `version` - (Optional) the flannel image version.
+  * `backend` - (Optional) Flannel backend: `vxlan`, `host-gw`, 
+  `udp`, `ali-vpc`, `aws-vpc`, `gce`, `ipip`, `ipsec`.
 
 ### `certs`
 

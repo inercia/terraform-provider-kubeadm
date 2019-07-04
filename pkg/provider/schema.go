@@ -121,6 +121,32 @@ func dataSourceKubeadm() *schema.Resource {
 							Description:  "Configuration directory for CNI",
 							ValidateFunc: common.ValidateAbsPath,
 						},
+						"flannel": {
+							Type:     schema.TypeList,
+							Optional: true,
+							ForceNew: true,
+							MaxItems: 1,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"backend": {
+										Type:     schema.TypeString,
+										Optional: true,
+										Default:  common.DefFlannelBackend,
+										// see https://github.com/coreos/flannel/blob/master/Documentation/backends.md
+										Description:  "Flannel backend: vxlan, host-gw, udp, ali-vpc, aws-vpc, gce, ipip, ipsec",
+										ValidateFunc: validation.StringInSlice([]string{"vxlan", "host-gw", "udp", "ali-vpc", "aws-vpc", "gce", "ipip", "ipsec"}, true),
+									},
+									"version": {
+										Type:     schema.TypeString,
+										Optional: true,
+										Default:  common.DefFlannelBackend,
+										// see https://github.com/coreos/flannel/blob/master/Documentation/backends.md
+										Description:  "Flannel backend: vxlan, host-gw, udp, ali-vpc, aws-vpc, gce, ipip, ipsec",
+										ValidateFunc: validation.StringInSlice([]string{"vxlan", "host-gw", "udp", "ali-vpc", "aws-vpc", "gce", "ipip", "ipsec"}, true),
+									},
+								},
+							},
+						},
 					},
 				},
 			},

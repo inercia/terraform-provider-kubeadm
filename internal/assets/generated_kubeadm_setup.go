@@ -134,6 +134,16 @@ install_apt() {
     restart_services
 }
 
+# installation for other OSes
+install_generic() {
+    warn "Using generic installation"
+    RELEASE="$(curl -sSL https://dl.k8s.io/release/stable.txt)"
+    mkdir -p /opt/bin
+    cd /opt/bin
+    curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/amd64/{kubeadm,kubelet,kubectl}
+    chmod +x {kubeadm,kubelet,kubectl}
+}
+
 ##########################################################################################
 
 # there are two ways we can identify the distro: with the help of lsb-release, or
@@ -165,7 +175,7 @@ if [ -x $LSB_RELEASE ] ; then
         ;;
 
     *)
-        log "could not get the release/distribution from $LSB_RELEASE"
+        install_generic
         ;;
     esac
 elif [ /etc/os-release ] ; then
@@ -181,7 +191,7 @@ elif [ /etc/os-release ] ; then
         install_zypper
         ;;
     *)
-        warn "could not get the release/distribution from /etc/os-release"
+        install_generic
         ;;
     esac
 elif [ -f /etc/debian_version ] ; then
@@ -195,7 +205,7 @@ elif [ -f /etc/SuSE-release ] ; then
 elif [ -f /etc/centos-release ] ; then
     install_yum
 else
-    warn "No distro detected"
+    install_generic
 fi
 
 [ -x $KUBEADM_EXE ] || abort "no kubeadm executable available at $KUBEADM_EXE"

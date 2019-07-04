@@ -19,9 +19,10 @@ import (
 )
 
 // ProvisionerConfigElements is the list of configuration options that can be
-// passed from the provider to the provisioner
-// FIXME: it seems we cannot use types other than "strings":
-// Terraform just skips those fields otherwise
+// passed from the provider to the provisioner.
+// This dictionary is passed to templates as well, so you can use ie, {{.token}}
+//
+// FIXME: it seems we cannot use types other than "strings": Terraform just skips those fields otherwise
 var ProvisionerConfigElements = map[string]*schema.Schema{
 	"init": {
 		Type: schema.TypeString,
@@ -48,6 +49,26 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		Type: schema.TypeString,
 		// Computed: true,
 		Optional: true,
+	},
+	"cni_conf_dir": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"cni_pod_cidr": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"flannel_backend": {
+		Type:        schema.TypeString,
+		Optional:    true,
+		Description: "the flannel backend",
+	},
+	"flannel_image_version": {
+		Type:        schema.TypeString,
+		Optional:    true,
+		Description: "the flannel image version",
 	},
 	"helm_enabled": {
 		Type: schema.TypeBool,

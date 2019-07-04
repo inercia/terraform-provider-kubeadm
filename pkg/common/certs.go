@@ -181,7 +181,7 @@ func (c *CertsConfig) FromDisk(certsDir string) error {
 // so they can be uploaded to the remote init machine
 func CreateCerts(d *schema.ResourceData, initCfg *kubeadmapi.InitConfiguration) (map[string]string, error) {
 	// create a temporary directory for the certificates
-	certsDir, err := GetSafeTempDirectory()
+	certsDir, err := GetSafeLocalTempDirectory()
 	if err != nil {
 		return nil, err
 	}
