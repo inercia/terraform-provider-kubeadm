@@ -13,7 +13,7 @@ NUM_MASTERS=2
 NUM_WORKERS=2
 
 cd $E2E_ENV
-[ -f "ci.tfvars" ] && TF_ARGS="$TF_ARGS -var-file=ci.tfvars"
+[ -f "ci.tfvars" ] && [ "$CI" = "true" ] && TF_ARGS="$TF_ARGS -var-file=ci.tfvars"
 
 ###########################################################################################
 # cluster creation
@@ -33,7 +33,8 @@ if [ $? -ne 0 ] ; then
 fi
 
 echo ">>> Creating cluster..."
-terraform apply -auto-approve $TF_ARGS
+TF_VAR_master_count=$NUM_MASTERS TF_VAR_worker_count=$NUM_WORKERS \
+    terraform apply -auto-approve $TF_ARGS
 if [ $? -ne 0 ] ; then
     echo ">>> FAILED: could not create cluster"
     exit 1
@@ -72,8 +73,3 @@ if [ $CURR_NUM_MASTERS -ne $EXP_NUM_MASTERS ] ; then
     exit 1
 fi
 
-###########################################################################################
-# teardown
-###########################################################################################
-
-# TODO: do not destroy the cluster until we fix the DnD problems

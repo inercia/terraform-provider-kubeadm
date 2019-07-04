@@ -93,7 +93,7 @@ output "masters" {
 # kube-minion
 #####################
 resource "libvirt_volume" "minion_volume" {
-  count          = "${var.minions}"
+  count          = "${var.worker_count}"
   name           = "${var.name_prefix}minion${count.index}.img"
   pool           = "${var.image_pool}"
   base_volume_id = "${libvirt_volume.base.id}"
@@ -101,7 +101,7 @@ resource "libvirt_volume" "minion_volume" {
 }
 
 resource "libvirt_domain" "minion" {
-  count      = "${var.minions}"
+  count      = "${var.worker_count}"
   name       = "${var.name_prefix}minion${count.index}"
   depends_on = ["libvirt_domain.master"]
   memory     = 512

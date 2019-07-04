@@ -106,14 +106,14 @@ to your masters and you will have a HA cluster!.
 * Easy _scale-up_/_scale-down_ of the cluster by just changing the
 `count` of your masters or workers.
 * Use the [`kubeadm` attributes](../../wiki/Resource_kubeadm#attributes-reference)
-in other parts of your Terraform script. This makes it easy to:
-  * enable SSL termination, by using the certificates in the code you have
-  for creating a Load Balancer.
+in other parts of your Terraform script. This makes it easy to do things like:
+  * enabling SSL termination by using the certificates generated for `kubeadm`
+   in the code you have for creating your Load Balancer.
   * create machine _templates_ (for example, `cloud-init` code) that can 
   be used for creating machines dynamically when Terraform is not involved
   (like _autoscaling groups_).
 * Automatic rolling upgrade of the cluster by just changing the base
-image of your machines. Terraform will take care of replacing old
+image of your machines. Ter-raform will take care of replacing old
 nodes with upgraded ones...
 * Automatic deployment of some addons, like CNI drivers, the Dashboard,
 Helm, etc.  
@@ -163,15 +163,16 @@ instructions.
 
 ## Running the tests
 
+You can run the unit tests with:
+
 ```console
-make test
+$ make test
 ```
 
-In order to run the acceptance tests you need to define the TF_ACC variables:
+There are [end-to-end tests](tests/e2e) as well, that can be launched with
 
 ```console
-export TF_ACC=1
-make test
+$ make tests-e2e
 ```
 
 ## Author(s)

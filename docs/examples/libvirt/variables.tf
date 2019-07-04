@@ -2,7 +2,11 @@
 # variables
 #####################
 
-variable "minions" {
+variable "master_count" {
+  default = "1"
+}
+
+variable "worker_count" {
   default = "1"
 }
 

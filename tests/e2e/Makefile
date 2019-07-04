@@ -21,7 +21,11 @@ ci-setup:
 ci-tests:
 	@echo "Running tests suite:"
 	@echo
-	@for i in `pwd`/[0-9]*-*.sh ; do \
-		echo "Running $$i" ; \
-		sh $$i ; \
+	@for d in `pwd`/[0-9]* ; do \
+		echo "Running testsuite $$d" ; \
+		for i in $$d/[0-9]*-*.sh ; do \
+			echo "Running $$i" ; \
+			sh $$i ; \
+		done ; \
 	done
+

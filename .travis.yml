@@ -29,6 +29,8 @@ env:
     - TF_ACC=true
     - LC_ALL=C.UTF-8
     - LANG=C.UTF-8
+    - CI=travis
+    - CI=true
 
 jobs:
   include:

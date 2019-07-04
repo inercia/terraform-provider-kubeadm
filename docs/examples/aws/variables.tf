@@ -57,7 +57,7 @@ variable "master_size" {
   description = "Size of the master nodes"
 }
 
-variable "masters" {
+variable "master_count" {
   default     = 2
   description = "Number of master nodes"
 }
@@ -67,7 +67,7 @@ variable "worker_size" {
   description = "Size of the worker nodes"
 }
 
-variable "workers" {
+variable "worker_count" {
   default     = 2
   description = "Number of worker nodes"
 }
