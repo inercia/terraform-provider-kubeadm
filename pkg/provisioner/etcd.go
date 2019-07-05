@@ -213,17 +213,17 @@ func doPrintEtcdMembers(d *schema.ResourceData) ssh.Applyer {
 		members, err := getMemberList(o, comm, useSudo)
 		if err != nil {
 			if err == ErrNoEtcdContainer {
-				o.Output("etcd is not running in this node")
+				return ssh.DoMessageInfo("etcd is not running in this node").Apply(o, comm, useSudo)
 			} else {
 				return nil
 			}
 		}
 		if len(members) == 0 {
-			o.Output("WARNING, would not get list of etcd members")
-			return nil
+			return ssh.DoMessageWarn("Could not get list of etcd members").Apply(o, comm, useSudo)
 		}
+
 		for _, member := range members {
-			o.Output(fmt.Sprintf("etcd member '%s' at '%s'", member.ID, member.ClienAddrs))
+			_ = ssh.DoMessage(fmt.Sprintf("etcd member '%s' at '%s'", member.ID, member.ClienAddrs)).Apply(o, comm, useSudo)
 		}
 		return nil
 	})

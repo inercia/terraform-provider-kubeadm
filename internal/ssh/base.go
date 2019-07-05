@@ -82,26 +82,30 @@ func DoNothing() ApplyFunc {
 	})
 }
 
-// DoMessage is a dummy action that just prints a message
-func DoMessage(msg string) ApplyFunc {
+func DoMessageWithColor(msg string, c color.Color) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		o.Output(msg)
+		o.Output(c.Render(msg))
 		return nil
 	})
 }
 
+// DoMessage is a dummy action that just prints a message
+func DoMessage(msg string) ApplyFunc {
+	return DoMessageWithColor(msg, color.FgLightGreen)
+}
+
 func DoMessageWarn(msg string) ApplyFunc {
-	return DoMessage(color.FgLightRed.Render(msg))
+	return DoMessageWithColor(fmt.Sprintf("WARNING: %s", msg), color.FgLightGreen)
 }
 
 func DoMessageInfo(msg string) ApplyFunc {
-	return DoMessage(color.FgGreen.Render(msg))
+	return DoMessageWithColor(msg, color.FgLightGreen)
 }
 
 // DoMessageDebug prints a debug message
 func DoMessageDebug(msg string) ApplyFunc {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		log.Printf("[DEBUG] [KUBEADM] %s", msg)
+		log.Printf(color.FgLightYellow.Render(fmt.Sprintf("[DEBUG] [KUBEADM] %s", msg)))
 		return nil
 	})
 }

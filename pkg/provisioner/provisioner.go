@@ -111,6 +111,7 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Applyer {
 
 	actions := []ssh.Applyer{
 		ssh.DoMessageInfo("Initializing the cluster with 'kubadm init'"),
+		ssh.DoPrintIpAddresses(),
 		doDeleteLocalKubeconfig(d),
 		doUploadCerts(d),
 		ssh.DoIfElse(
@@ -119,6 +120,7 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Applyer {
 			doKubeadm(d, "init", initConfigBytes, extraArgs...),
 		),
 		doDownloadKubeconfig(d),
+		doCheckKubeconfigIsAlive(d),
 		doPrintEtcdMembers(d),
 		doLoadCNI(d),
 		doLoadDashboard(d),
@@ -139,8 +141,11 @@ func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Applyer {
 	// check if we are joining the Control Plane: we must upload the certificates and
 	// use the '--control-plane' flag
 	actions := []ssh.Applyer{
-		ssh.DoMessageInfo("Joining the cluster with 'kubadm join'"),
+		ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'"),
+		ssh.DoPrintIpAddresses(),
 		doKubeadm(d, "join", joinConfigBytes),
+		doCheckKubeconfigIsAlive(d),
+		doPrintEtcdMembers(d),
 	}
 	return ssh.DoComposed(actions...)
 }
@@ -181,9 +186,12 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Applyer {
 
 	extraArgs := []string{}
 	actions := []ssh.Applyer{
-		ssh.DoMessageInfo("Joining the cluster with 'kubadm join'"),
+		ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'"),
+		ssh.DoPrintIpAddresses(),
 		doUploadCerts(d),
 		doKubeadm(d, "join", joinConfigBytes, extraArgs...),
+		doCheckKubeconfigIsAlive(d),
+		doPrintEtcdMembers(d),
 	}
 	return ssh.DoComposed(actions...)
 }
@@ -205,4 +213,12 @@ func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Applyer {
 func doDownloadKubeconfig(d *schema.ResourceData) ssh.Applyer {
 	kubeconfig := getKubeconfig(d)
 	return ssh.DoDownloadFile(ssh.DefAdminKubeconfig, kubeconfig)
+}
+
+func doCheckKubeconfigIsAlive(d *schema.ResourceData) ssh.Applyer {
+	return ssh.DoIfElse(
+		checkKubeconfigAlive(d),
+		ssh.DoMessageInfo("the API server is accessible from here (with the current kubeconfig)"),
+		ssh.DoMessageWarn("the API server does NOT seem to be accessible from here (with the current kubeconfig)"),
+	)
 }

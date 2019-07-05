@@ -80,7 +80,7 @@ func checkKubeconfigAlive(d *schema.ResourceData) ssh.CheckerFunc {
 	return ssh.CheckAnd(
 		checkKubeconfigExists(d),
 		ssh.CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-			if err := ssh.DoRemoteKubectl(kubeconfig, "cluster-health").Apply(o, comm, useSudo); err != nil {
+			if err := ssh.DoRemoteKubectl(kubeconfig, "cluster-info").Apply(o, comm, useSudo); err != nil {
 				return false, nil
 			}
 			return true, nil

@@ -132,13 +132,12 @@ func doRealUploadFile(contents io.Reader, remote string) Applyer {
 // user, while the `mv` is done with `sudo`
 func DoUploadReaderToFile(contents io.Reader, remote string) Applyer {
 	if len(remote) == 0 {
-		panic("empty remote path")
+		return ApplyError("empty remote path in DoUploadReaderToFile()")
 	}
 
 	// do not create temporary files for files that are already temporary
 	if IsTempFilename(remote) {
 		return DoComposed(
-			DoMessageInfo(fmt.Sprintf("Uploading to %q", remote)),
 			DoMkdir(filepath.Dir(remote)),
 			doRealUploadFile(contents, remote))
 	}
