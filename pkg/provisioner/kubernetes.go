@@ -15,35 +15,12 @@
 package provisioner
 
 import (
-	"fmt"
-
 	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
-	"github.com/pkg/errors"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
-	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
-
-func getMasterNodes(kubeconfig string) (*v1.NodeList, error) {
-	clientSet, err := common.GetClientSet(kubeconfig)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to get admin client set")
-	}
-
-	return clientSet.CoreV1().Nodes().List(metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s=", kubeadmconstants.LabelNodeRoleMaster),
-	})
-}
-
-func isMaster(node *v1.Node) bool {
-	_, isMaster := node.ObjectMeta.Labels[kubeadmconstants.LabelNodeRoleMaster]
-	return isMaster
-}
 
 // doLocalKubectl runs a local kubectl with the kubeconfig specified in the schema
 func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.Applyer {
@@ -51,7 +28,7 @@ func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.Applyer {
 	return ssh.DoLocalKubectl(kubeconfig, args...)
 }
 
-// doRemooteKubectl runs a remoote kubectl with the kubeconfig specified in the schema
+// doRemoteKubectl runs a remote kubectl with the kubeconfig specified in the schema
 func doRemoteKubectl(d *schema.ResourceData, args ...string) ssh.Applyer {
 	kubeconfig := getKubeconfig(d)
 	return ssh.DoLocalKubectl(kubeconfig, args...)
@@ -77,27 +54,15 @@ func doRemoteKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.
 
 // doRefreshToken uses the kubeconfig for connecting to the API server and refreshing the token
 func doRefreshToken(d *schema.ResourceData) ssh.Applyer {
-	token, ok := d.GetOk("config.token")
-	if !ok {
-		panic("there should be a token")
-	}
-
-	// TODO: we should (re)create the token by ssh'ing and doing a 'kubeadm token create'
+	//token, ok := d.GetOk("config.token")
+	//if !ok {
+	//	panic("there should be a token")
+	//}
 
 	return ssh.DoIfElse(
 		checkKubeconfigAlive(d),
 		ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-			// load the existing kubeconfig and use it for refreshing the token
-			client, err := common.GetClientSet(getKubeconfig(d))
-			if err != nil {
-				return err
-			}
-
-			o.Output(fmt.Sprintf("Refreshing token %s", token.(string)))
-			err = common.CreateOrRefreshToken(client, token.(string))
-			if err != nil {
-				return err
-			}
+			// TODO: we should (re)create the token by ssh'ing and doing a 'kubeadm token create'
 			return nil
 		}),
 		ssh.DoAbort("no valid kubeconfig exists or the cluster is not alive/reachable: the token not refreshed, so the node cannot join the cluster"),

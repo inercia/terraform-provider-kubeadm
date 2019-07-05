@@ -73,6 +73,8 @@ test-compile:
 	fi
 	$(GO) test -c $(TEST) $(TESTARGS)
 
+tests-e2e: ci-tests-e2e
+
 ################################################
 
 vet:
@@ -97,7 +99,6 @@ errcheck:
 ################################################
 # CI targets (mainly for Travis)
 
-
 ci-save-env:
 	# NOTE: "sudo" in travis resets the environment to "safe" values
 	#       (loaded from "/etc/environment"), so we save our current env
@@ -107,18 +108,18 @@ ci-save-env:
 	@cat /tmp/environment
 	@sudo mv -f /tmp/environment /etc/environment
 
-ci: ci-tests
+ci-tests-style: fmtcheck vet errcheck
 
-ci-tests-unit:
-	@make build test vet
+ci-tests-unit: test
 
-tests-e2e: ci-tests-e2e
-ci-tests-e2e:
+ci-tests-e2e: build
 	@make -C tests/e2e ci-tests
+
+ci: ci-tests
 
 # entrypoints: ci-tests and ci-setup
 
-ci-tests: ci-tests-unit ci-tests-e2e
+ci-tests: ci-tests-unit ci-tests-style ci-tests-e2e
 
 ci-setup:
 	@make -C tests/e2e ci-setup

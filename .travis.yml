@@ -14,7 +14,7 @@ cache:
     #
     # this list of directories seems to speedup things:
     #
-    - $HOME/.cache/go-build
+    #- $HOME/.cache/go-build
     - $HOME/gopath/pkg/mod
     - $HOME/.terraform.d/plugins
 
@@ -34,11 +34,18 @@ env:
 
 jobs:
   include:
-    - stage: Build and test the code
-      script:
-        # NOTE: use this `sudo .. su` trick in order to use
-        #       the `usermod -a -G lxd` we did on the `before_install`
-        - sudo -E su $USER -c "make ci-tests"
+    # NOTE: all the `stages`s  with the sdame name are run in parallel
+    # NOTE: use this `sudo .. su` trick in order to use
+    #       the `usermod -a -G lxd` we did on the `before_install`
+    - stage: unit tests and style checks
+      script: sudo -E su $USER -c "make ci-tests-style"
+    - stage: unit tests and style checks
+      script: sudo -E su $USER -c "make ci-tests-unit"
+
+    - stage: end-2-end tests
+      script: sudo -E su $USER -c "make ci-tests-e2e"
+
+    # TODO: add a deployer to github releases: https://docs.travis-ci.com/user/build-stages/deploy-github-releases/
 
 #branches:
 #  only:
