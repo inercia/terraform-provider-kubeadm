@@ -36,14 +36,18 @@ administrative privileges.
 * `api` - (Optional) API server configuration (see section below).
 * `certs` - (Optional) user-provided certificates (see section below).
 * `cni` - (Optional) CNI configuration (see section below).
-* `network` - (Optional) network configuration (see section below).
-* `images`  - (Optional) images used for running the different services (see section below).
 * `etcd`  - (Optional) `etcd` configuration (see section below).
+* `images`  - (Optional) images used for running the different services (see section below).
+* `network` - (Optional) network configuration (see section below).
+* `runtime` - (Optional) runtime and operational configuration (see section below).
 * `version`  - (Optional) kubernetes version.
 
 ## Nested Blocks
 
 ### `addons`
+
+The `addons` block provides flags for enabling/disabling and configuring
+different addons that can be deployed to the cluster.
 
 #### Arguments
 
@@ -51,6 +55,23 @@ administrative privileges.
 * `helm` - (Optional) when `true`, deploy Helm.
 
 ### `api`
+
+The `api` block provided different configuration options for the API server.
+
+Example:
+
+```hcl
+resource "kubeadm" "main" {
+  # ...
+  api {
+    # use the load balancer's address as an external addrerss for the API server
+    external = "my-lb.my-company.com"
+
+    # some other names to include in the cerificate that will be generated
+    alt_names = "IP=193.144.60.101,DNS=server.my-company.com"
+  }
+}
+```
 
 #### Arguments
 
@@ -71,6 +92,28 @@ be obtained from the _external_ and _internal_ names/IPs.
 
 ### `cni`
 
+The `cni` block is used for configuring the CNI plugin.
+
+Example:
+
+```hcl
+resource "kubeadm" "k8s" {
+  # ...
+  cni {
+    plugin = "flannel"
+
+    # use a non-standard directory
+    bin_dir = "/usr/lib/cni"
+
+    flannel {
+      # use some specific backend 
+      backend = "host-gw"
+    }
+  }
+}
+
+
+```
 #### Arguments
 
 * `plugin` - (Optional) when not empty, name of the CNI plugin to load in the
@@ -89,9 +132,10 @@ the former one is ignored.
 
 ### `certs`
 
-#### Arguments
+The `certs` block can be used for providing specific certificates instead of
+relaying in the automatically generated ones. 
 
-Example:
+Example, using some inlined certificates:
 
 ```hcl
         
@@ -99,6 +143,7 @@ resource "kubeadm" "k8s" {
   config_path = "/tmp/kubeconfig"
 
   # provided a specific CA certificate/key inlined in the "certs" block
+  # could also be read from some file with something like "${file("somepath/ca.crt")}"
   certs {
 	ca_crt =<<EOF
 -----BEGIN CERTIFICATE-----
@@ -121,6 +166,8 @@ EOF
 }
 ```
 
+#### Arguments
+
 * `ca_crt` - (Optional) user-provided CA certificate.
 * `ca_key` - (Optional) user-provided CA key.
 * `sa_crt` - (Optional) user-provided Service Account certificate.
@@ -130,10 +177,58 @@ EOF
 * `proxy_crt` - (Optional) user-provided front-proxy certificate.
 * `proxy_key`- (Optional) user-provided front-proxy key.
 
-Note well: all these certificates are optional: they will be generated  automatically
-if not provided.
+All these certificates are completely optional: they will be generated
+automatically by the `kubeadm` resource if not provided. However, in some cases
+it is useful to provide certificates from other resources in your Terraform script.
+
+For example, you could also generate a certifciate with Terraform and share it in
+different parts of your code:
+
+```hcl
+resource "tls_private_key" "ca" {
+  algorithm = "ECDSA"
+}
+
+resource "tls_self_signed_cert" "ca" {
+  key_algorithm   = "${tls_private_key.example.algorithm}"
+  private_key_pem = "${tls_private_key.example.private_key_pem}"
+
+  # Reasonable set of uses for a server SSL certificate.
+  allowed_uses = [
+      "key_encipherment",
+      "digital_signature",
+      "server_auth",
+  ]
+
+  dns_names = ["my-company.com", "my-company.net"]
+
+  subject {
+      common_name  = "my-company.com"
+      organization = "My Company, Inc"
+  }
+}
+
+resource "kubeadm" "k8s" {
+  config_path = "/tmp/kubeconfig"
+
+  certs {
+	ca_crt = "${tls_self_signed_cert.ca.cert_pem}"
+
+	ca_key = "${tls_private_key.ca.private_key_pem}"
+  }
+}
+```
+
+Notes:
+  * Changes in the certificates, for example after a certificate rotation, will
+  currently invalidate the kubeadm resources and, as a consequence, recreate
+  the cluster. It is not recommended to rely on external resources for rotating
+  certifciates and to [use kubeadm for rotating certificates](https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-certs/). 
+  
 
 ### `network`
+
+The `network` block is used for configuring the network.
 
 #### Arguments
 
@@ -153,6 +248,9 @@ resource "kubeadm" "main" {
 
 ### `images`
 
+The `images` block provides a way for changing the images used for running
+the control plane in the cluster.
+
 #### Arguments
 
 * `kube_repo` - (Optional) the kubernetes images repository.
@@ -161,9 +259,11 @@ resource "kubeadm" "main" {
 
 ### `etcd`
 
-#### Arguments
+The `etcd` block can be used for using an external etcd cluster, providing
+the endpoints that will be used.
 
 Example:
+
 ```hcl
 resource "kubeadm" "main" {
   etcd {
@@ -172,37 +272,42 @@ resource "kubeadm" "main" {
 }
 ```
 
+#### Arguments
+
 * `endpoints` - (Optional) list of etcd servers URLs, as `host:port`.
 
 ### `runtime`
 
-#### Arguments
-
-* `engine` - (Optional) containers runtime to use: `docker`/`crio`.
-* `extra_args` - (Optional) extra arguments for the components:
-  * `api_server` - (Optional) extra arguments for the API server.
-  * `controller_manager` - (Optional) extra arguments for the controller manager.
-  * `scheduler` - (Optional) extra arguments for the scheduler.
-  * `kubelet` - (Optional) extra arguments for the kubelet.
+The `runtime` block provides some operational configuration for different components
+of the Kubernetes cluster.
 
 Example:
+
 ```hcl
 resource "kubeadm" "main" {
   runtime {
     engine = "crio"
     extra_args {
       api_server = {
+        # this will be transaleted to a "--feature-gates=DynamicKubeletConfig=true" argument
         "feature-gates" = "DynamicKubeletConfig=true"
       }
     }
   }
 ```
 
+#### Arguments
+
+* `engine` - (Optional) containers runtime to use: `docker`/`crio`.
+* `extra_args` - (Optional) maps with extra arguments for the components:
+  * `api_server` - (Optional) map with extra arguments for the API server.
+  * `controller_manager` - (Optional) map with extra arguments for the controller manager.
+  * `scheduler` - (Optional) map with extra arguments for the scheduler.
+  * `kubelet` - (Optional) map with extra arguments for the kubelet.
 
 ## Attributes Reference
 
 The following attributes are exported:
-
 
 * `config` - a dictionary with some config exported to the provisioners,
 but can also be directly accessible in case you need it.
