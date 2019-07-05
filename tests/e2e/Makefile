@@ -25,7 +25,11 @@ ci-tests:
 		echo "Running testsuite $$d" ; \
 		for i in $$d/[0-9]*-*.sh ; do \
 			echo "Running $$i" ; \
-			sh $$i ; \
+			$$i ; \
+			if [ $$? -ne 0 ] ; then \
+                echo ">>> FAILED: $$i"  ; \
+                exit 1  ; \
+            fi ; \
 		done ; \
 	done
 

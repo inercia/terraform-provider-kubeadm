@@ -193,9 +193,11 @@ func DoIfElse(condition Checker, actionIf Applyer, actionElse Applyer) Applyer {
 }
 
 // DoTry tries to run an action, but it is ok if the action fails
-func DoTry(action Applyer) Applyer {
+func DoTry(actions ...Applyer) Applyer {
 	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		_ = action.Apply(o, comm, useSudo)
+		for _, action := range actions {
+			_ = action.Apply(o, comm, useSudo)
+		}
 		return nil
 	})
 }

@@ -23,7 +23,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/helper/schema"
+	"github.com/hashicorp/terraform/terraform"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
@@ -118,25 +120,31 @@ func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, arg
 		dropinPath = common.DefKubeadmDropinPath
 	}
 
-	return ssh.DoComposed(
+	actions := []ssh.Applyer{
 		doPrepareCRI(),
 		ssh.DoEnableService("kubelet.service"),
 		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletSysconfigCode), sysconfigPath),
 		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), servicePath),
 		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), dropinPath),
-		ssh.DoComposed(
-			ssh.DoIf(
-				ssh.CheckFileExists(kubeadmConfigFilename),
-				ssh.DoComposed(
-					doExecKubeadmWithConfig(d, "reset", "", "--force"),
-					ssh.DoDeleteFile(kubeadmConfigFilename),
-				)),
-			ssh.DoUploadReaderToFile(bytes.NewReader(kubeadmConfig), kubeadmConfigFilename),
-			ssh.DoMessageInfo("Starting kubeadm..."),
+		doMaybeReset(d, kubeadmConfigFilename),
+		ssh.DoUploadReaderToFile(bytes.NewReader(kubeadmConfig), kubeadmConfigFilename),
+		ssh.DoMessageInfo("Starting kubeadm..."),
+		ssh.DoWithException(
 			doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
-			ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak"),
-		),
-	)
+			ssh.DoDeleteFile(kubeadmConfigFilename)), // if something goes wrong, delete the "kubeadm.conf" file
+		ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak"), // otherwise, back it up
+	}
+	return ssh.DoComposed(actions...)
+}
+
+// doMaybeReset maybe "reset"s with kubeadm if /etc/kubernetes/kubeadm-* exists
+func doMaybeReset(d *schema.ResourceData, kubeadmConfigFilename string) ssh.Applyer {
+	return ssh.DoIf(
+		ssh.CheckFileExists(kubeadmConfigFilename),
+		ssh.DoComposed(
+			doExecKubeadmWithConfig(d, "reset", "", "--force"),
+			ssh.DoDeleteFile(kubeadmConfigFilename),
+		))
 }
 
 // doUploadCerts upload the certificates from the serialized `d.config` to the remote machine
@@ -162,4 +170,24 @@ func doUploadCerts(d *schema.ResourceData) ssh.Applyer {
 	}
 
 	return ssh.DoComposed(actions...)
+}
+
+// doPrintNodes prints the list of <nodename>:<IP> in the cluster
+func doPrintNodes(d *schema.ResourceData) ssh.Applyer {
+	kubeconfig := getKubeconfig(d)
+	if kubeconfig == "" {
+		return ssh.ApplyError("no 'config_path' has been specified")
+	}
+
+	ipAddresses := map[string]string{}
+	return ssh.DoTry(
+		ssh.DoComposed(
+			ssh.DoGetNodesAndIPs(kubeconfig, ipAddresses),
+			ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+				_ = ssh.DoMessage(fmt.Sprintf("Nodes (and IPs) in cluster:")).Apply(o, comm, useSudo)
+				for ip, name := range ipAddresses {
+					_ = ssh.DoMessage(fmt.Sprintf("- ip:%s name:%s", ip, name)).Apply(o, comm, useSudo)
+				}
+				return nil
+			})))
 }

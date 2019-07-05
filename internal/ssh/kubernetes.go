@@ -16,14 +16,20 @@ package ssh
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"os/exec"
 	"strings"
+
+	"github.com/hashicorp/terraform/communicator"
+	"github.com/hashicorp/terraform/terraform"
 )
 
 const (
 	DefAdminKubeconfig = "/etc/kubernetes/admin.conf"
+)
+
+const (
+	kubectlNodesIPsCmd = `get nodes --output=jsonpath='{range .items[*]}{.metadata.name} {.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}'`
 )
 
 type Manifest struct {
@@ -49,8 +55,6 @@ func (m Manifest) IsEmpty() bool {
 	return false
 }
 
-/////////////////////////////////////////////////////////////////////////////////
-
 // isValidUrl tests a string to determine if it is a url or not.
 func isValidUrl(toTest string) bool {
 	_, err := url.ParseRequestURI(toTest)
@@ -61,11 +65,35 @@ func isValidUrl(toTest string) bool {
 	}
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+
+// DoGetNodesAndIPs gets a map with (IPs, NAME), with the IPs and the nodename in that IP
+// this is done by running some magic kubectl command
+func DoGetNodesAndIPs(kubeconfig string, ipAddresses map[string]string) Applyer {
+	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+		var interceptor OutputFunc = func(s string) {
+			// parse "<NAME> <IP>"
+			r := strings.Split(s, " ")
+			if len(r) == 2 {
+				ipAddresses[strings.TrimSpace(r[1])] = strings.TrimSpace(r[0])
+			} else {
+				_ = DoMessageWarn(fmt.Sprintf("could not parse kubectl output %q", s)).Apply(o, comm, useSudo)
+			}
+		}
+
+		if err := DoRemoteKubectl(kubeconfig, kubectlNodesIPsCmd).Apply(interceptor, comm, useSudo); err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
 // DoLocalKubectl runs a local kubectl command
 func DoLocalKubectl(kubeconfig string, args ...string) Applyer {
 	kubectl, err := exec.LookPath("kubectl")
 	if err != nil {
-		log.Fatal("kubectl not available")
+		return ApplyError("kubectl not available")
 	}
 
 	f := append([]string{fmt.Sprintf("--kubeconfig=%s", kubeconfig)}, args...)
@@ -78,7 +106,7 @@ func DoRemoteKubectl(kubeconfig string, args ...string) Applyer {
 	// upload the local kubeconfig to some temporary remote file
 	remoteKubeconfig, err := GetTempFilename()
 	if err != nil {
-		panic(err)
+		return ApplyError(err.Error())
 	}
 
 	return DoIfElse(
@@ -98,7 +126,7 @@ func DoLocalKubectlApply(kubeconfig string, manifests []Manifest) Applyer {
 		if manifest.Inline != "" {
 			localManifest, err := GetTempFilename()
 			if err != nil {
-				panic(err)
+				return ApplyError(err.Error())
 			}
 
 			actions = append(actions,
@@ -145,7 +173,7 @@ func DoRemoteKubectlApply(kubeconfig string, manifests []Manifest) Applyer {
 			// it is a file: upload the file to a temporary, remote file and then `kubectl apply -f` it
 			remoteManifest, err := GetTempFilename()
 			if err != nil {
-				panic(err)
+				return ApplyError(err.Error())
 			}
 
 			actions = append(actions,
