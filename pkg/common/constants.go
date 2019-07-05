@@ -14,6 +14,10 @@
 
 package common
 
+import (
+	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
+)
+
 const (
 	DefPodCIDR = "10.244.0.0/16"
 
@@ -34,6 +38,10 @@ const (
 	DefCniLookbackConfPath = "/etc/cni/net.d/99-loopback.conf"
 
 	DefCniBinDir = "/opt/cni/bin"
+
+	DefFlannelBackend = "vxlan"
+
+	DefFlannelImageVersion = "v0.11.0"
 
 	// Full path where we should upload the kubelet sysconfig file
 	DefKubeletSysconfigPath = "/etc/sysconfig/kubelet"
@@ -60,9 +68,9 @@ const (
 )
 
 var (
-	// CNIPluginsManifests is the map of manifests for different CNI drivers
-	CNIPluginsManifests = map[string]string{
-		"flannel": "https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml",
+	// CNIPluginsManifestsTemplates is the map of manifests for different CNI drivers
+	CNIPluginsManifestsTemplates = map[string]string{
+		"flannel": assets.FlannelManifestCode,
 	}
 )
 

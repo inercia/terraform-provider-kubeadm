@@ -31,6 +31,8 @@ import (
 )
 
 const (
+	defMaxPathLength = 4096
+
 	defTemporaryFilenamePrefix = "tmpfile"
 
 	defTemporaryFilenameExt = "tmp"
@@ -41,6 +43,19 @@ const (
 
 	markEnd = "-- END --"
 )
+
+// LocalFileExists reports whether the named file or directory exists.
+func LocalFileExists(name string) bool {
+	if len(name) > defMaxPathLength {
+		return false
+	}
+	if _, err := os.Stat(name); err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
 
 func randBytes(length int) (string, error) {
 	b := make([]byte, length)
@@ -199,6 +214,22 @@ func DoDownloadFileToWriter(remote string, contents io.WriteCloser) Applyer {
 
 			return nil
 		}))
+}
+
+// DoWriteLocalFile writes some string in a local file
+func DoWriteLocalFile(filename string, contents string) Applyer {
+	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+		localFile, err := os.Create(filename)
+		if err != nil {
+			return err
+		}
+
+		if _, err := localFile.WriteString(contents); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 // DoDeleteFile removes a file

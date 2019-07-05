@@ -19,3 +19,4 @@ package assets
 //go:generate ../../utils/generate.sh --out-var KubeadmDropinCode --out-package assets --out-file generated_kubeadm_dropin.go ./static/kubeadm-dropin.conf
 //go:generate ../../utils/generate.sh --out-var KubeletServiceCode --out-package assets --out-file generated_kubelet_service.go ./static/service.conf
 //go:generate ../../utils/generate.sh --out-var CNIDefConfCode --out-package assets --out-file generated_cni_conf.go ./static/cni-default.conflist
+//go:generate ../../utils/generate.sh --out-var FlannelManifestCode --out-package assets --out-file generated_flannel_manifest.go ./static/kube-flannel.yml

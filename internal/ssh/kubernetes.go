@@ -26,6 +26,31 @@ const (
 	DefAdminKubeconfig = "/etc/kubernetes/admin.conf"
 )
 
+type Manifest struct {
+	Path   string
+	URL    string
+	Inline string
+}
+
+func NewManifest(m string) Manifest {
+	if isValidUrl(m) {
+		return Manifest{URL: m}
+	}
+	if LocalFileExists(m) {
+		return Manifest{Path: m}
+	}
+	return Manifest{Inline: m}
+}
+
+func (m Manifest) IsEmpty() bool {
+	if m.Inline == "" && m.Path == "" && m.URL == "" {
+		return true
+	}
+	return false
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
 // isValidUrl tests a string to determine if it is a url or not.
 func isValidUrl(toTest string) bool {
 	_, err := url.ParseRequestURI(toTest)
@@ -48,6 +73,7 @@ func DoLocalKubectl(kubeconfig string, args ...string) Applyer {
 }
 
 // DoRemoteKubectl runs a remote kubectl command in a remote machine
+// it takes care about uploading a valid kubeconfig file if not present in the remote machine
 func DoRemoteKubectl(kubeconfig string, args ...string) Applyer {
 	// upload the local kubeconfig to some temporary remote file
 	remoteKubeconfig, err := GetTempFilename()
@@ -66,30 +92,56 @@ func DoRemoteKubectl(kubeconfig string, args ...string) Applyer {
 }
 
 // DoLocalKubectlApply applies some manifests with a local kubectl
-func DoLocalKubectlApply(kubeconfig string, manifests []string) Applyer {
-	loaders := []Applyer{}
+func DoLocalKubectlApply(kubeconfig string, manifests []Manifest) Applyer {
+	actions := []Applyer{}
 	for _, manifest := range manifests {
-		if len(manifest) == 0 {
-			continue
+		if manifest.Inline != "" {
+			localManifest, err := GetTempFilename()
+			if err != nil {
+				panic(err)
+			}
+
+			actions = append(actions,
+				DoWithCleanup(
+					DoComposed(
+						DoWriteLocalFile(localManifest, manifest.Inline),
+						DoRemoteKubectl(kubeconfig, "apply", "-f", localManifest)),
+					DoDeleteLocalFile(localManifest)))
+		} else if manifest.Path != "" {
+			actions = append(actions, DoLocalKubectl(kubeconfig, "apply", "-f", manifest.Path))
+		} else if manifest.URL != "" {
+			actions = append(actions, DoLocalKubectl(kubeconfig, "apply", "-f", manifest.URL))
 		}
-		loaders = append(loaders, DoLocalKubectl(kubeconfig, "apply", "-f", manifest))
 	}
-	return DoComposed(loaders...)
+	return DoComposed(actions...)
 }
 
 // DoRemoteKubectlApply applies some manifests with a remote kubectl
-func DoRemoteKubectlApply(kubeconfig string, manifests []string) Applyer {
+// manifests can be 1) a local file 2) a URL
+func DoRemoteKubectlApply(kubeconfig string, manifests []Manifest) Applyer {
 	actions := []Applyer{}
 
 	for _, manifest := range manifests {
-		if len(manifest) == 0 {
-			continue
-		}
+		if manifest.Inline != "" {
+			localManifest, err := GetTempFilename()
+			if err != nil {
+				return ApplyError(fmt.Sprintf("could not get temporary path: %s", err))
+			}
+			remoteManifest, err := GetTempFilename()
+			if err != nil {
+				return ApplyError(fmt.Sprintf("could not get temporary path: %s", err))
+			}
 
-		if isValidUrl(manifest) {
-			// it is an URL: just run the `kubectl apply`
-			actions = append(actions, DoRemoteKubectl(kubeconfig, "apply", "-f", manifest))
-		} else {
+			actions = append(actions,
+				DoWithCleanup(
+					DoComposed(
+						DoWriteLocalFile(localManifest, manifest.Inline),
+						DoUploadFileToFile(localManifest, remoteManifest),
+						DoRemoteKubectl(kubeconfig, "apply", "-f", remoteManifest)),
+					DoComposed(
+						DoDeleteLocalFile(localManifest),
+						DoDeleteFile(remoteManifest))))
+		} else if manifest.Path != "" {
 			// it is a file: upload the file to a temporary, remote file and then `kubectl apply -f` it
 			remoteManifest, err := GetTempFilename()
 			if err != nil {
@@ -99,9 +151,12 @@ func DoRemoteKubectlApply(kubeconfig string, manifests []string) Applyer {
 			actions = append(actions,
 				DoWithCleanup(
 					DoComposed(
-						DoUploadFileToFile(manifest, remoteManifest),
+						DoUploadFileToFile(manifest.Path, remoteManifest),
 						DoRemoteKubectl(kubeconfig, "apply", "-f", remoteManifest)),
 					DoDeleteFile(remoteManifest)))
+		} else if manifest.URL != "" {
+			// it is an URL: just run the `kubectl apply`
+			actions = append(actions, DoRemoteKubectl(kubeconfig, "apply", "-f", manifest.URL))
 		}
 	}
 
