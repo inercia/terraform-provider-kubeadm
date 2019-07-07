@@ -15,76 +15,224 @@
 package ssh
 
 import (
-	"fmt"
-	"io"
+	"bytes"
 	"testing"
-	"time"
 
 	"github.com/hashicorp/terraform/communicator"
-	"github.com/hashicorp/terraform/communicator/remote"
 	"github.com/hashicorp/terraform/terraform"
 )
 
-type DummyOutput struct{}
-
-func (_ DummyOutput) Output(s string) {
-	fmt.Print(s)
-}
-
-type DummyCommunicator struct{}
-
-func (_ DummyCommunicator) Connect(terraform.UIOutput) error {
-	return nil
-}
-
-func (_ DummyCommunicator) Disconnect() error {
-	return nil
-}
-
-func (_ DummyCommunicator) Timeout() time.Duration {
-	return 1 * time.Hour
-}
-
-func (_ DummyCommunicator) ScriptPath() string {
-	return ""
-}
-
-func (_ DummyCommunicator) Start(*remote.Cmd) error {
-	return nil
-}
-
-func (_ DummyCommunicator) Upload(string, io.Reader) error {
-	return nil
-}
-
-func (_ DummyCommunicator) UploadScript(string, io.Reader) error {
-	return nil
-}
-
-func (_ DummyCommunicator) UploadDir(string, string) error {
-	return nil
-}
+////////////////////////////////////////////////////////////////////////////////////////////////
 
 func TestApply(t *testing.T) {
 	counter := 0
-	appliers := []Applyer{
+	errorMsg := "some error"
+	actions := ActionList{
 		DoMessage("test"),
-		ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+		ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 			counter = counter + 1
 			return nil
 		}),
-		ApplyError("some error"),
+		nil,
+		nil,
+		ActionError(errorMsg),
 	}
 
 	o := DummyOutput{}
 	comm := DummyCommunicator{}
 
-	err := Apply(appliers, o, comm, false)
+	err := actions.Apply(o, comm, false)
 	if err == nil {
 		t.Fatal("Error: no error detected")
+	}
+	if err.Error() != errorMsg {
+		t.Fatalf("Error: unexpected error message: %q", err.Error())
 	}
 	if counter > 0 {
 		t.Fatal("Error: error was raised after some function was run")
 	}
 
+}
+
+func TestDoCatchingOutput(t *testing.T) {
+	expected := "this is a test"
+
+	var buf bytes.Buffer
+	actions := ActionList{
+		DoSendingOutputToWriter(
+			ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+				o.Output(expected)
+				return nil
+			}), &buf),
+	}
+
+	o := DummyOutput{}
+	comm := DummyCommunicator{}
+
+	err := actions.Apply(o, comm, false)
+	if err != nil {
+		t.Fatalf("Error: error detected: %s", err)
+	}
+	if buf.String() != expected {
+		t.Fatalf("Error: the output, %q, has not been the expected value: %q", buf.String(), expected)
+	}
+}
+
+func TestDoLazy(t *testing.T) {
+	expected := "12345678"
+
+	path := ""
+	doRecordPath := func(num string) Action {
+		return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+			path += num
+			return nil
+		})
+	}
+
+	actions := ActionList{
+		doRecordPath("1"),
+		nil,
+		DoLazy(func() Action {
+			return ActionList{
+				doRecordPath("2"),
+				doRecordPath("3"),
+				DoLazy(func() Action {
+					return ActionList{
+						doRecordPath("4"),
+						nil,
+						doRecordPath("5"),
+					}
+				}),
+			}
+		}),
+		DoLazy(func() Action {
+			return ActionList{
+				nil,
+				doRecordPath("6"),
+				DoIfElse(CheckExpr(true),
+					DoLazy(func() (res Action) {
+						return doRecordPath("7")
+					}),
+					DoLazy(func() (res Action) {
+						return doRecordPath("XXX")
+					}),
+				),
+			}
+		}),
+		nil,
+		nil,
+		doRecordPath("8"),
+	}
+
+	var buf bytes.Buffer
+	o := DummyOutput{}
+	comm := DummyCommunicator{}
+	res := DoSendingOutputToWriter(&actions, &buf).Apply(o, comm, false)
+	if IsError(res) {
+		t.Fatalf("Error: error detected: %s", res)
+	}
+	if path != expected {
+		t.Fatalf("Error: unexpected contents: %q, expected: %q", path, expected)
+	}
+}
+
+func TestIfThenElse(t *testing.T) {
+	path := ""
+	doRecordPath := func(num string) Action {
+		return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+			path += num
+			return nil
+		})
+	}
+
+	expected := "000111222"
+	actions := ActionList{
+		doRecordPath("000"),
+		DoIfElse(CheckExpr(true),
+			DoLazy(func() (res Action) {
+				return doRecordPath("111")
+			}),
+			DoLazy(func() (res Action) {
+				return doRecordPath("XXX")
+			}),
+		),
+		DoIfElse(CheckExpr(true),
+			nil,
+			DoLazy(func() (res Action) {
+				return doRecordPath("YYY")
+			}),
+		),
+		DoIfElse(CheckExpr(false),
+			DoLazy(func() (res Action) {
+				return doRecordPath("YYY")
+			}),
+			nil,
+		),
+		nil,
+		nil,
+		doRecordPath("222"),
+	}
+
+	var buf bytes.Buffer
+	o := DummyOutput{}
+	comm := DummyCommunicator{}
+	res := DoSendingOutputToWriter(&actions, &buf).Apply(o, comm, false)
+	if IsError(res) {
+		t.Fatalf("Error: error detected: %s", res)
+	}
+	if path != expected {
+		t.Fatalf("Error: unexpected contents: %q, expected: %q", path, expected)
+	}
+}
+
+func TestDoTry(t *testing.T) {
+	expected := "01234"
+
+	path := ""
+	doRecordPath := func(num string) Action {
+		return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+			path += num
+			return nil
+		})
+	}
+
+	actions := ActionList{
+		DoTry(
+			doRecordPath("0"),
+			DoTry(
+				doRecordPath("1"),
+				doRecordPath("2"),
+			),
+			nil,
+			nil,
+			ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+				return ActionError("some error")
+			}),
+			// this ActionList is never executed, as the presence of an error makes the whole list errored
+			ActionList{
+				doRecordPath("XXX"),
+				ActionError("some error"),
+			},
+			DoLazy(func() (res Action) {
+				return ActionList{
+					doRecordPath("3"),
+				}
+			}),
+			nil,
+		),
+		nil,
+		nil,
+		doRecordPath("4"),
+	}
+
+	var buf bytes.Buffer
+	o := DummyOutput{}
+	comm := DummyCommunicator{}
+	res := DoSendingOutputToWriter(&actions, &buf).Apply(o, comm, false)
+	if IsError(res) {
+		t.Fatalf("Error: error detected: %s", res)
+	}
+	if path != expected {
+		t.Fatalf("Error: unexpected contents: %q, expected: %q", path, expected)
+	}
 }

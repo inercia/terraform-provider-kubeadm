@@ -74,7 +74,7 @@ func applyFn(ctx context.Context) error {
 	role := strings.TrimSpace(strings.ToLower(d.Get("role").(string)))
 	log.Printf("[DEBUG] [KUBEADM] will join %q, with role %q", join, role)
 
-	var action ssh.Applyer
+	var action ssh.Action
 	if len(join) == 0 {
 		switch role {
 		case "worker":
@@ -100,25 +100,26 @@ func applyFn(ctx context.Context) error {
 }
 
 // doDeleteLocalKubeconfig deletes the current, local kubeconfig, doing a backup before
-func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Applyer {
+func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Action {
 	kubeconfig := getKubeconfig(d)
 	kubeconfigBak := kubeconfig + ".bak"
 
 	return ssh.DoIf(
 		ssh.CheckLocalFileExists(kubeconfig),
-		ssh.DoComposed(
+		ssh.ActionList{
 			ssh.DoMessage("Removing local kubeconfig (with backup)"),
-			ssh.DoMoveLocalFile(kubeconfig, kubeconfigBak)),
+			ssh.DoMoveLocalFile(kubeconfig, kubeconfigBak),
+		},
 	)
 }
 
 // doDownloadKubeconfig downloads a kubeconfig from the remote master
-func doDownloadKubeconfig(d *schema.ResourceData) ssh.Applyer {
+func doDownloadKubeconfig(d *schema.ResourceData) ssh.Action {
 	kubeconfig := getKubeconfig(d)
 	return ssh.DoDownloadFile(ssh.DefAdminKubeconfig, kubeconfig)
 }
 
-func doCheckKubeconfigIsAlive(d *schema.ResourceData) ssh.Applyer {
+func doCheckKubeconfigIsAlive(d *schema.ResourceData) ssh.Action {
 	return ssh.DoIfElse(
 		checkKubeconfigAlive(d),
 		ssh.DoMessageInfo("the API server is accessible from here (with the current kubeconfig)"),

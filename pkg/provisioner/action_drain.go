@@ -22,7 +22,7 @@ import (
 )
 
 // doDrainNode drains a node
-func doDrainNode(d *schema.ResourceData) ssh.Applyer {
+func doDrainNode(d *schema.ResourceData) ssh.Action {
 	var node *v1.Node
 
 	// TODO: get the Node.Name from the IP

@@ -96,172 +96,194 @@ func IsTempFilename(filename string) bool {
 }
 
 // doRealUploadFile uploads a file to a remote path
-func doRealUploadFile(contents io.Reader, remote string) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		dir := filepath.Dir(remote)
-		log.Printf("[DEBUG] [KUBEADM] Making sure directory '%s' is there", dir)
-		err := DoMkdir(dir).Apply(o, comm, useSudo)
-		if err != nil {
-			return err
-		}
+func doRealUploadFile(contents io.Reader, remote string) Action {
+	dir := filepath.Dir(remote)
+	removeCmd := fmt.Sprintf("rm -f %s", remote)
 
-		log.Printf("[DEBUG] [KUBEADM] removing previous file '%s'", remote)
-		cmd := fmt.Sprintf("rm -f %s", remote)
-		err = DoExec(cmd).Apply(o, comm, useSudo)
-		if err != nil {
-			return err
-		}
+	if len(remote) == 0 {
+		return DoAbort("empty destination for upload")
+	}
 
-		allContents, err := ioutil.ReadAll(contents)
-		if err != nil {
-			return err
-		}
+	actions := ActionList{
+		DoMessageDebug(fmt.Sprintf("Making sure directory '%s' is there", dir)),
+		DoMkdir(dir),
+		DoMessageDebug(fmt.Sprintf("Making sure '%s' does not exist", remote)),
+		DoExec(removeCmd),
+		ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+			allContents, err := ioutil.ReadAll(contents)
+			if err != nil {
+				return ActionError(err.Error())
+			}
 
-		// FIXME: for some unknown reason, we must do this conversion...
-		// passing rs.Contents to comm.Upload() leads to an empty file
-		c := strings.NewReader(string(allContents))
+			// FIXME: for some unknown reason, we must do this conversion...
+			// passing rs.Contents to comm.Upload() leads to an empty file
+			c := strings.NewReader(string(allContents))
 
-		log.Printf("[DEBUG] [KUBEADM] Uploading to %s:\n%s\n", remote, allContents)
-		return comm.Upload(remote, c)
-	})
+			log.Printf("[DEBUG] [KUBEADM] Uploading to %s:\n%s\n", remote, allContents)
+			if err = comm.Upload(remote, c); err != nil {
+				return ActionError(err.Error())
+			}
+
+			return nil
+		}),
+	}
+
+	return actions
 }
 
 // DoUploadReaderToFile uploads a file to a remote path, using a temporary file in /tmp
 // and then moving it to the final destination with `sudo`.
 // It is important to use a temporary file as uploads are performed as a regular
 // user, while the `mv` is done with `sudo`
-func DoUploadReaderToFile(contents io.Reader, remote string) Applyer {
+func DoUploadReaderToFile(contents io.Reader, remote string) Action {
 	if len(remote) == 0 {
-		return ApplyError("empty remote path in DoUploadReaderToFile()")
+		return ActionError("empty remote path in DoUploadReaderToFile()")
 	}
 
-	// do not create temporary files for files that are already temporary
+	// do not create temporary files for files that are already in the remote temporary directory
 	if IsTempFilename(remote) {
-		return DoComposed(
+		return ActionList{
 			DoMkdir(filepath.Dir(remote)),
-			doRealUploadFile(contents, remote))
-	}
-
-	tmpPath, err := GetTempFilename()
-	if err != nil {
-		panic(err)
+			doRealUploadFile(contents, remote),
+		}
 	}
 
 	// for regular files, upload to a temp file and then move the temp file to the final destination
 	// (uploading directly to destination could need root permissions, while we can "mv" with "sudo")
+	tmpPath, err := GetTempFilename()
+	if err != nil {
+		return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
+	}
+
 	return DoWithCleanup(
-		DoComposed(
+		ActionList{
 			DoMessageInfo(fmt.Sprintf("Uploading to %q", remote)),
 			DoMessageDebug(fmt.Sprintf("Uploading to temporary file %q", tmpPath)),
 			doRealUploadFile(contents, tmpPath),
 			DoMkdir(filepath.Dir(remote)),
 			DoMessageDebug(fmt.Sprintf("... and moving to final destination %s", remote)),
-			DoMoveFile(tmpPath, remote)),
+			DoMoveFile(tmpPath, remote),
+		},
 		DoDeleteFile(tmpPath),
 	)
 }
 
-func DoUploadFileToFile(local string, remote string) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		// note: we muyst do the "Open" inside the ApplyFunc, as we must delay the operation
+func DoUploadFileToFile(local string, remote string) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		// note: we muyst do the "Open" inside the ActionFunc, as we must delay the operation
 		// just in case the file does not exists yet
 		f, err := os.Open(local)
 		if err != nil {
-			return ApplyError(fmt.Sprintf("could not open local file %q for uploading to %q: %s", local, remote, err))
+			return ActionError(fmt.Sprintf("could not open local file %q for uploading to %q: %s", local, remote, err))
 		}
 
-		return DoUploadReaderToFile(f, remote).Apply(o, comm, useSudo)
+		return DoUploadReaderToFile(f, remote)
 	})
 }
 
 // DoDownloadFileToWriter downloads a file to a writer
-func DoDownloadFileToWriter(remote string, contents io.WriteCloser) Applyer {
-	return DoComposed(
-		DoMessageDebug(fmt.Sprintf("Dumping remote file %s", remote)),
-		ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-			enabled := false
-			var interceptor OutputFunc = func(s string) {
-				if strings.Contains(s, markStart) {
-					enabled = true
-					return
-				}
-				if strings.Contains(s, markEnd) {
-					enabled = false
-					return
-				}
+func DoDownloadFileToWriter(remote string, contents io.WriteCloser) Action {
+	// Terraform does not provide a mechanism for copying file from a remote host
+	// to the local machine
+	// so we must run a remote command that dumps the file Contents to stdout
+	// hopefully it will be terminal-friendly
+	// otherwise, we could use `cat <FILE> | base64 -`
+	command := fmt.Sprintf("sh -c \"echo '%s' && cat '%s' && echo '%s'\"", markStart, remote, markEnd)
 
-				if enabled {
-					contents.Write([]byte(s))
-					contents.Write([]byte{'\n'})
-				} else {
-					o.Output(s)
-				}
-			}
+	insideBlock := false
+	extraOutput := ""
+	var err error
 
-			// Terraform does not provide a mechanism for copying file from a remote host
-			// to the local machine
-			// so we must run a remote command that dumps the file Contents to stdout
-			// hopefully it will be terminal-friendly
-			// otherwise, we could use `cat <FILE> | base64 -`
-			command := fmt.Sprintf("sh -c \"echo '%s' && cat '%s' && echo '%s'\"",
-				markStart, remote, markEnd)
-			err := DoExec(command).Apply(interceptor, comm, useSudo)
-			if err != nil {
-				return err
-			}
-			contents.Close()
+	return DoWithCleanup(
+		ActionList{
+			DoMessageDebug(fmt.Sprintf("Dumping remote file %q", remote)),
+			DoSendingOutputToFun(
+				DoExec(command),
+				func(s string) {
+					if strings.Contains(s, markStart) {
+						insideBlock = true
+						return
+					}
+					if strings.Contains(s, markEnd) {
+						insideBlock = false
+						return
+					}
 
-			return nil
-		}))
+					if insideBlock {
+						if _, err = contents.Write([]byte(s)); err != nil {
+							return
+						}
+
+						if _, err = contents.Write([]byte{'\n'}); err != nil {
+							return
+						}
+					} else {
+						extraOutput += s
+					}
+				}),
+		},
+		ActionList{
+			DoMessage(extraOutput),
+			ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+				// close the file handler
+				_ = contents.Close()
+				return nil
+			}),
+		},
+	)
 }
 
 // DoWriteLocalFile writes some string in a local file
-func DoWriteLocalFile(filename string, contents string) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoWriteLocalFile(filename string, contents string) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		localFile, err := os.Create(filename)
 		if err != nil {
-			return err
+			return ActionError(fmt.Sprintf("cannot create %q: %s", filename, err.Error()))
 		}
-
 		if _, err := localFile.WriteString(contents); err != nil {
-			return err
+			return ActionError(fmt.Sprintf("cannot write %q: %s", filename, err.Error()))
 		}
-
 		return nil
 	})
 }
 
 // DoDeleteFile removes a file
-func DoDeleteFile(path string) Applyer {
-	return DoExec(fmt.Sprintf("rm -f %s", path))
+func DoDeleteFile(path string) Action {
+	if len(path) == 0 {
+		return nil // ignore empty files
+	}
+	return DoExec(fmt.Sprintf("rm -f %q", path))
 }
 
 // DoDeleteLocalFile removes a local file
-func DoDeleteLocalFile(path string) Applyer {
+func DoDeleteLocalFile(path string) Action {
+	if len(path) == 0 {
+		return nil // ignore empty files
+	}
 	return DoLocalExec("rm", "-f", path)
 }
 
 // DoMoveFile moves a file
-func DoMoveFile(src, dst string) Applyer {
+func DoMoveFile(src, dst string) Action {
 	return DoExec(fmt.Sprintf("mv -f %s %s", src, dst))
 }
 
 // DoMoveLocalFile moves a local file
-func DoMoveLocalFile(src, dst string) Applyer {
+func DoMoveLocalFile(src, dst string) Action {
 	return DoLocalExec("mv", "-f", src, dst)
 }
 
 // DoDownloadFile downloads a remote file to a local file
-func DoDownloadFile(remote, local string) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoDownloadFile(remote, local string) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		localFile, err := os.Create(local)
 		if err != nil {
-			return err
+			return ActionError(err.Error())
 		}
-
-		return DoComposed(
-			DoMessageInfo(fmt.Sprintf("Downloading remote file %s -> %s", remote, local)),
-			DoDownloadFileToWriter(remote, localFile)).Apply(o, comm, useSudo)
+		return ActionList{
+			DoMessageInfo(fmt.Sprintf("Downloading remote file %q -> %q", remote, local)),
+			DoDownloadFileToWriter(remote, localFile),
+		}
 	})
 }
 

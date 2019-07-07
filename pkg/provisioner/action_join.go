@@ -25,15 +25,15 @@ import (
 )
 
 // doKubeadmJoinWorker runs the `kubeadm join`
-func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Applyer {
+func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
 	_, joinConfigBytes, err := common.JoinConfigFromResourceData(d)
 	if err != nil {
-		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 	}
 
 	// check if we are joining the Control Plane: we must upload the certificates and
 	// use the '--control-plane' flag
-	actions := []ssh.Applyer{
+	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'"),
 		ssh.DoPrintIpAddresses(),
 		doKubeadm(d, "join", joinConfigBytes),
@@ -41,23 +41,23 @@ func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Applyer {
 		doPrintEtcdMembers(d),
 		doPrintNodes(d),
 	}
-	return ssh.DoComposed(actions...)
+	return actions
 }
 
 // doKubeadmJoinWorker runs the `kubeadm join`
-func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Applyer {
+func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 	joinConfig, _, err := common.JoinConfigFromResourceData(d)
 	if err != nil {
-		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 	}
 
 	// check that we have a stable control plane endpoint
 	initConfig, _, err := common.InitConfigFromResourceData(d)
 	if err != nil {
-		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 	}
 	if len(initConfig.ClusterConfiguration.ControlPlaneEndpoint) == 0 {
-		return ssh.ApplyError("Cannot create additional masters when the 'kubeadm.<name>.api.external' is empty")
+		return ssh.ActionError("Cannot create additional masters when the 'kubeadm.<name>.api.external' is empty")
 	}
 
 	// add a local Control-Plane section to the JoinConfiguration
@@ -65,7 +65,7 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Applyer {
 	if hp, ok := d.GetOk("listen"); ok {
 		h, p, err := common.SplitHostPort(hp.(string), common.DefAPIServerPort)
 		if err != nil {
-			return ssh.ApplyError(fmt.Sprintf("could not parse listen address %q: %s", hp.(string), err))
+			return ssh.ActionError(fmt.Sprintf("could not parse listen address %q: %s", hp.(string), err))
 		}
 		endpoint = kubeadmapi.APIEndpoint{AdvertiseAddress: h, BindPort: int32(p)}
 	} else {
@@ -75,11 +75,11 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Applyer {
 
 	joinConfigBytes, err := common.JoinConfigToYAML(joinConfig)
 	if err != nil {
-		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 	}
 
 	extraArgs := []string{}
-	actions := []ssh.Applyer{
+	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'"),
 		ssh.DoPrintIpAddresses(),
 		doUploadCerts(d),
@@ -88,5 +88,5 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Applyer {
 		doPrintEtcdMembers(d),
 		doPrintNodes(d),
 	}
-	return ssh.DoComposed(actions...)
+	return actions
 }

@@ -15,8 +15,8 @@
 package ssh
 
 import (
+	"bytes"
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 
@@ -40,32 +40,28 @@ func AllMatchesIPv4(s string, ipAddresses *[]string) error {
 }
 
 // DoGetIpAddresses gets the list of IP addresses
-func DoGetIpAddresses(ipAddresses *[]string) Applyer {
-	return DoComposed(
-		ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-			output := ""
-
-			var interceptor OutputFunc = func(s string) {
-				output = output + " " + s // we don't care about the format, only about the IPs
+func DoGetIpAddresses(ipAddresses *[]string) Action {
+	var buf bytes.Buffer
+	return ActionList{
+		DoMessageDebug(fmt.Sprintf("Getting list of IP addresses with %q", ipAddressesCmd)),
+		DoSendingOutputToWriter(DoExec(ipAddressesCmd), &buf),
+		ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+			// note: this must be inside of a function for being lazy-evaluated (when we have obtained the IPs)
+			if err := AllMatchesIPv4(buf.String(), ipAddresses); err != nil {
+				return ActionError(err.Error())
 			}
-
-			log.Printf("[DEBUG] Getting list of IP addresses: '%s'", ipAddressesCmd)
-			if err := DoExec(ipAddressesCmd).Apply(interceptor, comm, useSudo); err != nil {
-				return err
-			}
-
-			return AllMatchesIPv4(output, ipAddresses)
-		}))
+			return nil
+		}),
+	}
 }
 
-func DoPrintIpAddresses() Applyer {
-	return DoComposed(
-		ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-			ipAddresses := []string{}
-			if err := DoGetIpAddresses(&ipAddresses).Apply(o, comm, useSudo); err != nil {
-				return err
-			}
-
-			return DoMessage(fmt.Sprintf("IP addresses detected by the kubeadm provisioner: %s", strings.Join(ipAddresses, ", "))).Apply(o, comm, useSudo)
-		}))
+func DoPrintIpAddresses() Action {
+	ipAddresses := []string{}
+	return ActionList{
+		DoGetIpAddresses(&ipAddresses),
+		ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+			// note: this must be inside of a function for being lazy-evaluated (when we have obtained the IPs)
+			return DoMessage(fmt.Sprintf("IP addresses detected by the kubeadm provisioner: %s", strings.Join(ipAddresses, ", ")))
+		}),
+	}
 }

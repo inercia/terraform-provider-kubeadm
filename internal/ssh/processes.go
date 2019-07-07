@@ -28,17 +28,19 @@ func CheckProcessRunning(process string) CheckerFunc {
 }
 
 // DoRestartService restart a systemctl service
-func DoRestartService(service string) Applyer {
-	return DoComposed(
+func DoRestartService(service string) Action {
+	return ActionList{
 		DoMessageInfo(fmt.Sprintf("Restarting service %s", service)),
-		DoExec(fmt.Sprintf("systemctl --no-pager restart '%s'", service)))
+		DoExec(fmt.Sprintf("systemctl --no-pager restart '%s'", service)),
+	}
 }
 
 // DoEnableService enables a systemctl service
-func DoEnableService(service string) Applyer {
-	return DoComposed(
+func DoEnableService(service string) Action {
+	return ActionList{
 		DoMessageInfo(fmt.Sprintf("Enabling service %s", service)),
-		DoExec(fmt.Sprintf("systemctl --no-pager enable '%s'", service)))
+		DoExec(fmt.Sprintf("systemctl --no-pager enable '%s'", service)),
+	}
 }
 
 // CheckServiceExists checks that service exists

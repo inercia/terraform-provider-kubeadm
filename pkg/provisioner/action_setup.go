@@ -56,10 +56,10 @@ func doKubeadmSetup(d *schema.ResourceData, o terraform.UIOutput, comm communica
 			code = string(contents)
 		}
 
-		return ssh.DoComposed(
+		return ssh.ActionList{
 			ssh.DoMessage(descr),
 			ssh.DoExecScript(strings.NewReader(code), defaultKubeadmSetup),
-		).Apply(o, comm, useSudo)
+		}
 	}
 	return nil
 }

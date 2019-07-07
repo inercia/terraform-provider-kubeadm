@@ -16,6 +16,7 @@ package ssh
 
 import (
 	"fmt"
+	"io"
 	"log"
 
 	"github.com/gookit/color"
@@ -23,104 +24,158 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 )
 
-// Applyer is an action that can be "applied"
-type Applyer interface {
-	Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error
-	Error() string
+// Action is an action that can be "applied"
+type Action interface {
+	error
+	Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action
 }
 
-// ApplyFunc is a function that can be converted to a `Applyer`
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+// ActionFunc is a function that can be converted to a `Action`
 //
-// ie: 	ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+// ie: 	ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
 // 			return nil
 // }),
-type ApplyFunc func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error
+type ActionFunc func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action
 
 // Apply applies an action
-func (f ApplyFunc) Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func (f ActionFunc) Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 	return f(o, comm, useSudo)
 }
 
-func (f ApplyFunc) Error() string {
+func (f ActionFunc) Error() string {
 	return ""
 }
 
-type ApplyError string
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+// ActionError is an error for an Action
+type ActionError string
 
 // Apply applies an action
-func (_ ApplyError) Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func (_ ActionError) Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 	return nil
 }
 
-func (s ApplyError) Error() string {
+func (s ActionError) Error() string {
 	return string(s)
 }
 
-// Apply applies a list of actions
-func Apply(actions []Applyer, o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-	for _, action := range actions {
-		if action != nil {
-			if e := action.Error(); e != "" {
-				return fmt.Errorf(e)
-			}
-		}
+func IsError(a Action) bool {
+	if a == nil {
+		return false
 	}
-	for _, action := range actions {
-		if action != nil {
-			if err := action.Apply(o, comm, useSudo); err != nil {
-				return err
+	t, ok := a.(ActionError)
+	if !ok {
+		return false
+	}
+	return t.Error() != ""
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+// ActionList is a list of Actions
+type ActionList []Action
+
+// Apply applies an action
+func (actions ActionList) Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+	localActions := actions[:]
+
+	// use a queue where we take and put things in the front
+	for len(localActions) > 0 {
+		// if some action is in the queue, just quit with that error
+		for _, action := range localActions {
+			if IsError(action) {
+				return action
 			}
 		}
+
+		// otherwise, consume from the queue: pop the first element
+		cur := localActions[0]
+		localActions = localActions[1:]
+
+		// if it nil, pass to the next element
+		if cur == nil {
+			continue
+		}
+
+		// otherwise, run the action
+		res := cur.Apply(o, comm, useSudo)
+
+		// ... and add the resulting actions in front of the queue
+		localActions = append([]Action{res}, localActions...)
 	}
 	return nil
 }
 
+func (actions ActionList) Error() string {
+	for _, action := range actions {
+		if IsError(action) {
+			return action.Error()
+		}
+	}
+	return ""
+}
+
+func DoLazy(g func() Action) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		return g()
+	})
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 // DoNothing is a dummy action
-func DoNothing() ApplyFunc {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoNothing() Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		return nil
 	})
 }
 
-func DoMessageWithColor(msg string, c color.Color) ApplyFunc {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		o.Output(c.Render(msg))
+func DoMessageRaw(msg string) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		o.Output(msg)
 		return nil
 	})
+}
+
+func DoMessageWithColor(msg string, c color.Color) Action {
+	return DoMessageRaw(c.Render(msg))
 }
 
 // DoMessage is a dummy action that just prints a message
-func DoMessage(msg string) ApplyFunc {
+func DoMessage(msg string) Action {
 	return DoMessageWithColor(msg, color.FgLightGreen)
 }
 
-func DoMessageWarn(msg string) ApplyFunc {
+func DoMessageWarn(msg string) Action {
 	return DoMessageWithColor(fmt.Sprintf("WARNING: %s", msg), color.FgLightGreen)
 }
 
-func DoMessageInfo(msg string) ApplyFunc {
+func DoMessageInfo(msg string) Action {
 	return DoMessageWithColor(msg, color.FgLightGreen)
 }
 
 // DoMessageDebug prints a debug message
-func DoMessageDebug(msg string) ApplyFunc {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoMessageDebug(msg string) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		log.Printf(color.FgLightYellow.Render(fmt.Sprintf("[DEBUG] [KUBEADM] %s", msg)))
 		return nil
 	})
 }
 
 // DoAbort is an action that prints an error message and exits
-func DoAbort(msg string) ApplyFunc {
+func DoAbort(msg string) Action {
 	coloredMsg := color.Style{color.FgRed, color.OpBold}.Render(fmt.Sprintf("FATAL: %s", msg))
 
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		o.Output(coloredMsg)
-		return fmt.Errorf(msg)
+		return ActionError(msg)
 	})
 }
 
-// ///////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 // Checker implements a Check method
 type Checker interface {
@@ -135,27 +190,28 @@ func (f CheckerFunc) Check(o terraform.UIOutput, comm communicator.Communicator,
 	return f(o, comm, useSudo)
 }
 
-// DoComposed composes from a list of actions a single ApplyFunc
-func DoComposed(actions ...Applyer) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		return Apply(actions, o, comm, useSudo)
-	})
-}
-
 // DoWithCleanup runs some action and, despite the result, runs the cleanup function
-func DoWithCleanup(action, cleanup Applyer) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoWithCleanup(action, cleanup Action) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		if action == nil || IsError(action) {
+			return action
+		}
 		res := action.Apply(o, comm, useSudo)
-		_ = cleanup.Apply(o, comm, useSudo)
+		if cleanup != nil || !IsError(cleanup) {
+			_ = cleanup.Apply(o, comm, useSudo)
+		}
 		return res
 	})
 }
 
 // DoWithError runs some action and, if some error happens, runs the exception
-func DoWithException(action, exc Applyer) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoWithException(action, exc Action) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		if action == nil || IsError(action) {
+			return action
+		}
 		res := action.Apply(o, comm, useSudo)
-		if res != nil {
+		if IsError(res) && exc != nil {
 			_ = exc.Apply(o, comm, useSudo)
 		}
 		return res
@@ -163,42 +219,91 @@ func DoWithException(action, exc Applyer) Applyer {
 }
 
 // DoIf runs an action iff the condition is true
-func DoIf(condition Checker, action Applyer) ApplyFunc {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoIf(condition Checker, action Action) ActionFunc {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		res, err := condition.Check(o, comm, useSudo)
 		if err != nil {
-			return err
+			return ActionError(err.Error())
 		}
-
 		if res {
-			return action.Apply(o, comm, useSudo)
+			if action != nil {
+				return action.Apply(o, comm, useSudo)
+			}
 		}
 		return nil
 	})
 }
 
 // DoIfElse runs an action iff the condition is true, otherwise runs a different action
-func DoIfElse(condition Checker, actionIf Applyer, actionElse Applyer) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoIfElse(condition Checker, actionIf Action, actionElse Action) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		res, err := condition.Check(o, comm, useSudo)
 		if err != nil {
-			return err
+			return ActionError(fmt.Sprintf("could not check condition: %s", err.Error()))
 		}
 
 		if res {
-			return actionIf.Apply(o, comm, useSudo)
+			if actionIf != nil {
+				return actionIf.Apply(o, comm, useSudo)
+			}
+			return nil
 		}
-		return actionElse.Apply(o, comm, useSudo)
+		if actionElse != nil {
+			return actionElse.Apply(o, comm, useSudo)
+		}
+		return nil
 	})
 }
 
-// DoTry tries to run an action, but it is ok if the action fails
-func DoTry(actions ...Applyer) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
-		for _, action := range actions {
-			_ = action.Apply(o, comm, useSudo)
+// DoTry tries to run some actions, but it is ok if some action fails
+func DoTry(actions ...Action) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		// use a queue where we take and put things in the front
+		localActions := actions[:]
+		for len(localActions) > 0 {
+			// consume from the queue: pop the first element
+			cur := localActions[0]
+			localActions = localActions[1:]
+
+			// if it is nil/error, pass to the next element
+			if cur == nil {
+				continue
+			}
+
+			// replace error by warnings
+			if IsError(cur) {
+				cur = DoMessageWarn(fmt.Sprintf("%s (IGNORED)", cur.Error()))
+			}
+
+			// otherwise, run the action
+			res := cur.Apply(o, comm, useSudo)
+
+			// ... and add the resulting actions in front of the queue
+			localActions = append([]Action{res}, localActions...)
 		}
 		return nil
+	})
+}
+
+func DoSendingOutputToFun(action Action, interceptor OutputFunc) Action {
+	if action == nil || IsError(action) {
+		return action
+	}
+	return ActionFunc(func(_ terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		return action.Apply(interceptor, comm, useSudo)
+	})
+}
+
+func DoSendingOutputToWriter(action Action, writer io.Writer) Action {
+	return DoSendingOutputToFun(action, func(s string) {
+		_, _ = writer.Write([]byte(s))
+	})
+}
+
+// CheckExpr returns the result of the boolean expression
+func CheckExpr(expr bool) CheckerFunc {
+	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+		return expr, nil
 	})
 }
 
