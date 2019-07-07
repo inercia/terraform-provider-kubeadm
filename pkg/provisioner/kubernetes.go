@@ -23,37 +23,37 @@ import (
 )
 
 // doLocalKubectl runs a local kubectl with the kubeconfig specified in the schema
-func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.Applyer {
+func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.Action {
 	kubeconfig := getKubeconfig(d)
 	return ssh.DoLocalKubectl(kubeconfig, args...)
 }
 
 // doRemoteKubectl runs a remote kubectl with the kubeconfig specified in the schema
-func doRemoteKubectl(d *schema.ResourceData, args ...string) ssh.Applyer {
+func doRemoteKubectl(d *schema.ResourceData, args ...string) ssh.Action {
 	kubeconfig := getKubeconfig(d)
 	return ssh.DoLocalKubectl(kubeconfig, args...)
 }
 
 // DoLocalKubectlApply applies some manifests with a local kubectl with the kubeconfig specified in the schema
-func doLocalKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.Applyer {
+func doLocalKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.Action {
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
-		return ssh.ApplyError("no 'config_path' has been specified")
+		return ssh.ActionError("no 'config_path' has been specified")
 	}
 	return ssh.DoLocalKubectlApply(kubeconfig, manifests)
 }
 
 // DoRemoteKubectlApply applies some manifests with a remote kubectl, uploading the kubeconfig specified in the schema
-func doRemoteKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.Applyer {
+func doRemoteKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.Action {
 	kubeconfig := getKubeconfig(d)
 	if kubeconfig == "" {
-		return ssh.ApplyError("no 'config_path' has been specified")
+		return ssh.ActionError("no 'config_path' has been specified")
 	}
 	return ssh.DoRemoteKubectlApply(kubeconfig, manifests)
 }
 
 // doRefreshToken uses the kubeconfig for connecting to the API server and refreshing the token
-func doRefreshToken(d *schema.ResourceData) ssh.Applyer {
+func doRefreshToken(d *schema.ResourceData) ssh.Action {
 	//token, ok := d.GetOk("config.token")
 	//if !ok {
 	//	panic("there should be a token")
@@ -61,7 +61,7 @@ func doRefreshToken(d *schema.ResourceData) ssh.Applyer {
 
 	return ssh.DoIfElse(
 		checkKubeconfigAlive(d),
-		ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+		ssh.ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) ssh.Action {
 			// TODO: we should (re)create the token by ssh'ing and doing a 'kubeadm token create'
 			return nil
 		}),
@@ -80,8 +80,8 @@ func checkKubeconfigAlive(d *schema.ResourceData) ssh.CheckerFunc {
 	return ssh.CheckAnd(
 		checkKubeconfigExists(d),
 		ssh.CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-			if err := ssh.DoRemoteKubectl(kubeconfig, "cluster-info").Apply(o, comm, useSudo); err != nil {
-				return false, nil
+			if res := ssh.DoRemoteKubectl(kubeconfig, "cluster-info").Apply(o, comm, useSudo); ssh.IsError(res) {
+				return false, nil // if some error happens, just return "false"
 			}
 			return true, nil
 		}))

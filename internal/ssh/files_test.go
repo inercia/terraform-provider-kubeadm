@@ -15,7 +15,10 @@
 package ssh
 
 import (
+	"os"
 	"testing"
+
+	"github.com/hashicorp/terraform/communicator/remote"
 )
 
 func TestTempFilenames(t *testing.T) {
@@ -50,5 +53,59 @@ func TestTempFilenames(t *testing.T) {
 		if isTemp != testCase.res {
 			t.Fatalf("Error: %q detected as temp=%t when we expected temp=%t", testCase.name, isTemp, testCase.res)
 		}
+	}
+}
+
+func TestCheckLocalFileExists(t *testing.T) {
+	o := DummyOutput{}
+	comm := DummyCommunicator{}
+
+	name1, err := GetTempFilename()
+	if err != nil {
+		t.Fatalf("Error: %s", err)
+	}
+	defer DoDeleteLocalFile(name1).Apply(o, comm, false)
+
+	f, err := os.Create(name1)
+	if err != nil {
+		t.Fatalf("Error: %s", err)
+	}
+	_, err = f.Write([]byte("something"))
+	if err != nil {
+		t.Fatalf("Error: %s", err)
+	}
+
+	exists, err := CheckLocalFileExists(name1).Check(o, comm, false)
+	if err != nil {
+		t.Fatalf("Error: %s", err)
+	}
+	if !exists {
+		t.Fatalf("Error: unexpected result for exists: %t", exists)
+	}
+}
+
+func TestCheckFileExists(t *testing.T) {
+	o := DummyOutput{}
+	comm := DummyCommunicator{}
+
+	name1, err := GetTempFilename()
+	if err != nil {
+		t.Fatalf("Error: %s", err)
+	}
+	defer DoDeleteLocalFile(name1).Apply(o, comm, false)
+
+	// overwrite the startFunction, returning CONDITION_SUCCEEDED
+	comm.startFunction = func(cmd *remote.Cmd) error {
+		cmd.Init()
+		cmd.Stdout.Write([]byte("CONDITION_SUCCEEDED"))
+		cmd.SetExitStatus(0, nil)
+		return nil
+	}
+	exists, err := CheckFileExists(name1).Check(o, comm, false)
+	if err != nil {
+		t.Fatalf("Error: %s", err)
+	}
+	if !exists {
+		t.Fatalf("Error: unexpected result for exists: %t", exists)
 	}
 }

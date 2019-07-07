@@ -23,8 +23,8 @@ import (
 )
 
 // doPrepareCRI preparse the CRI in the target node
-func doPrepareCRI() ssh.Applyer {
-	return ssh.DoComposed(
+func doPrepareCRI() ssh.Action {
+	return ssh.ActionList{
 		ssh.DoUploadReaderToFile(strings.NewReader(assets.CNIDefConfCode), common.DefCniLookbackConfPath),
 		// we must reload the containers runtime engine after changing the CNI configuration
 		ssh.DoIf(
@@ -33,5 +33,5 @@ func doPrepareCRI() ssh.Applyer {
 		ssh.DoIf(
 			ssh.CheckServiceExists("docker.service"),
 			ssh.DoRestartService("docker.service")),
-	)
+	}
 }

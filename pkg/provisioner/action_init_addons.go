@@ -25,14 +25,14 @@ import (
 )
 
 // doLoadHelm loads Helm (if enabled)
-func doLoadHelm(d *schema.ResourceData) ssh.Applyer {
+func doLoadHelm(d *schema.ResourceData) ssh.Action {
 	opt, ok := d.GetOk("config.helm_enabled")
 	if !ok {
 		return ssh.DoMessageWarn("Helm will not be loaded")
 	}
 	enabled, err := strconv.ParseBool(opt.(string))
 	if err != nil {
-		return ssh.ApplyError("could not parse helm_enabled in provisioner")
+		return ssh.ActionError("could not parse helm_enabled in provisioner")
 	}
 	if !enabled {
 		return ssh.DoMessageWarn("Helm will not be loaded")
@@ -40,20 +40,21 @@ func doLoadHelm(d *schema.ResourceData) ssh.Applyer {
 	if common.DefHelmManifest == "" {
 		return ssh.DoMessageWarn("no manifest for Helm: Helm will not be loaded")
 	}
-	return ssh.DoComposed(
+	return ssh.ActionList{
 		ssh.DoMessageInfo(fmt.Sprintf("Loading Helm from %q", common.DefHelmManifest)),
-		doRemoteKubectlApply(d, []ssh.Manifest{{URL: common.DefHelmManifest}}))
+		doRemoteKubectlApply(d, []ssh.Manifest{{URL: common.DefHelmManifest}}),
+	}
 }
 
 // doLoadDashboard loads the dashboard (if enabled)
-func doLoadDashboard(d *schema.ResourceData) ssh.Applyer {
+func doLoadDashboard(d *schema.ResourceData) ssh.Action {
 	opt, ok := d.GetOk("config.dashboard_enabled")
 	if !ok {
 		return ssh.DoMessageWarn("the Dashboard will not be loaded")
 	}
 	enabled, err := strconv.ParseBool(opt.(string))
 	if err != nil {
-		return ssh.ApplyError("could not parse dashboard_enabled in provisioner")
+		return ssh.ActionError("could not parse dashboard_enabled in provisioner")
 	}
 	if !enabled {
 		return ssh.DoMessageWarn("The Dashboard will not be loaded")
@@ -61,16 +62,17 @@ func doLoadDashboard(d *schema.ResourceData) ssh.Applyer {
 	if common.DefDashboardManifest == "" {
 		return ssh.DoMessageWarn("No manifest for Dashboard: the Dashboard will not be loaded")
 	}
-	return ssh.DoComposed(
+	return ssh.ActionList{
 		ssh.DoMessageInfo(fmt.Sprintf("Loading Dashboard from %q", common.DefDashboardManifest)),
-		doRemoteKubectlApply(d, []ssh.Manifest{{URL: common.DefDashboardManifest}}))
+		doRemoteKubectlApply(d, []ssh.Manifest{{URL: common.DefDashboardManifest}}),
+	}
 }
 
 // doLoadManifests loads some extra manifests
-func doLoadManifests(d *schema.ResourceData) ssh.Applyer {
+func doLoadManifests(d *schema.ResourceData) ssh.Action {
 	manifestsOpt, ok := d.GetOk("manifests")
 	if !ok {
-		return ssh.DoNothing()
+		return nil
 	}
 	manifests := []ssh.Manifest{}
 	for _, v := range manifestsOpt.([]interface{}) {
@@ -79,7 +81,8 @@ func doLoadManifests(d *schema.ResourceData) ssh.Applyer {
 	if len(manifests) == 0 {
 		return ssh.DoMessageWarn("Could not find valid manifests to load")
 	}
-	return ssh.DoComposed(
+	return ssh.ActionList{
 		ssh.DoMessageInfo(fmt.Sprintf("Loading %d extra manifests", len(manifests))),
-		doRemoteKubectlApply(d, manifests))
+		doRemoteKubectlApply(d, manifests),
+	}
 }

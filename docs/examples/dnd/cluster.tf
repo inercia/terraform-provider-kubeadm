@@ -56,6 +56,8 @@ EOF
 }
 
 # start a haproxy instance as a load balancer for all the masters
+# this is not completely safe, as we start the haproxy before all the masters are up,
+# so `kubeadm init` can run the probe in the wrong backend.
 resource "docker_container" "haproxy" {
   name                  = "${var.name_prefix}haproxy"
   image                 = "haproxy"

@@ -15,6 +15,7 @@
 package ssh
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -34,16 +35,21 @@ const (
 )
 
 // DoExecList is a runner for a list of remote commands
-func DoExecList(commands []string) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoExecList(commands []string) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		var ae ActionError
 		for _, command := range commands {
-			var err error
+			if len(command) == 0 {
+				continue
+			}
+
 			if useSudo {
 				command = "sudo " + sudoArgs + " " + command
 			}
 
 			log.Printf("[DEBUG] [KUBEADM] running '%s'", command)
 
+			// TODO: reuse the same pipe's and stuff between commands
 			outR, outW := io.Pipe()
 			errR, errW := io.Pipe()
 			outDoneCh := make(chan struct{})
@@ -67,13 +73,13 @@ func DoExecList(commands []string) Applyer {
 			}
 
 			if err := comm.Start(cmd); err != nil {
-				return fmt.Errorf("Error executing command %q: %v", cmd.Command, err)
+				return ActionError(fmt.Sprintf("Error executing command %q: %v", cmd.Command, err))
 			}
 			waitResult := cmd.Wait()
 			if waitResult != nil {
 				cmdError, _ := waitResult.(*remote.ExitError)
 				if cmdError.ExitStatus != 0 {
-					err = fmt.Errorf("Command '%q' exited with non-zero exit status: %d", cmdError.Command, cmdError.ExitStatus)
+					ae = ActionError(fmt.Sprintf("Command '%q' exited with non-zero exit status: %d", cmdError.Command, cmdError.ExitStatus))
 				}
 			}
 
@@ -81,36 +87,35 @@ func DoExecList(commands []string) Applyer {
 			errW.Close()
 			<-outDoneCh
 			<-errDoneCh
-			return err
 		}
-		return nil
+		return ae
 	})
 }
 
 // DoExec is a runner for remote Commands
-func DoExec(command string) Applyer {
+func DoExec(command string) Action {
 	return DoExecList([]string{command})
 }
 
 // DoExecScript is a runner for a script (with some random path in /tmp)
-func DoExecScript(contents io.Reader, prefix string) Applyer {
+func DoExecScript(contents io.Reader, prefix string) Action {
 	path, err := GetTempFilename()
 	if err != nil {
-		panic(err)
+		return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 	}
 
 	return DoWithCleanup(
-		DoComposed(
+		ActionList{
 			doRealUploadFile(contents, path),
 			DoExec(fmt.Sprintf("sh %s", path)),
-		),
+		},
 		DoDeleteFile(path),
 	)
 }
 
 // DoLocalExec executes a local command
-func DoLocalExec(command string, args ...string) Applyer {
-	return ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func DoLocalExec(command string, args ...string) Action {
+	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		fullCmd := fmt.Sprintf("%s %s", command, strings.Join(args, " "))
 		o.Output(fmt.Sprintf("Running local command %q...", fullCmd))
 
@@ -144,7 +149,7 @@ func DoLocalExec(command string, args ...string) Applyer {
 		if status.Exit != 0 {
 			o.Output(fmt.Sprintf("Error waiting for %q: %s [%d]",
 				command, status.Error.Error(), status.Exit))
-			return status.Error
+			return ActionError(status.Error.Error())
 		}
 
 		return nil
@@ -153,28 +158,26 @@ func DoLocalExec(command string, args ...string) Applyer {
 
 // CheckExec checks if bash command succeedes or not
 func CheckExec(cmd string) CheckerFunc {
+	const success = "CONDITION_SUCCEEDED"
+	const failure = "CONDITION_FAILED"
+	command := fmt.Sprintf("%s && echo '%s' || echo '%s'", cmd, success, failure)
+
 	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-		success := "CONDITION_SUCCEEDED"
-		failure := "CONDITION_FAILED"
-		found := false
-		var interceptor OutputFunc = func(s string) {
-			// check only the `success` appears, as some other error/log message about
-			// the command can contain both...
-			if strings.Contains(s, success) && !strings.Contains(s, failure) {
-				log.Printf("[DEBUG] Condition succeeded: '%s' found in '%s'", success, s)
-				found = true
-			}
+		log.Printf("[DEBUG] [KUBEADM] Checking condition: '%s'", cmd)
+		var buf bytes.Buffer
+		if res := DoSendingOutputToWriter(DoExec(command), &buf).Apply(o, comm, useSudo); IsError(res) {
+			log.Printf("[DEBUG] [KUBEADM] ERROR: check failed: %s", res)
+			return false, res
 		}
 
-		command := fmt.Sprintf("%s && echo '%s' || echo '%s'",
-			cmd, success, failure)
-
-		log.Printf("[DEBUG] Checking condition: '%s'", cmd)
-		err := DoExec(command).Apply(interceptor, comm, useSudo)
-		if err != nil {
-			return false, err
+		// check _only_ the `success` appears, as some other error/log message about
+		// the command can contain both...
+		s := buf.String()
+		if strings.Contains(s, success) && !strings.Contains(s, failure) {
+			log.Printf("[DEBUG] [KUBEADM] Condition %q succeeded: %q found", cmd, success)
+			return true, nil
 		}
-
-		return found, nil
+		log.Printf("[DEBUG] [KUBEADM] Condition %q failed", cmd)
+		return false, nil
 	})
 }

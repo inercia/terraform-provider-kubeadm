@@ -24,21 +24,21 @@ import (
 )
 
 // doKubeadmInit runs the `kubeadm init`
-func doKubeadmInit(d *schema.ResourceData) ssh.Applyer {
+func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 	_, initConfigBytes, err := common.InitConfigFromResourceData(d)
 	if err != nil {
-		return ssh.ApplyError(fmt.Sprintf("could not get a valid 'config' for init'ing: %s", err))
+		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for init'ing: %s", err))
 	}
 	extraArgs := []string{"--skip-token-print"}
 
-	actions := []ssh.Applyer{
+	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Initializing the cluster with 'kubadm init'"),
 		ssh.DoPrintIpAddresses(),
 		doDeleteLocalKubeconfig(d),
 		doUploadCerts(d),
 		ssh.DoIfElse(
 			ssh.CheckFileExists(ssh.DefAdminKubeconfig),
-			ssh.DoMessage("admin.conf already exists: skipping `kubeadm init`"),
+			ssh.DoMessageWarn("admin.conf already exists: skipping `kubeadm init`"),
 			doKubeadm(d, "init", initConfigBytes, extraArgs...),
 		),
 		doDownloadKubeconfig(d),
@@ -50,6 +50,5 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Applyer {
 		doLoadHelm(d),
 		doLoadManifests(d),
 	}
-
-	return ssh.DoComposed(actions...)
+	return actions
 }

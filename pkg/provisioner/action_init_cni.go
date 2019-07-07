@@ -26,16 +26,16 @@ import (
 )
 
 // doLoadCNI loads the CNI driver
-func doLoadCNI(d *schema.ResourceData) ssh.Applyer {
+func doLoadCNI(d *schema.ResourceData) ssh.Action {
 	manifest := ssh.Manifest{}
-	message := ssh.DoNothing()
+	var message ssh.Action
 
 	if cniPluginManifestOpt, ok := d.GetOk("config.cni_plugin_manifest"); ok {
 		cniPluginManifest := strings.TrimSpace(cniPluginManifestOpt.(string))
 		if len(cniPluginManifest) > 0 {
 			manifest = ssh.NewManifest(cniPluginManifest)
 			if manifest.Inline != "" {
-				return ssh.ApplyError(fmt.Sprintf("%q not recognized as URL or local filename", cniPluginManifest))
+				return ssh.ActionError(fmt.Sprintf("%q not recognized as URL or local filename", cniPluginManifest))
 			}
 			message = ssh.DoMessageInfo(fmt.Sprintf("Loading CNI plugin from %q", cniPluginManifest))
 		}
@@ -49,7 +49,7 @@ func doLoadCNI(d *schema.ResourceData) ssh.Applyer {
 					config := d.Get("config").(map[string]interface{})
 					replaced, err := common.ReplaceInTemplate(template, config)
 					if err != nil {
-						return ssh.ApplyError(fmt.Sprintf("could not replace variables in manifest for %q: %s", cniPlugin, err))
+						return ssh.ActionError(fmt.Sprintf("could not replace variables in manifest for %q: %s", cniPlugin, err))
 					}
 					manifest.Inline = replaced
 				} else {
@@ -64,7 +64,8 @@ func doLoadCNI(d *schema.ResourceData) ssh.Applyer {
 		return ssh.DoMessageWarn("no CNI driver is going to be loaded")
 	}
 
-	return ssh.DoComposed(
+	return ssh.ActionList{
 		message,
-		doRemoteKubectlApply(d, []ssh.Manifest{manifest}))
+		doRemoteKubectlApply(d, []ssh.Manifest{manifest}),
+	}
 }

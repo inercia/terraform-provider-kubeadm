@@ -36,7 +36,7 @@ const (
 	dockerGetEtcdContainer = "docker ps --filter name=^/k8s_etcd_etcd -q"
 
 	// common arguments for etcdctl
-	// note: these arguments are valid when using ETCDCTL_API=3
+	// note: these arguments are valid IFF using "ETCDCTL_API=3" is defined in the environment
 	argsCommon = "--cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --cacert=/etc/kubernetes/pki/etcd/ca.crt"
 
 	// command for getting the endpoints
@@ -122,7 +122,7 @@ func getEtcdContainer(o terraform.UIOutput, comm communicator.Communicator, useS
 		output = append(output, s)
 	}
 
-	if err := ssh.DoExec(dockerGetEtcdContainer).Apply(interceptor, comm, useSudo); err != nil {
+	if err := ssh.DoExec(dockerGetEtcdContainer).Apply(interceptor, comm, useSudo); ssh.IsError(err) {
 		return "", err
 	}
 
@@ -174,8 +174,8 @@ func runEtcdctlSubcommand(o terraform.UIOutput, comm communicator.Communicator, 
 	}
 
 	log.Printf("[DEBUG] Running command in etcd container: '%s'", dockerCommand)
-	if err := ssh.DoExec(dockerCommand).Apply(interceptor, comm, useSudo); err != nil {
-		return nil, err
+	if res := ssh.DoExec(dockerCommand).Apply(interceptor, comm, useSudo); ssh.IsError(res) {
+		return nil, res
 	}
 
 	return output, nil
@@ -208,30 +208,34 @@ func getMemberList(o terraform.UIOutput, comm communicator.Communicator, useSudo
 }
 
 // doPrintEtcdMembers prints the list of etcd members in the etcd cluster
-func doPrintEtcdMembers(d *schema.ResourceData) ssh.Applyer {
-	return ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func doPrintEtcdMembers(d *schema.ResourceData) ssh.Action {
+	return ssh.ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) ssh.Action {
 		members, err := getMemberList(o, comm, useSudo)
 		if err != nil {
 			if err == ErrNoEtcdContainer {
-				return ssh.DoMessageInfo("etcd is not running in this node").Apply(o, comm, useSudo)
+				return ssh.DoMessageInfo("etcd is not running in this node")
 			} else {
 				return nil
 			}
 		}
 		if len(members) == 0 {
-			return ssh.DoMessageWarn("Could not get list of etcd members").Apply(o, comm, useSudo)
+			return ssh.DoMessageWarn("Could not get list of etcd members")
 		}
 
-		for _, member := range members {
-			_ = ssh.DoMessage(fmt.Sprintf("etcd member '%s' at '%s'", member.ID, member.ClienAddrs)).Apply(o, comm, useSudo)
+		actions := ssh.ActionList{
+			ssh.DoMessage("etcd members:"),
 		}
-		return nil
+		for _, member := range members {
+			actions = append(actions,
+				ssh.DoMessage(fmt.Sprintf("- '%s' at '%s'", member.ID, member.ClienAddrs)))
+		}
+		return actions
 	})
 }
 
 // doRemoveIfMember removes this node from the etcd cluster iff it was a member
-func doRemoveIfMember(d *schema.ResourceData) ssh.Applyer {
-	return ssh.ApplyFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func doRemoveIfMember(d *schema.ResourceData) ssh.Action {
+	return ssh.ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) ssh.Action {
 		// TODO: check if there is a etcd container running in this machine
 		// TODO: get the list of endpoints
 		// TODO: get the endpoint that has 127.0.0.1 in the endpoint URL
