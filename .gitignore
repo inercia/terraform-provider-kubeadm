@@ -8,3 +8,6 @@ terraform.tfstate*
 *.local
 *.bak
 crash.log
+
+.terraform.tfstate.lock.info
+docker_mirror_*
