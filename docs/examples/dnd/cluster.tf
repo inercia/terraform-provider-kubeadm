@@ -1,10 +1,12 @@
 provider "docker" {
+  version = "~> 2.0.0"
   host = "${var.daemon}"
 }
 
 locals {
   gateway_ip = "${cidrhost(var.nodes_network, 1)}"
   haproxy_ip = "${cidrhost(var.nodes_network, 2)}"
+  cache_ip   = "${cidrhost(var.nodes_network, 3)}"
 }
 
 resource "docker_network" "network" {
@@ -18,12 +20,81 @@ resource "docker_network" "network" {
 }
 
 ##########################
+# docker registry cache
+##########################
+
+# start a docker registry cache
+# https://github.com/rpardini/docker-registry-proxy
+resource "docker_container" "cache" {
+  name                  = "${var.name_prefix}cache"
+  image                 = "rpardini/docker-registry-proxy:0.2.4"
+  hostname              = "${var.name_prefix}cache"
+  start                 = true
+  privileged            = true
+  must_run              = true
+  restart               = "no"
+  destroy_grace_seconds = 60
+  network_mode          = "bridge"
+  domainname            = "${var.domain_name}"
+
+  ports {
+    internal = 3128
+    external = 3128
+  }
+
+  networks_advanced {
+    name         = "${docker_network.network.name}"
+    ipv4_address = "${local.cache_ip}"
+  }
+
+  host {
+    host = "cache.local"
+    ip   = "${local.cache_ip}"
+  }
+
+  labels {
+    type        = "cache"
+    environment = "${var.name_prefix}"
+  }
+
+  volumes {
+    host_path      = "${path.cwd}/docker_mirror_cache"
+    container_path = "/docker_mirror_cache"
+  }
+
+  volumes {
+    host_path      = "${path.cwd}/docker_mirror_certs"
+    container_path = "/ca"
+  }
+
+  env = [
+    "REGISTRIES=k8s.gcr.io gcr.io quay.io",
+  ]
+}
+
+output "cache" {
+  value = [
+    "${docker_container.cache.ip_address}",
+  ]
+}
+
+# will use this dropin in the masters/workers
+data "template_file" "docker_dropin_cache" {
+  template = <<EOF
+[Service]
+Environment="HTTP_PROXY=http://${docker_container.cache.ip_address}:3128/"
+Environment="HTTPS_PROXY=http://${docker_container.cache.ip_address}:3128/"
+EOF
+}
+
+##########################
 # haproxy
 ##########################
 
 # generate one haproxy backend line per master
 data "template_file" "haproxy_backends" {
   count = "${var.master_count}"
+
   template = <<EOF
   server $${fqdn} $${ip}:6443 check check-ssl verify none
 EOF
@@ -77,7 +148,7 @@ resource "docker_container" "haproxy" {
 
   host {
     host = "haproxy.local"
-    ip = "${local.haproxy_ip}"
+    ip   = "${local.haproxy_ip}"
   }
 
   labels {
@@ -102,7 +173,6 @@ output "lb" {
     "${docker_container.haproxy.ip_address}",
   ]
 }
-
 
 ##########################
 # Kubeadm #
@@ -177,6 +247,7 @@ resource "docker_container" "master" {
 
   depends_on = [
     "docker_container.haproxy",
+    "docker_container.cache",
     "null_resource.base_image",
   ]
 
@@ -187,7 +258,12 @@ resource "docker_container" "master" {
 
   host {
     host = "haproxy.local"
-    ip = "${local.haproxy_ip}"
+    ip   = "${local.haproxy_ip}"
+  }
+
+  upload {
+    content = "${data.template_file.docker_dropin_cache.rendered}"
+    file    = "/etc/systemd/system/docker.service.d/http-proxy.conf"
   }
 
   volumes {
@@ -201,6 +277,25 @@ resource "docker_container" "master" {
     host     = "${self.ip_address}"
     user     = "${var.ssh_user}"
     password = "${var.ssh_pass}"
+  }
+
+  # setup the Docker registry cache
+  provisioner "remote-exec" {
+    inline = [
+      # Get the CA certificate from the proxy and make it a trusted root.
+      # copy it to the OS-specifi directory: for OpenSUSE: /etc/pki/trust/anchors
+      "mkdir -p /etc/pki/trust/anchors/",
+
+      "curl http://${docker_container.cache.ip_address}:3128/ca.crt > /etc/pki/trust/anchors/docker_registry_proxy.crt",
+      "echo 'docker_registry_proxy.crt' >> /etc/ca-certificates.conf",
+      "update-ca-certificates --fresh",
+
+      # Reload systemd
+      "systemctl daemon-reload",
+
+      # Restart dockerd
+      "systemctl restart docker.service",
+    ]
   }
 
   provisioner "kubeadm" {
@@ -245,17 +340,23 @@ resource "docker_container" "worker" {
 
   depends_on = [
     "docker_container.haproxy",
+    "docker_container.cache",
     "docker_container.master",
   ]
 
   host {
     host = "haproxy.local"
-    ip = "${local.haproxy_ip}"
+    ip   = "${local.haproxy_ip}"
   }
 
   labels {
     type        = "worker"
     environment = "${var.name_prefix}"
+  }
+
+  upload {
+    content = "${data.template_file.docker_dropin_cache.rendered}"
+    file    = "/etc/systemd/system/docker.service.d/http-proxy.conf"
   }
 
   volumes {
@@ -269,6 +370,25 @@ resource "docker_container" "worker" {
     host     = "${self.ip_address}"
     user     = "${var.ssh_user}"
     password = "${var.ssh_pass}"
+  }
+
+  # setup the Docker registry cache
+  provisioner "remote-exec" {
+    inline = [
+      # Get the CA certificate from the proxy and make it a trusted root.
+      # copy it to the OS-specifi directory: for OpenSUSE: /etc/pki/trust/anchors
+      "mkdir -p /etc/pki/trust/anchors/",
+
+      "curl http://${docker_container.cache.ip_address}:3128/ca.crt > /etc/pki/trust/anchors/docker_registry_proxy.crt",
+      "echo 'docker_registry_proxy.crt' >> /etc/ca-certificates.conf",
+      "update-ca-certificates --fresh",
+
+      # Reload systemd
+      "systemctl daemon-reload",
+
+      # Restart dockerd
+      "systemctl restart docker.service",
+    ]
   }
 
   provisioner "kubeadm" {

@@ -3,8 +3,9 @@
 #####################
 
 variable "daemon" {
-  type        = "string"
-  default     = "tcp://127.0.0.1:2375/"
+  type    = "string"
+  default = "tcp://127.0.0.1:2375/"
+
   #default     = "unix:///var/run/docker.sock"
   description = "Docker daemon socket"
 }

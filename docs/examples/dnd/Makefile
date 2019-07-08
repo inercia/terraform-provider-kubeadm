@@ -2,9 +2,10 @@ IMAGE := dnd-kubeadm
 
 all: image
 
+.PHONY: image
 image:
 	@echo "Builing image..."
-	docker build -t $(IMAGE) .
+	cd image && docker build -t $(IMAGE) .
 	@echo "done!"
 
 # target for testing the image
@@ -17,6 +18,9 @@ run:
 		-p 8022:22 \
 		--name $(IMAGE) \
 		$(IMAGE)
+
+clean:
+	sudo rm -rf docker_mirror_*
 
 ###################################################################
 # CI
