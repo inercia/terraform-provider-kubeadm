@@ -66,9 +66,9 @@ func isValidUrl(toTest string) bool {
 
 // DoGetNodesAndIPs gets a map with (IPs, NAME), with the IPs and the nodename in that IP
 // this is done by running some magic kubectl command
-func DoGetNodesAndIPs(kubeconfig string, ipAddresses map[string]string) Action {
+func DoGetNodesAndIPs(kubectl string, kubeconfig string, ipAddresses map[string]string) Action {
 	return DoSendingOutputToFun(
-		DoRemoteKubectl(kubeconfig, kubectlNodesIPsCmd), func(s string) {
+		DoRemoteKubectl(kubectl, kubeconfig, kubectlNodesIPsCmd), func(s string) {
 			// parse "<NAME> <IP>"
 			r := strings.Split(s, " ")
 			if len(r) == 2 {
@@ -93,7 +93,7 @@ func DoLocalKubectl(kubeconfig string, args ...string) Action {
 
 // DoRemoteKubectl runs a remote kubectl command in a remote machine
 // it takes care about uploading a valid kubeconfig file if not present in the remote machine
-func DoRemoteKubectl(kubeconfig string, args ...string) Action {
+func DoRemoteKubectl(kubectl string, kubeconfig string, args ...string) Action {
 	return DoIfElse(
 		CheckFileExists(DefAdminKubeconfig),
 		DoExec(fmt.Sprintf("kubectl --kubeconfig=%s %s", DefAdminKubeconfig, strings.Join(args, " "))),
@@ -111,7 +111,7 @@ func DoRemoteKubectl(kubeconfig string, args ...string) Action {
 			return DoWithCleanup(
 				ActionList{
 					DoUploadFileToFile(kubeconfig, remoteKubeconfig),
-					DoExec(fmt.Sprintf("kubectl --kubeconfig=%s %s", remoteKubeconfig, strings.Join(args, " "))),
+					DoExec(fmt.Sprintf("%s --kubeconfig=%s %s", kubectl, remoteKubeconfig, strings.Join(args, " "))),
 				},
 				DoTry(DoDeleteFile(remoteKubeconfig)))
 		}))
@@ -146,7 +146,7 @@ func DoLocalKubectlApply(kubeconfig string, manifests []Manifest) Action {
 
 // DoRemoteKubectlApply applies some manifests with a remote kubectl
 // manifests can be 1) a local file 2) a URL 3) in a string
-func DoRemoteKubectlApply(kubeconfig string, manifests []Manifest) Action {
+func DoRemoteKubectlApply(kubectl string, kubeconfig string, manifests []Manifest) Action {
 	actions := ActionList{}
 
 	for _, manifest := range manifests {
@@ -160,7 +160,7 @@ func DoRemoteKubectlApply(kubeconfig string, manifests []Manifest) Action {
 				return DoWithCleanup(
 					ActionList{
 						DoUploadReaderToFile(strings.NewReader(manifest.Inline), remoteManifest),
-						DoRemoteKubectl(kubeconfig, "apply", "-f", remoteManifest),
+						DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
 					},
 					DoTry(DoDeleteFile(remoteManifest)))
 			}))
@@ -175,14 +175,14 @@ func DoRemoteKubectlApply(kubeconfig string, manifests []Manifest) Action {
 				return DoWithCleanup(
 					ActionList{
 						DoUploadFileToFile(manifest.Path, remoteManifest),
-						DoRemoteKubectl(kubeconfig, "apply", "-f", remoteManifest),
+						DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
 					},
 					DoTry(DoDeleteFile(remoteManifest)))
 			}))
 
 		case manifest.URL != "":
 			// it is an URL: just run the `kubectl apply`
-			actions = append(actions, DoRemoteKubectl(kubeconfig, "apply", "-f", manifest.URL))
+			actions = append(actions, DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", manifest.URL))
 		}
 	}
 

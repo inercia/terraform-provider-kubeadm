@@ -152,7 +152,9 @@ in some directory available in the default `$PATH`.
 * `dropin_path` - (Optional) full path for the uploaded kubeadm dropin file
 (defaults to `/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf`).
 * `kubeadm_path` - (Optional) full path where `kubeadm` should be found (if 
-no absolute path is provided, it will use the default `PATH` for finding it).
+no absolute path is provided, it will use the default `$PATH` for finding it).
+* `kubectl_path` - (Optional) full path where `kubectl` should be found (if 
+no absolute path is provided, it will use the default `$PATH` for finding it).
 
 ### Known limitations
 

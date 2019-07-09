@@ -49,7 +49,7 @@ func doRemoteKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.
 	if kubeconfig == "" {
 		return ssh.ActionError("no 'config_path' has been specified")
 	}
-	return ssh.DoRemoteKubectlApply(kubeconfig, manifests)
+	return ssh.DoRemoteKubectlApply(getKubectlFromResourceData(d), kubeconfig, manifests)
 }
 
 // doRefreshToken uses the kubeconfig for connecting to the API server and refreshing the token
@@ -80,7 +80,7 @@ func checkLocalKubeconfigAlive(d *schema.ResourceData) ssh.CheckerFunc {
 	return ssh.CheckAnd(
 		checkLocalKubeconfigExists(d),
 		ssh.CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-			if res := ssh.DoRemoteKubectl(kubeconfig, "cluster-info").Apply(o, comm, useSudo); ssh.IsError(res) {
+			if res := ssh.DoRemoteKubectl(getKubectlFromResourceData(d), kubeconfig, "cluster-info").Apply(o, comm, useSudo); ssh.IsError(res) {
 				return false, nil // if some error happens, just return "false"
 			}
 			return true, nil
@@ -92,7 +92,8 @@ func checkAdminConfAlive(d *schema.ResourceData) ssh.CheckerFunc {
 	return ssh.CheckAnd(
 		ssh.CheckFileExists(ssh.DefAdminKubeconfig),
 		ssh.CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-			if res := ssh.DoRemoteKubectl("", "cluster-info").Apply(o, comm, useSudo); ssh.IsError(res) {
+			// note: we will not use any "kubeconfig", so if "admin.conf" is not there it will just fail
+			if res := ssh.DoRemoteKubectl(getKubectlFromResourceData(d), "", "cluster-info").Apply(o, comm, useSudo); ssh.IsError(res) {
 				return false, nil // if some error happens, just return "false"
 			}
 			return true, nil

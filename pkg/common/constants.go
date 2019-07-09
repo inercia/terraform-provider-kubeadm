@@ -65,6 +65,9 @@ const (
 
 	// kubeadm executable in the machines (we assume it is in some standard path)
 	DefKubeadmPath = "kubeadm"
+
+	// kubectl executable in the machines (we assume it is in some standard path)
+	DefKubectlPath = "kubectl"
 )
 
 var (

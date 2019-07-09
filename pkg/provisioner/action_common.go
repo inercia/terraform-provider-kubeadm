@@ -66,13 +66,22 @@ func getKubeconfigFromResourceData(d *schema.ResourceData) string {
 	return f
 }
 
-// getKubeadmFromResourceData returns the kubeadm binary path from the confuig
+// getKubeadmFromResourceData returns the kubeadm binary path from the config
 func getKubeadmFromResourceData(d *schema.ResourceData) string {
 	kubeadm_path := d.Get("install.0.kubeadm_path").(string)
 	if len(kubeadm_path) == 0 {
 		kubeadm_path = common.DefKubeadmPath
 	}
 	return kubeadm_path
+}
+
+// getKubectlFromResourceData returns the kubectl binary path from the config
+func getKubectlFromResourceData(d *schema.ResourceData) string {
+	kubectl_path := d.Get("install.0.kubectl_path").(string)
+	if len(kubectl_path) == 0 {
+		kubectl_path = common.DefKubectlPath
+	}
+	return kubectl_path
 }
 
 // doExecKubeadmWithConfig runs a `kubeadm` command in the remote host
@@ -186,7 +195,7 @@ func doPrintNodes(d *schema.ResourceData) ssh.Action {
 	ipAddresses := map[string]string{}
 	return ssh.DoTry(
 		ssh.ActionList{
-			ssh.DoGetNodesAndIPs(kubeconfig, ipAddresses),
+			ssh.DoGetNodesAndIPs(getKubectlFromResourceData(d), kubeconfig, ipAddresses),
 			ssh.DoMessage("Nodes (and IPs) in cluster:"),
 			ssh.DoLazy(func() ssh.Action {
 				res := ssh.ActionList{}
@@ -206,13 +215,14 @@ func doCheckCommonBinaries(d *schema.ResourceData) ssh.Action {
 		ssh.DoIfElse(
 			ssh.CheckBinaryExists(kubeadm_path),
 			ssh.DoMessage("- kubeadm found"),
-			ssh.DoAbort("kubeadm NOT found")))
+			ssh.DoAbort("kubeadm NOT found in $PATH. You can specify a custom executable in the 'install.kubeadm_path' property in the provisioner.")))
 
+	kubectl_path := getKubectlFromResourceData(d)
 	checks = append(checks,
 		ssh.DoIfElse(
-			ssh.CheckBinaryExists("kubectl"),
+			ssh.CheckBinaryExists(kubectl_path),
 			ssh.DoMessage("- kubectl found"),
-			ssh.DoAbort("kubectl NOT found")))
+			ssh.DoAbort("kubectl NOT found in $PATH. You can specify a custom executable in the 'install.kubectl_path' property in the provisioner")))
 
 	return checks
 }
