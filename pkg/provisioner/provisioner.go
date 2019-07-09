@@ -78,7 +78,7 @@ func applyFn(ctx context.Context) error {
 	if len(join) == 0 {
 		switch role {
 		case "worker":
-			action = ssh.DoAbort(fmt.Sprintf("role is %q while no \"join\" argument has been provided", role))
+			action = ssh.DoAbort("role is %q while no \"join\" argument has been provided", role)
 		default:
 			action = doKubeadmInit(d)
 		}
@@ -101,7 +101,7 @@ func applyFn(ctx context.Context) error {
 
 // doDeleteLocalKubeconfig deletes the current, local kubeconfig, doing a backup before
 func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Action {
-	kubeconfig := getKubeconfig(d)
+	kubeconfig := getKubeconfigFromResourceData(d)
 	kubeconfigBak := kubeconfig + ".bak"
 
 	return ssh.DoIf(
@@ -115,13 +115,14 @@ func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Action {
 
 // doDownloadKubeconfig downloads a kubeconfig from the remote master
 func doDownloadKubeconfig(d *schema.ResourceData) ssh.Action {
-	kubeconfig := getKubeconfig(d)
+	kubeconfig := getKubeconfigFromResourceData(d)
 	return ssh.DoDownloadFile(ssh.DefAdminKubeconfig, kubeconfig)
 }
 
+// doCheckKubeconfigIsAlive checks that the "kubeconfig" we have is valid
 func doCheckKubeconfigIsAlive(d *schema.ResourceData) ssh.Action {
 	return ssh.DoIfElse(
-		checkKubeconfigAlive(d),
+		checkLocalKubeconfigAlive(d),
 		ssh.DoMessageInfo("the API server is accessible from here (with the current kubeconfig)"),
 		ssh.DoMessageWarn("the API server does NOT seem to be accessible from here (with the current kubeconfig)"),
 	)

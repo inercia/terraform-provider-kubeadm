@@ -64,7 +64,9 @@ func TestCheckLocalFileExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error: %s", err)
 	}
-	defer DoDeleteLocalFile(name1).Apply(o, comm, false)
+	defer func() {
+		DoTry(DoDeleteLocalFile(name1)).Apply(o, comm, false)
+	}()
 
 	f, err := os.Create(name1)
 	if err != nil {
@@ -92,7 +94,9 @@ func TestCheckFileExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error: %s", err)
 	}
-	defer DoDeleteLocalFile(name1).Apply(o, comm, false)
+	defer func() {
+		DoTry(DoDeleteLocalFile(name1)).Apply(o, comm, false)
+	}()
 
 	// overwrite the startFunction, returning CONDITION_SUCCEEDED
 	comm.startFunction = func(cmd *remote.Cmd) error {

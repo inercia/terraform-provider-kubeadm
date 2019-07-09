@@ -34,10 +34,12 @@ func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
 	// check if we are joining the Control Plane: we must upload the certificates and
 	// use the '--control-plane' flag
 	actions := ssh.ActionList{
-		ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'"),
-		ssh.DoPrintIpAddresses(),
+		ssh.DoMessageInfo("Checking we have the required binaries..."),
+		doCheckCommonBinaries(d),
+		ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'..."),
 		doKubeadm(d, "join", joinConfigBytes),
 		doCheckKubeconfigIsAlive(d),
+		ssh.DoPrintIpAddresses(),
 		doPrintEtcdMembers(d),
 		doPrintNodes(d),
 	}
@@ -80,11 +82,13 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 
 	extraArgs := []string{}
 	actions := ssh.ActionList{
-		ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'"),
-		ssh.DoPrintIpAddresses(),
+		ssh.DoMessageInfo("Checking we have the required binaries..."),
+		doCheckCommonBinaries(d),
+		ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'..."),
 		doUploadCerts(d),
 		doKubeadm(d, "join", joinConfigBytes, extraArgs...),
 		doCheckKubeconfigIsAlive(d),
+		ssh.DoPrintIpAddresses(),
 		doPrintEtcdMembers(d),
 		doPrintNodes(d),
 	}

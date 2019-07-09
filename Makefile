@@ -8,25 +8,22 @@ GO_VERSION     := $(shell $(GO) version | sed -e 's/^[^0-9.]*\([0-9.]*\).*/\1/')
 GO_VERSION_MAJ := $(shell echo $(GO_VERSION) | cut -f1 -d'.')
 GO_VERSION_MIN := $(shell echo $(GO_VERSION) | cut -f2 -d'.')
 
-TEST           ?= $$(go list ./... |grep -v 'vendor')
-GOFMT_FILES    ?= $$(find . -name '*.go' |grep -v vendor)
+# directories with sources
+SRC_DIRS        = pkg internal
+
+TEST           ?= $$(go list ./... 2>/dev/null |grep -v 'vendor')
+GOFMT_FILES    ?= $$(find $(SRC_DIRS) -name '*.go' |grep -v vendor)
 WEBSITE_REPO   = github.com/hashicorp/terraform-website
 WIKI_REPO      = $(shell echo `pwd`.wiki)
 
 # for some unknown reason, "provisioners" are only recognized in this directory
 PLUGINS_DIR    = $$HOME/.terraform.d/plugins
 
-TRAVIS_BUILDID := $(shell echo "build-$$RANDOM")
-# from https://hub.docker.com/r/travisci/ci-garnet/tags/
-TRAVIS_INSTANCE := "travisci/ci-garnet:packer-1515445631-7dfb2e1"
-
 # the deployment used for running the E2E tests
 E2E_ENV         := $(shell echo `pwd`)/docs/examples/dnd
 
 export GOPATH
 export GOBIN
-export TRAVIS_BUILDID
-export TRAVIS_INSTANCE
 export E2E_ENV
 
 
@@ -97,7 +94,7 @@ errcheck:
 
 
 ################################################
-# CI targets (mainly for Travis)
+# CI targets (for Travis)
 
 ci-save-env:
 	# NOTE: "sudo" in travis resets the environment to "safe" values

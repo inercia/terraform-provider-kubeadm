@@ -227,7 +227,7 @@ func doPrintEtcdMembers(d *schema.ResourceData) ssh.Action {
 		}
 		for _, member := range members {
 			actions = append(actions,
-				ssh.DoMessage(fmt.Sprintf("- '%s' at '%s'", member.ID, member.ClienAddrs)))
+				ssh.DoMessage("- '%s' at '%s'", member.ID, member.ClienAddrs))
 		}
 		return actions
 	})

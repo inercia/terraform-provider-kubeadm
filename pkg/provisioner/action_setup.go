@@ -58,7 +58,7 @@ func doKubeadmSetup(d *schema.ResourceData, o terraform.UIOutput, comm communica
 
 		return ssh.ActionList{
 			ssh.DoMessage(descr),
-			ssh.DoExecScript(strings.NewReader(code), defaultKubeadmSetup),
+			ssh.DoExecScript(strings.NewReader(code)),
 		}
 	}
 	return nil

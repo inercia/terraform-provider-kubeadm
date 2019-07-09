@@ -32,17 +32,21 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 	extraArgs := []string{"--skip-token-print"}
 
 	actions := ssh.ActionList{
-		ssh.DoMessageInfo("Initializing the cluster with 'kubadm init'"),
-		ssh.DoPrintIpAddresses(),
+		ssh.DoMessageInfo("Checking we have the required binaries..."),
+		doCheckCommonBinaries(d),
+		ssh.DoMessageInfo("Initializing the cluster with 'kubadm init'..."),
 		doDeleteLocalKubeconfig(d),
 		doUploadCerts(d),
+		// check if there is a (valid) admin.conf there
+		// in that case, skip the "kubeadm init"
 		ssh.DoIfElse(
-			ssh.CheckFileExists(ssh.DefAdminKubeconfig),
+			checkAdminConfAlive(d),
 			ssh.DoMessageWarn("admin.conf already exists: skipping `kubeadm init`"),
 			doKubeadm(d, "init", initConfigBytes, extraArgs...),
 		),
 		doDownloadKubeconfig(d),
 		doCheckKubeconfigIsAlive(d),
+		ssh.DoPrintIpAddresses(),
 		doPrintEtcdMembers(d),
 		doPrintNodes(d),
 		doLoadCNI(d),

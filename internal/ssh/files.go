@@ -164,11 +164,18 @@ func DoUploadReaderToFile(contents io.Reader, remote string) Action {
 			DoMessageDebug(fmt.Sprintf("... and moving to final destination %s", remote)),
 			DoMoveFile(tmpPath, remote),
 		},
-		DoDeleteFile(tmpPath),
+		DoTry(DoDeleteFile(tmpPath)),
 	)
 }
 
 func DoUploadFileToFile(local string, remote string) Action {
+	if local == "" {
+		return ActionError("empty local file name to upload")
+	}
+	if remote == "" {
+		return ActionError("empty remote file name to upload")
+	}
+
 	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		// note: we muyst do the "Open" inside the ActionFunc, as we must delay the operation
 		// just in case the file does not exists yet
@@ -183,6 +190,10 @@ func DoUploadFileToFile(local string, remote string) Action {
 
 // DoDownloadFileToWriter downloads a file to a writer
 func DoDownloadFileToWriter(remote string, contents io.WriteCloser) Action {
+	if remote == "" {
+		return ActionError("empty remote file name to download")
+	}
+
 	// Terraform does not provide a mechanism for copying file from a remote host
 	// to the local machine
 	// so we must run a remote command that dumps the file Contents to stdout
@@ -234,14 +245,17 @@ func DoDownloadFileToWriter(remote string, contents io.WriteCloser) Action {
 }
 
 // DoWriteLocalFile writes some string in a local file
-func DoWriteLocalFile(filename string, contents string) Action {
+func DoWriteLocalFile(path string, contents string) Action {
+	if path == "" {
+		return ActionError("empty local file name to create")
+	}
 	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		localFile, err := os.Create(filename)
+		localFile, err := os.Create(path)
 		if err != nil {
-			return ActionError(fmt.Sprintf("cannot create %q: %s", filename, err.Error()))
+			return ActionError(fmt.Sprintf("cannot create %q: %s", path, err.Error()))
 		}
 		if _, err := localFile.WriteString(contents); err != nil {
-			return ActionError(fmt.Sprintf("cannot write %q: %s", filename, err.Error()))
+			return ActionError(fmt.Sprintf("cannot write %q: %s", path, err.Error()))
 		}
 		return nil
 	})
@@ -249,23 +263,23 @@ func DoWriteLocalFile(filename string, contents string) Action {
 
 // DoDeleteFile removes a file
 func DoDeleteFile(path string) Action {
-	if len(path) == 0 {
-		return nil // ignore empty files
+	if path == "" {
+		return ActionError("empty remote file name to remove")
 	}
 	return DoExec(fmt.Sprintf("rm -f %q", path))
 }
 
 // DoDeleteLocalFile removes a local file
 func DoDeleteLocalFile(path string) Action {
-	if len(path) == 0 {
-		return nil // ignore empty files
+	if path == "" {
+		return ActionError("empty local file name to remove")
 	}
-	return DoLocalExec("rm", "-f", path)
+	return DoLocalExec(fmt.Sprintf("rm -f %q", path))
 }
 
 // DoMoveFile moves a file
 func DoMoveFile(src, dst string) Action {
-	return DoExec(fmt.Sprintf("mv -f %s %s", src, dst))
+	return DoExec(fmt.Sprintf("mv -f %q %q", src, dst))
 }
 
 // DoMoveLocalFile moves a local file
@@ -289,7 +303,7 @@ func DoDownloadFile(remote, local string) Action {
 
 // CheckFileExists checks that a remote file exists
 func CheckFileExists(path string) CheckerFunc {
-	return CheckExec(fmt.Sprintf("[ -f '%s' ]", path))
+	return CheckExec(fmt.Sprintf("[ -f %q ]", path))
 }
 
 // CheckFileAbsent checks that a remote file does not exists
@@ -297,8 +311,13 @@ func CheckFileAbsent(path string) CheckerFunc {
 	return CheckNot(CheckFileExists(path))
 }
 
+// CheckLocalFileExists checks that a local file exists
+// If the input file is empty, it returns false.
 func CheckLocalFileExists(path string) CheckerFunc {
 	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+		if path == "" {
+			return false, nil
+		}
 		if _, err := os.Stat(path); err == nil {
 			return true, nil
 		}
