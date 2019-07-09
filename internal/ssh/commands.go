@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"path"
 	"strings"
 	"time"
 
@@ -98,7 +99,7 @@ func DoExec(command string) Action {
 }
 
 // DoExecScript is a runner for a script (with some random path in /tmp)
-func DoExecScript(contents io.Reader, prefix string) Action {
+func DoExecScript(contents io.Reader) Action {
 	path, err := GetTempFilename()
 	if err != nil {
 		return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
@@ -109,7 +110,7 @@ func DoExecScript(contents io.Reader, prefix string) Action {
 			doRealUploadFile(contents, path),
 			DoExec(fmt.Sprintf("sh %s", path)),
 		},
-		DoDeleteFile(path),
+		DoTry(DoDeleteFile(path)),
 	)
 }
 
@@ -178,6 +179,43 @@ func CheckExec(cmd string) CheckerFunc {
 			return true, nil
 		}
 		log.Printf("[DEBUG] [KUBEADM] Condition %q failed", cmd)
+		return false, nil
+	})
+}
+
+// CheckBinaryExists checks that a binary exists in the path
+func CheckBinaryExists(cmd string) CheckerFunc {
+	command := fmt.Sprintf("command -v '%s'", cmd)
+
+	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+		log.Printf("[DEBUG] [KUBEADM] Checking binary exists with: '%s'", cmd)
+		var buf bytes.Buffer
+		if res := DoSendingOutputToWriter(DoExec(command), &buf).Apply(o, comm, useSudo); IsError(res) {
+			log.Printf("[DEBUG] [KUBEADM] ERROR: check failed: %s", res)
+			return false, res
+		}
+
+		// if "command -v" doesn't print anything, it was not found
+		s := strings.TrimSpace(buf.String())
+		if s == "" {
+			log.Printf("[DEBUG] [KUBEADM] %q NOT found: empty output: output == %q", cmd, s)
+			return false, nil
+		}
+
+		// sometimes it just returns the file name provided
+		if s == cmd {
+			log.Printf("[DEBUG] [KUBEADM] %q found: output == %q", cmd, s)
+			return true, nil
+		}
+
+		// if it prints the full path: check it is really there
+		if path.IsAbs(s) {
+			log.Printf("[DEBUG] [KUBEADM] checking file %q exists at %q", cmd, s)
+			return CheckFileExists(s).Check(o, comm, useSudo)
+		}
+
+		// otherwise, just fail
+		log.Printf("[DEBUG] [KUBEADM] %q NOT found: output == %q", cmd, s)
 		return false, nil
 	})
 }

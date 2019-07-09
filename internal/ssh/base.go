@@ -145,12 +145,12 @@ func DoMessageWithColor(msg string, c color.Color) Action {
 }
 
 // DoMessage is a dummy action that just prints a message
-func DoMessage(msg string) Action {
-	return DoMessageWithColor(msg, color.FgLightGreen)
+func DoMessage(format string, args ...interface{}) Action {
+	return DoMessageWithColor(fmt.Sprintf(format, args...), color.FgLightGreen)
 }
 
-func DoMessageWarn(msg string) Action {
-	return DoMessageWithColor(fmt.Sprintf("WARNING: %s", msg), color.FgLightGreen)
+func DoMessageWarn(format string, args ...interface{}) Action {
+	return DoMessageWithColor(fmt.Sprintf("WARNING: "+format, args...), color.FgLightGreen)
 }
 
 func DoMessageInfo(msg string) Action {
@@ -158,20 +158,20 @@ func DoMessageInfo(msg string) Action {
 }
 
 // DoMessageDebug prints a debug message
-func DoMessageDebug(msg string) Action {
+func DoMessageDebug(format string, args ...interface{}) Action {
 	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		log.Printf(color.FgLightYellow.Render(fmt.Sprintf("[DEBUG] [KUBEADM] %s", msg)))
+		log.Printf(color.FgLightYellow.Render(fmt.Sprintf(fmt.Sprintf("[DEBUG] [KUBEADM] "+format, args...))))
 		return nil
 	})
 }
 
 // DoAbort is an action that prints an error message and exits
-func DoAbort(msg string) Action {
-	coloredMsg := color.Style{color.FgRed, color.OpBold}.Render(fmt.Sprintf("FATAL: %s", msg))
+func DoAbort(format string, args ...interface{}) Action {
+	coloredMsg := color.Style{color.FgRed, color.OpBold}.Render(fmt.Sprintf(fmt.Sprintf("FATAL: "+format, args...)))
 
 	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		o.Output(coloredMsg)
-		return ActionError(msg)
+		return ActionError(fmt.Sprintf(format, args...))
 	})
 }
 
@@ -272,7 +272,7 @@ func DoTry(actions ...Action) Action {
 
 			// replace error by warnings
 			if IsError(cur) {
-				cur = DoMessageWarn(fmt.Sprintf("%s (IGNORED)", cur.Error()))
+				cur = DoMessageWarn("%s (IGNORED)", cur.Error())
 			}
 
 			// otherwise, run the action
@@ -285,6 +285,8 @@ func DoTry(actions ...Action) Action {
 	})
 }
 
+// DoSendingOutputToFun runs some action redirecting each line of stdout/stderr to some function
+// make sure you trip spaces in the output, as some extra spaces can be before/after
 func DoSendingOutputToFun(action Action, interceptor OutputFunc) Action {
 	if action == nil || IsError(action) {
 		return action
@@ -294,6 +296,8 @@ func DoSendingOutputToFun(action Action, interceptor OutputFunc) Action {
 	})
 }
 
+// DoSendingOutputToWriter runs some action redirecting the output to some io.Writer
+// make sure you trip spaces in the output, as some extra spaces can be before/after
 func DoSendingOutputToWriter(action Action, writer io.Writer) Action {
 	return DoSendingOutputToFun(action, func(s string) {
 		_, _ = writer.Write([]byte(s))

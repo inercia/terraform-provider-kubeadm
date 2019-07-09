@@ -61,7 +61,7 @@ func DoPrintIpAddresses() Action {
 		DoGetIpAddresses(&ipAddresses),
 		ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 			// note: this must be inside of a function for being lazy-evaluated (when we have obtained the IPs)
-			return DoMessage(fmt.Sprintf("IP addresses detected by the kubeadm provisioner: %s", strings.Join(ipAddresses, ", ")))
+			return DoMessage("IP addresses detected by the kubeadm provisioner: %s", strings.Join(ipAddresses, ", "))
 		}),
 	}
 }

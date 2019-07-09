@@ -24,19 +24,19 @@ import (
 
 // doLocalKubectl runs a local kubectl with the kubeconfig specified in the schema
 func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.Action {
-	kubeconfig := getKubeconfig(d)
+	kubeconfig := getKubeconfigFromResourceData(d)
 	return ssh.DoLocalKubectl(kubeconfig, args...)
 }
 
 // doRemoteKubectl runs a remote kubectl with the kubeconfig specified in the schema
 func doRemoteKubectl(d *schema.ResourceData, args ...string) ssh.Action {
-	kubeconfig := getKubeconfig(d)
+	kubeconfig := getKubeconfigFromResourceData(d)
 	return ssh.DoLocalKubectl(kubeconfig, args...)
 }
 
 // DoLocalKubectlApply applies some manifests with a local kubectl with the kubeconfig specified in the schema
 func doLocalKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.Action {
-	kubeconfig := getKubeconfig(d)
+	kubeconfig := getKubeconfigFromResourceData(d)
 	if kubeconfig == "" {
 		return ssh.ActionError("no 'config_path' has been specified")
 	}
@@ -45,7 +45,7 @@ func doLocalKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.A
 
 // DoRemoteKubectlApply applies some manifests with a remote kubectl, uploading the kubeconfig specified in the schema
 func doRemoteKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.Action {
-	kubeconfig := getKubeconfig(d)
+	kubeconfig := getKubeconfigFromResourceData(d)
 	if kubeconfig == "" {
 		return ssh.ActionError("no 'config_path' has been specified")
 	}
@@ -60,7 +60,7 @@ func doRefreshToken(d *schema.ResourceData) ssh.Action {
 	//}
 
 	return ssh.DoIfElse(
-		checkKubeconfigAlive(d),
+		checkLocalKubeconfigAlive(d),
 		ssh.ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) ssh.Action {
 			// TODO: we should (re)create the token by ssh'ing and doing a 'kubeadm token create'
 			return nil
@@ -69,18 +69,30 @@ func doRefreshToken(d *schema.ResourceData) ssh.Action {
 	)
 }
 
-// checkKubeconfigExists checks if the kubeconfig exists
-func checkKubeconfigExists(d *schema.ResourceData) ssh.CheckerFunc {
-	return ssh.CheckLocalFileExists(getKubeconfig(d))
+// checkLocalKubeconfigExists checks if the kubeconfig exists
+func checkLocalKubeconfigExists(d *schema.ResourceData) ssh.CheckerFunc {
+	return ssh.CheckLocalFileExists(getKubeconfigFromResourceData(d))
 }
 
-// checkKubeconfigAlive checks if the kubeconfig exists and is alive
-func checkKubeconfigAlive(d *schema.ResourceData) ssh.CheckerFunc {
-	kubeconfig := getKubeconfig(d)
+// checkLocalKubeconfigAlive checks if the kubeconfig exists and is alive
+func checkLocalKubeconfigAlive(d *schema.ResourceData) ssh.CheckerFunc {
+	kubeconfig := getKubeconfigFromResourceData(d)
 	return ssh.CheckAnd(
-		checkKubeconfigExists(d),
+		checkLocalKubeconfigExists(d),
 		ssh.CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
 			if res := ssh.DoRemoteKubectl(kubeconfig, "cluster-info").Apply(o, comm, useSudo); ssh.IsError(res) {
+				return false, nil // if some error happens, just return "false"
+			}
+			return true, nil
+		}))
+}
+
+// checkAdminConfAlive checks if a remmote kubeconfig exists and is alive
+func checkAdminConfAlive(d *schema.ResourceData) ssh.CheckerFunc {
+	return ssh.CheckAnd(
+		ssh.CheckFileExists(ssh.DefAdminKubeconfig),
+		ssh.CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+			if res := ssh.DoRemoteKubectl("", "cluster-info").Apply(o, comm, useSudo); ssh.IsError(res) {
 				return false, nil // if some error happens, just return "false"
 			}
 			return true, nil
