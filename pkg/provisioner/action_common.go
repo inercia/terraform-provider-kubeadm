@@ -75,6 +75,16 @@ func getKubeadmFromResourceData(d *schema.ResourceData) string {
 	return kubeadm_path
 }
 
+// getToken returns the current token
+func getToken(d *schema.ResourceData) string {
+	config := d.Get("config").(map[string]interface{})
+	t, ok := config["token"]
+	if !ok {
+		return ""
+	}
+	return t.(string)
+}
+
 // getKubectlFromResourceData returns the kubectl binary path from the config
 func getKubectlFromResourceData(d *schema.ResourceData) string {
 	kubectl_path := d.Get("install.0.kubectl_path").(string)
@@ -107,7 +117,7 @@ func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string,
 }
 
 // doKubeadm is the common kubeadm call, both for the `init` as well as well as for the `join`.
-func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, args ...string) ssh.Action {
+func doKubeadm(d *schema.ResourceData, command string, args ...string) ssh.Action {
 	kubeadmConfigFilename := ""
 	switch command {
 	case "init":
@@ -140,7 +150,7 @@ func doKubeadm(d *schema.ResourceData, command string, kubeadmConfig []byte, arg
 		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), servicePath),
 		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), dropinPath),
 		doMaybeReset(d, kubeadmConfigFilename),
-		ssh.DoUploadReaderToFile(bytes.NewReader(kubeadmConfig), kubeadmConfigFilename),
+		doUploadJoinConfig(d, command, kubeadmConfigFilename),
 		ssh.DoMessageInfo("Starting kubeadm..."),
 		ssh.DoWithException(
 			doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
@@ -158,6 +168,28 @@ func doMaybeReset(d *schema.ResourceData, kubeadmConfigFilename string) ssh.Acti
 			doExecKubeadmWithConfig(d, "reset", "", "--force"),
 			ssh.DoDeleteFile(kubeadmConfigFilename),
 		})
+}
+
+func doUploadJoinConfig(d *schema.ResourceData, command string, kubeadmConfigFilename string) ssh.Action {
+	return ssh.DoLazy(func() ssh.Action {
+		// we must delay the joinConfig retrieval as some other functions modify it until the very last moment...
+		joinConfigBytes := []byte{}
+		var err error
+		switch command {
+		case "init":
+			_, joinConfigBytes, err = common.InitConfigFromResourceData(d)
+			if err != nil {
+				return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for init'ing: %s", err))
+			}
+
+		case "join":
+			_, joinConfigBytes, err = common.JoinConfigFromResourceData(d)
+			if err != nil {
+				return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+			}
+		}
+		return ssh.DoUploadReaderToFile(bytes.NewReader(joinConfigBytes), kubeadmConfigFilename)
+	})
 }
 
 // doUploadCerts upload the certificates from the serialized `d.config` to the remote machine

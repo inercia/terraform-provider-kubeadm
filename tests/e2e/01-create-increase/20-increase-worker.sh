@@ -4,15 +4,17 @@
 # variables
 ###########################################################################################
 
-[ -f common.bash  ] && source common.bash
-[ -f dynamic.bash ] && source dynamic.bash
-[ -f local.bash   ] && source local.bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+[ -f $DIR/common.bash  ] && source $DIR/common.bash
+[ -f $DIR/dynamic.bash ] && source $DIR/dynamic.bash
+[ -f $DIR/local.bash   ] && source $DIR/local.bash
 
-TF_ARGS=""
 NUM_MASTERS=3
 NUM_WORKERS=3
 
 cd $E2E_ENV
+
+TF_ARGS=""
 [ -f "ci.tfvars" ] && [ "$CI" = "true" ] && TF_ARGS="$TF_ARGS -var-file=ci.tfvars"
 
 ###########################################################################################

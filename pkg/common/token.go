@@ -23,8 +23,11 @@ import (
 )
 
 const (
-	TokenIDBytes     = 3
+	TokenIDBytes = 3
+
 	TokenSecretBytes = 8
+
+	TokenRegex = `[a-z0-9]{6}\.[a-z0-9]{16}`
 )
 
 func randBytes(length int) (string, error) {

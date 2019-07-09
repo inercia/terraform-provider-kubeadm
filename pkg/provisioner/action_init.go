@@ -15,20 +15,13 @@
 package provisioner
 
 import (
-	"fmt"
-
 	"github.com/hashicorp/terraform/helper/schema"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
-	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
 // doKubeadmInit runs the `kubeadm init`
 func doKubeadmInit(d *schema.ResourceData) ssh.Action {
-	_, initConfigBytes, err := common.InitConfigFromResourceData(d)
-	if err != nil {
-		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for init'ing: %s", err))
-	}
 	extraArgs := []string{"--skip-token-print"}
 
 	actions := ssh.ActionList{
@@ -42,7 +35,7 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 		ssh.DoIfElse(
 			checkAdminConfAlive(d),
 			ssh.DoMessageWarn("admin.conf already exists: skipping `kubeadm init`"),
-			doKubeadm(d, "init", initConfigBytes, extraArgs...),
+			doKubeadm(d, "init", extraArgs...),
 		),
 		doDownloadKubeconfig(d),
 		doCheckKubeconfigIsAlive(d),

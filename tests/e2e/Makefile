@@ -11,7 +11,7 @@ ci-setup:
 	curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 	echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
 	sudo apt-get update
-	sudo apt install -y kubectl unzip
+	sudo apt install -y kubectl kubeadm unzip
 
 	@echo ">>> Installing Terraform..."
 	wget https://releases.hashicorp.com/terraform/0.11.13/terraform_0.11.13_linux_amd64.zip
@@ -19,12 +19,12 @@ ci-setup:
 	sudo mv terraform /usr/local/bin/
 
 ci-tests:
-	@echo "Running tests suite:"
+	@echo ">>> Starting tests suites:"
 	@echo
 	@for d in `pwd`/[0-9]* ; do \
-		echo "Running testsuite $$d" ; \
+		echo ">>> Running testsuite $$d" ; \
 		for i in $$d/[0-9]*-*.sh ; do \
-			echo "Running $$i" ; \
+			echo ">>> Running $$i" ; \
 			$$i ; \
 			if [ $$? -ne 0 ] ; then \
                 echo ">>> FAILED: $$i"  ; \
