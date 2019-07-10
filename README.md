@@ -164,6 +164,7 @@ instructions.
   * [lxd](docs/examples/lxd/README.md)
   * [Docker-in-Docker](docs/examples/dnd/README.md)
 * [Roadmap, TODO and vision](../../wiki/Roadmap).
+* [FAQ](../../wiki/FAQ).
 
 ## Running the tests
 

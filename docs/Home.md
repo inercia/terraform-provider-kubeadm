@@ -48,5 +48,6 @@ resource "libvirt_domain" "minion" {
   fully functional Kubernetes cluster, like installing some Pods
   Security Policy...
 * [Roadmap, TODO and vision](Roadmap).
+* [FAQ](FAQ).
 * [Examples](examples/README.md) for several providers like
 _libvirt_, _LXD_, _AWS_, etc.
