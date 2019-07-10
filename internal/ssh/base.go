@@ -197,8 +197,11 @@ func DoWithCleanup(action, cleanup Action) Action {
 		if action == nil || IsError(action) {
 			return action
 		}
+		if IsError(cleanup) {
+			return cleanup
+		}
 		res := action.Apply(o, comm, useSudo)
-		if cleanup != nil || !IsError(cleanup) {
+		if cleanup != nil {
 			_ = cleanup.Apply(o, comm, useSudo)
 		}
 		return res
@@ -210,6 +213,9 @@ func DoWithException(action, exc Action) Action {
 	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
 		if action == nil || IsError(action) {
 			return action
+		}
+		if IsError(exc) {
+			return exc
 		}
 		res := action.Apply(o, comm, useSudo)
 		if IsError(res) && exc != nil {

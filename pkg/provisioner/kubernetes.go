@@ -22,26 +22,11 @@ import (
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
-// doLocalKubectl runs a local kubectl with the kubeconfig specified in the schema
-func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.Action {
-	kubeconfig := getKubeconfigFromResourceData(d)
-	return ssh.DoLocalKubectl(kubeconfig, args...)
-}
-
 // doRemoteKubectl runs a remote kubectl with the kubeconfig specified in the schema
 func doRemoteKubectl(d *schema.ResourceData, args ...string) ssh.Action {
 	kubeconfig := getKubeconfigFromResourceData(d)
 	kubectl := getKubectlFromResourceData(d)
 	return ssh.DoRemoteKubectl(kubectl, kubeconfig, args...)
-}
-
-// DoLocalKubectlApply applies some manifests with a local kubectl with the kubeconfig specified in the schema
-func doLocalKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.Action {
-	kubeconfig := getKubeconfigFromResourceData(d)
-	if kubeconfig == "" {
-		return ssh.ActionError("no 'config_path' has been specified")
-	}
-	return ssh.DoLocalKubectlApply(kubeconfig, manifests)
 }
 
 // DoRemoteKubectlApply applies some manifests with a remote kubectl, uploading the kubeconfig specified in the schema

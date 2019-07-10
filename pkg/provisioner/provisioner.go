@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/terraform/helper/schema"
@@ -70,8 +69,8 @@ func applyFn(ctx context.Context) error {
 	}
 
 	// determine what to do (init, join or join --control-plane) depending on the argument provided
-	join := strings.TrimSpace(d.Get("join").(string))
-	role := strings.TrimSpace(strings.ToLower(d.Get("role").(string)))
+	join := getJoinFromResourceData(d)
+	role := getRoleFromResourceData(d)
 	log.Printf("[DEBUG] [KUBEADM] will join %q, with role %q", join, role)
 
 	var action ssh.Action
@@ -97,33 +96,4 @@ func applyFn(ctx context.Context) error {
 	}
 
 	return action.Apply(o, comm, useSudo)
-}
-
-// doDeleteLocalKubeconfig deletes the current, local kubeconfig, doing a backup before
-func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Action {
-	kubeconfig := getKubeconfigFromResourceData(d)
-	kubeconfigBak := kubeconfig + ".bak"
-
-	return ssh.DoIf(
-		ssh.CheckLocalFileExists(kubeconfig),
-		ssh.ActionList{
-			ssh.DoMessage("Removing local kubeconfig (with backup)"),
-			ssh.DoMoveLocalFile(kubeconfig, kubeconfigBak),
-		},
-	)
-}
-
-// doDownloadKubeconfig downloads a kubeconfig from the remote master
-func doDownloadKubeconfig(d *schema.ResourceData) ssh.Action {
-	kubeconfig := getKubeconfigFromResourceData(d)
-	return ssh.DoDownloadFile(ssh.DefAdminKubeconfig, kubeconfig)
-}
-
-// doCheckKubeconfigIsAlive checks that the "kubeconfig" we have is valid
-func doCheckKubeconfigIsAlive(d *schema.ResourceData) ssh.Action {
-	return ssh.DoIfElse(
-		checkLocalKubeconfigAlive(d),
-		ssh.DoMessageInfo("the API server is accessible from here (with the current kubeconfig)"),
-		ssh.DoMessageWarn("the API server does NOT seem to be accessible from here (with the current kubeconfig)"),
-	)
 }

@@ -16,6 +16,8 @@ package provisioner
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/helper/validation"
@@ -153,4 +155,67 @@ func Provisioner() terraform.ResourceProvisioner {
 		// note: we cannot "validate" config passed from the provisioner, as the
 		// validation is done before that config is created
 	}
+}
+
+//
+// Schema helpers
+//
+
+// getJoinFromResourceData returns the "joined host" from the ResourceData
+func getJoinFromResourceData(d *schema.ResourceData) string {
+	return strings.TrimSpace(d.Get("join").(string))
+}
+
+// getRoleFromResourceData returns the "role" host from the ResourceData
+func getRoleFromResourceData(d *schema.ResourceData) string {
+	return strings.TrimSpace(strings.ToLower(d.Get("role").(string)))
+}
+
+// getKubeconfigFromResourceData returns the kubeconfig parameter passed in the `config_path`
+func getKubeconfigFromResourceData(d *schema.ResourceData) string {
+	kubeconfigOpt, ok := d.GetOk("config.config_path")
+	if !ok {
+		return ""
+	}
+	f, err := filepath.Abs(kubeconfigOpt.(string))
+	if err != nil {
+		return ""
+	}
+	return f
+}
+
+// getKubeadmFromResourceData returns the kubeadm binary path from the config
+func getKubeadmFromResourceData(d *schema.ResourceData) string {
+	kubeadm_path := d.Get("install.0.kubeadm_path").(string)
+	if len(kubeadm_path) == 0 {
+		kubeadm_path = common.DefKubeadmPath
+	}
+	return kubeadm_path
+}
+
+// getTokenFromResourceData returns the current token in the ResourceData
+func getTokenFromResourceData(d *schema.ResourceData) string {
+	config := d.Get("config").(map[string]interface{})
+	t, ok := config["token"]
+	if !ok {
+		return ""
+	}
+	return t.(string)
+}
+
+// getKubectlFromResourceData returns the kubectl binary path from the config
+func getKubectlFromResourceData(d *schema.ResourceData) string {
+	kubectl_path := d.Get("install.0.kubectl_path").(string)
+	if len(kubectl_path) == 0 {
+		kubectl_path = common.DefKubectlPath
+	}
+	return kubectl_path
+}
+
+// getNodenameFromResourceData returns the nodename specified in the ResourceData
+func getNodenameFromResourceData(d *schema.ResourceData) string {
+	if nodenameOpt, ok := d.GetOk("nodename"); ok {
+		return nodenameOpt.(string)
+	}
+	return ""
 }

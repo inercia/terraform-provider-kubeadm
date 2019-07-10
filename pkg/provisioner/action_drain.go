@@ -29,5 +29,5 @@ func doDrainNode(d *schema.ResourceData) ssh.Action {
 
 	// Drain node (shelling out, FIXME after https://github.com/kubernetes/kubernetes/pull/72827 can be used [1.14])
 	args := []string{"drain", "--delete-local-data=true", "--force=true", "--ignore-daemonsets=true", node.ObjectMeta.Name}
-	return doLocalKubectl(d, args...)
+	return doRemoteKubectl(d, args...)
 }

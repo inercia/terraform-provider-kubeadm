@@ -26,15 +26,27 @@ import (
 
 // doKubeadmJoinWorker runs the `kubeadm join`
 func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
-	// check if we are joining the Control Plane: we must upload the certificates and
-	// use the '--control-plane' flag
+	// get the join configuration
+	joinConfig, _, err := common.JoinConfigFromResourceData(d)
+	if err != nil {
+		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+	}
+
+	// ... update the nodename
+	joinConfig.NodeRegistration.Name = getNodenameFromResourceData(d)
+
+	// ... and update the `config.join` section
+	if err := common.JoinConfigToResourceData(d, joinConfig); err != nil {
+		return ssh.ActionError(err.Error())
+	}
+
 	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Checking we have the required binaries..."),
 		doCheckCommonBinaries(d),
 		doRefreshToken(d),
 		ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'..."),
 		doKubeadm(d, "join"),
-		doCheckKubeconfigIsAlive(d),
+		doCheckLocalKubeconfigIsAlive(d),
 		ssh.DoPrintIpAddresses(),
 		doPrintEtcdMembers(d),
 		doPrintNodes(d),
@@ -42,8 +54,9 @@ func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
 	return actions
 }
 
-// doKubeadmJoinWorker runs the `kubeadm join`
+// doKubeadmJoinControlPlane runs the `kubeadm join` for another control-plane machine
 func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
+	// get the joinConfiguration from the 'config.join' in the ResourceData
 	joinConfig, _, err := common.JoinConfigFromResourceData(d)
 	if err != nil {
 		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
@@ -71,7 +84,9 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 	}
 	joinConfig.ControlPlane = &kubeadmapi.JoinControlPlane{LocalAPIEndpoint: endpoint}
 
-	// ... and update the `config.join` section
+	joinConfig.NodeRegistration.Name = getNodenameFromResourceData(d)
+
+	// ... and update the `config.join` section in the ResourceData
 	if err := common.JoinConfigToResourceData(d, joinConfig); err != nil {
 		return ssh.ActionError(err.Error())
 	}
@@ -84,7 +99,7 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 		ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'..."),
 		doUploadCerts(d),
 		doKubeadm(d, "join", extraArgs...),
-		doCheckKubeconfigIsAlive(d),
+		doCheckLocalKubeconfigIsAlive(d),
 		ssh.DoPrintIpAddresses(),
 		doPrintEtcdMembers(d),
 		doPrintNodes(d),

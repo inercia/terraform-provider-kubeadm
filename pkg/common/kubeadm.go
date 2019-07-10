@@ -132,6 +132,23 @@ func InitConfigFromResourceData(d *schema.ResourceData) (*kubeadmapi.InitConfigu
 	return initConfig, configBytes, nil
 }
 
+// InitConfigToResourceData updates the `config.init` in the ResourceData
+// with the initConfig provided
+func InitConfigToResourceData(d *schema.ResourceData, initConfig *kubeadmapi.InitConfiguration) error {
+	initConfigBytes, err := InitConfigToYAML(initConfig)
+	if err != nil {
+		return fmt.Errorf("could not get a valid 'config' for init'ing: %s", err)
+	}
+
+	// update the config.init
+	config := d.Get("config").(map[string]interface{})
+	config["init"] = ToTerraformSafeString(initConfigBytes[:])
+	if err := d.Set("config", config); err != nil {
+		return fmt.Errorf("cannot update config.init")
+	}
+	return nil
+}
+
 //
 // Join
 //
@@ -215,7 +232,8 @@ func JoinConfigFromResourceData(d *schema.ResourceData) (*kubeadmapi.JoinConfigu
 	return joinConfig, configBytes, nil
 }
 
-// JoinConfigToResourceData updates the `config.join` in the ResourceData with the joinConfig provided
+// JoinConfigToResourceData updates the `config.join` in the ResourceData with
+// the joinConfig provided
 func JoinConfigToResourceData(d *schema.ResourceData, joinConfig *kubeadmapi.JoinConfiguration) error {
 	joinConfigBytes, err := JoinConfigToYAML(joinConfig)
 	if err != nil {
@@ -228,6 +246,5 @@ func JoinConfigToResourceData(d *schema.ResourceData, joinConfig *kubeadmapi.Joi
 	if err := d.Set("config", config); err != nil {
 		return fmt.Errorf("cannot update config.join")
 	}
-
 	return nil
 }
