@@ -26,18 +26,14 @@ import (
 
 // doKubeadmJoinWorker runs the `kubeadm join`
 func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
-	_, joinConfigBytes, err := common.JoinConfigFromResourceData(d)
-	if err != nil {
-		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
-	}
-
 	// check if we are joining the Control Plane: we must upload the certificates and
 	// use the '--control-plane' flag
 	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Checking we have the required binaries..."),
 		doCheckCommonBinaries(d),
+		doRefreshToken(d),
 		ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'..."),
-		doKubeadm(d, "join", joinConfigBytes),
+		doKubeadm(d, "join"),
 		doCheckKubeconfigIsAlive(d),
 		ssh.DoPrintIpAddresses(),
 		doPrintEtcdMembers(d),
@@ -62,7 +58,7 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 		return ssh.ActionError("Cannot create additional masters when the 'kubeadm.<name>.api.external' is empty")
 	}
 
-	// add a local Control-Plane section to the JoinConfiguration
+	// add a local Control-Plane section to the JoinConfiguration (that means a new master will be started here)
 	endpoint := kubeadmapi.APIEndpoint{}
 	if hp, ok := d.GetOk("listen"); ok {
 		h, p, err := common.SplitHostPort(hp.(string), common.DefAPIServerPort)
@@ -75,18 +71,19 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 	}
 	joinConfig.ControlPlane = &kubeadmapi.JoinControlPlane{LocalAPIEndpoint: endpoint}
 
-	joinConfigBytes, err := common.JoinConfigToYAML(joinConfig)
-	if err != nil {
-		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+	// ... and update the `config.join` section
+	if err := common.JoinConfigToResourceData(d, joinConfig); err != nil {
+		return ssh.ActionError(err.Error())
 	}
 
 	extraArgs := []string{}
 	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Checking we have the required binaries..."),
 		doCheckCommonBinaries(d),
+		doRefreshToken(d),
 		ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'..."),
 		doUploadCerts(d),
-		doKubeadm(d, "join", joinConfigBytes, extraArgs...),
+		doKubeadm(d, "join", extraArgs...),
 		doCheckKubeconfigIsAlive(d),
 		ssh.DoPrintIpAddresses(),
 		doPrintEtcdMembers(d),

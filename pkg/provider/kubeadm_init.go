@@ -166,6 +166,7 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) (*kubeadmapi.I
 		if err != nil {
 			return nil, err
 		}
+		t.Expires = nil
 		initConfig.BootstrapTokens = []kubeadmapi.BootstrapToken{t}
 	}
 

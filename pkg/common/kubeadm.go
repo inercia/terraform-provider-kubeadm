@@ -16,6 +16,7 @@ package common
 
 import (
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -127,7 +128,7 @@ func InitConfigFromResourceData(d *schema.ResourceData) (*kubeadmapi.InitConfigu
 		return nil, nil, err
 	}
 
-	log.Printf("[DEBUG] [KUBEADM] init config:\n%s\n", configBytes)
+	// log.Printf("[DEBUG] [KUBEADM] init config:\n%s\n", configBytes)
 	return initConfig, configBytes, nil
 }
 
@@ -210,6 +211,23 @@ func JoinConfigFromResourceData(d *schema.ResourceData) (*kubeadmapi.JoinConfigu
 		return nil, nil, err
 	}
 
-	log.Printf("[DEBUG] [KUBEADM] join config:\n%s\n", configBytes)
+	// log.Printf("[DEBUG] [KUBEADM] join config:\n%s\n", configBytes)
 	return joinConfig, configBytes, nil
+}
+
+// JoinConfigToResourceData updates the `config.join` in the ResourceData with the joinConfig provided
+func JoinConfigToResourceData(d *schema.ResourceData, joinConfig *kubeadmapi.JoinConfiguration) error {
+	joinConfigBytes, err := JoinConfigToYAML(joinConfig)
+	if err != nil {
+		return fmt.Errorf("could not get a valid 'config' for join'ing: %s", err)
+	}
+
+	// update the config.join
+	config := d.Get("config").(map[string]interface{})
+	config["join"] = ToTerraformSafeString(joinConfigBytes[:])
+	if err := d.Set("config", config); err != nil {
+		return fmt.Errorf("cannot update config.join")
+	}
+
+	return nil
 }

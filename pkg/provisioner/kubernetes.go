@@ -31,7 +31,8 @@ func doLocalKubectl(d *schema.ResourceData, args ...string) ssh.Action {
 // doRemoteKubectl runs a remote kubectl with the kubeconfig specified in the schema
 func doRemoteKubectl(d *schema.ResourceData, args ...string) ssh.Action {
 	kubeconfig := getKubeconfigFromResourceData(d)
-	return ssh.DoLocalKubectl(kubeconfig, args...)
+	kubectl := getKubectlFromResourceData(d)
+	return ssh.DoRemoteKubectl(kubectl, kubeconfig, args...)
 }
 
 // DoLocalKubectlApply applies some manifests with a local kubectl with the kubeconfig specified in the schema
@@ -50,23 +51,6 @@ func doRemoteKubectlApply(d *schema.ResourceData, manifests []ssh.Manifest) ssh.
 		return ssh.ActionError("no 'config_path' has been specified")
 	}
 	return ssh.DoRemoteKubectlApply(getKubectlFromResourceData(d), kubeconfig, manifests)
-}
-
-// doRefreshToken uses the kubeconfig for connecting to the API server and refreshing the token
-func doRefreshToken(d *schema.ResourceData) ssh.Action {
-	//token, ok := d.GetOk("config.token")
-	//if !ok {
-	//	panic("there should be a token")
-	//}
-
-	return ssh.DoIfElse(
-		checkLocalKubeconfigAlive(d),
-		ssh.ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) ssh.Action {
-			// TODO: we should (re)create the token by ssh'ing and doing a 'kubeadm token create'
-			return nil
-		}),
-		ssh.DoAbort("no valid kubeconfig exists or the cluster is not alive/reachable: the token not refreshed, so the node cannot join the cluster"),
-	)
 }
 
 // checkLocalKubeconfigExists checks if the kubeconfig exists

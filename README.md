@@ -101,6 +101,8 @@ You can find examples of the privider/provisioner in other environments like Ope
 * Easy deployment of kubernetes clusters in any platform supported
 by Terraform, just adding our `provisioner "kubeadm"` in the machines
 you want to be part of the cluster.
+  * All operations are performed through the SSH connection created by Terraform, 
+  so you can create a k8s cluster in completely isolated machines.
 * Multi-master deployments. Just add a Load Balancer that points
 to your masters and you will have a HA cluster!.  
 * Easy _scale-up_/_scale-down_ of the cluster by just changing the
@@ -110,12 +112,13 @@ in other parts of your Terraform script. This makes it easy to do things like:
   * enabling SSL termination by using the certificates generated for `kubeadm`
    in the code you have for creating your Load Balancer.
   * create machine _templates_ (for example, `cloud-init` code) that can 
-  be used for creating machines dynamically when Terraform is not involved
-  (like _autoscaling groups_).
+  be used for creating machines dynamically, without Terraform being involved
+  (like _autoscaling groups_ in AWS).
 * Automatic rolling upgrade of the cluster by just changing the base
-image of your machines. Ter-raform will take care of replacing old
-nodes with upgraded ones...
-* Automatic deployment of some addons, like CNI drivers, the Dashboard,
+image of your machines. Terraform will take care of replacing old
+nodes with upgraded ones, and this provider will take care of draining
+the nodes.
+* Automatic deployment of some _addons_, like CNI drivers, the k8s Dashboard,
 Helm, etc.  
 
 (check the [TODO](../../wiki/Roadmap) for an updated list of features).  
@@ -130,7 +133,8 @@ any previous notice. To see what is left or planned, see the
 
 ## Requirements
 
-* Terraform
+* [Terraform](https://www.terraform.io)
+* Go >= 1.12 (for compiling)
 
 ## Quick start
 

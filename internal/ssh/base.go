@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 
 	"github.com/gookit/color"
 	"github.com/hashicorp/terraform/communicator"
@@ -153,8 +154,8 @@ func DoMessageWarn(format string, args ...interface{}) Action {
 	return DoMessageWithColor(fmt.Sprintf("WARNING: "+format, args...), color.FgLightGreen)
 }
 
-func DoMessageInfo(msg string) Action {
-	return DoMessageWithColor(msg, color.FgLightGreen)
+func DoMessageInfo(format string, args ...interface{}) Action {
+	return DoMessageWithColor(fmt.Sprintf(format, args...), color.FgGreen)
 }
 
 // DoMessageDebug prints a debug message
@@ -300,7 +301,15 @@ func DoSendingOutputToFun(action Action, interceptor OutputFunc) Action {
 // make sure you trip spaces in the output, as some extra spaces can be before/after
 func DoSendingOutputToWriter(action Action, writer io.Writer) Action {
 	return DoSendingOutputToFun(action, func(s string) {
-		_, _ = writer.Write([]byte(s))
+		c := strings.ReplaceAll(s, "\r", "\n")
+		_, _ = writer.Write([]byte(c))
+	})
+}
+
+// DoSendingOutputToDevNull runs some action, but hiding the output
+func DoSendingOutputToDevNull(action Action) Action {
+	return DoSendingOutputToFun(action, func(s string) {
+		// do nothing with s
 	})
 }
 
@@ -308,6 +317,16 @@ func DoSendingOutputToWriter(action Action, writer io.Writer) Action {
 func CheckExpr(expr bool) CheckerFunc {
 	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
 		return expr, nil
+	})
+}
+
+func CheckFailed() CheckerFunc {
+	return CheckExpr(false)
+}
+
+func CheckError(err error) CheckerFunc {
+	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+		return false, err
 	})
 }
 
