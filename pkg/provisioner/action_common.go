@@ -20,7 +20,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -29,6 +28,24 @@ import (
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
+
+// expectedBinaries is the list of expected binaries to be present in the remote machine
+var expectedBinaries = []struct {
+	name        string
+	defaultPath func(*schema.ResourceData) string
+	property    string
+}{
+	{
+		name:        "kubeadm",
+		defaultPath: getKubeadmFromResourceData,
+		property:    "install.kubeadm_path",
+	},
+	{
+		name:        "kubectl",
+		defaultPath: getKubectlFromResourceData,
+		property:    "install.kubectl_path",
+	},
+}
 
 // getKubeadmIgnoredChecksArg returns the kubeadm arguments for the ignored checks
 func getKubeadmIgnoredChecksArg(d *schema.ResourceData) string {
@@ -45,55 +62,6 @@ func getKubeadmIgnoredChecksArg(d *schema.ResourceData) string {
 	return ""
 }
 
-// getKubeadmNodenameArg returns the kubeadm arguments for specifying the nodename
-func getKubeadmNodenameArg(d *schema.ResourceData) string {
-	if nodenameOpt, ok := d.GetOk("nodename"); ok {
-		return fmt.Sprintf("--node-name=%s", nodenameOpt.(string))
-	}
-	return ""
-}
-
-// getKubeconfigFromResourceData returns the kubeconfig parameter passed in the `config_path`
-func getKubeconfigFromResourceData(d *schema.ResourceData) string {
-	kubeconfigOpt, ok := d.GetOk("config.config_path")
-	if !ok {
-		return ""
-	}
-	f, err := filepath.Abs(kubeconfigOpt.(string))
-	if err != nil {
-		return ""
-	}
-	return f
-}
-
-// getKubeadmFromResourceData returns the kubeadm binary path from the config
-func getKubeadmFromResourceData(d *schema.ResourceData) string {
-	kubeadm_path := d.Get("install.0.kubeadm_path").(string)
-	if len(kubeadm_path) == 0 {
-		kubeadm_path = common.DefKubeadmPath
-	}
-	return kubeadm_path
-}
-
-// getToken returns the current token
-func getToken(d *schema.ResourceData) string {
-	config := d.Get("config").(map[string]interface{})
-	t, ok := config["token"]
-	if !ok {
-		return ""
-	}
-	return t.(string)
-}
-
-// getKubectlFromResourceData returns the kubectl binary path from the config
-func getKubectlFromResourceData(d *schema.ResourceData) string {
-	kubectl_path := d.Get("install.0.kubectl_path").(string)
-	if len(kubectl_path) == 0 {
-		kubectl_path = common.DefKubectlPath
-	}
-	return kubectl_path
-}
-
 // doExecKubeadmWithConfig runs a `kubeadm` command in the remote host
 // this functions creates a `kubeadm` executor using some default values for some arguments.
 func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string, args ...string) ssh.Action {
@@ -103,7 +71,6 @@ func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string,
 	switch command {
 	case "init", "join":
 		allArgs = append(allArgs, getKubeadmIgnoredChecksArg(d))
-		allArgs = append(allArgs, getKubeadmNodenameArg(d))
 		allArgs = append(allArgs, fmt.Sprintf("--config=%s", cfg))
 	}
 
@@ -150,12 +117,16 @@ func doKubeadm(d *schema.ResourceData, command string, args ...string) ssh.Actio
 		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), servicePath),
 		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), dropinPath),
 		doMaybeReset(d, kubeadmConfigFilename),
-		doUploadJoinConfig(d, command, kubeadmConfigFilename),
+		// run kubeadm... if something goes wrong, delete the "kubeadm.conf" file created
+		// otherwise, back up the config file
 		ssh.DoMessageInfo("Starting kubeadm..."),
 		ssh.DoWithException(
-			doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
-			ssh.DoDeleteFile(kubeadmConfigFilename)), // if something goes wrong, delete the "kubeadm.conf" file
-		ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak"), // otherwise, back it up
+			ssh.ActionList{
+				doUploadKubeadmConfig(d, command, kubeadmConfigFilename),
+				doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
+			},
+			ssh.DoDeleteFile(kubeadmConfigFilename)),
+		ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak"),
 	}
 	return actions
 }
@@ -170,25 +141,26 @@ func doMaybeReset(d *schema.ResourceData, kubeadmConfigFilename string) ssh.Acti
 		})
 }
 
-func doUploadJoinConfig(d *schema.ResourceData, command string, kubeadmConfigFilename string) ssh.Action {
+func doUploadKubeadmConfig(d *schema.ResourceData, command string, kubeadmConfigFilename string) ssh.Action {
 	return ssh.DoLazy(func() ssh.Action {
-		// we must delay the joinConfig retrieval as some other functions modify it until the very last moment...
-		joinConfigBytes := []byte{}
+		// we must delay the {init|join}Config retrieval as some other functions
+		// modify it until the very last moment...
+		configBytes := []byte{}
 		var err error
 		switch command {
 		case "init":
-			_, joinConfigBytes, err = common.InitConfigFromResourceData(d)
+			_, configBytes, err = common.InitConfigFromResourceData(d)
 			if err != nil {
 				return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for init'ing: %s", err))
 			}
 
 		case "join":
-			_, joinConfigBytes, err = common.JoinConfigFromResourceData(d)
+			_, configBytes, err = common.JoinConfigFromResourceData(d)
 			if err != nil {
 				return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 			}
 		}
-		return ssh.DoUploadReaderToFile(bytes.NewReader(joinConfigBytes), kubeadmConfigFilename)
+		return ssh.DoUploadReaderToFile(bytes.NewReader(configBytes), kubeadmConfigFilename)
 	})
 }
 
@@ -241,20 +213,48 @@ func doPrintNodes(d *schema.ResourceData) ssh.Action {
 // doCheckCommonBinaries checks that some common binaries neccessary are present in the remote machine
 func doCheckCommonBinaries(d *schema.ResourceData) ssh.Action {
 	checks := ssh.ActionList{}
-
-	kubeadm_path := getKubeadmFromResourceData(d)
-	checks = append(checks,
-		ssh.DoIfElse(
-			ssh.CheckBinaryExists(kubeadm_path),
-			ssh.DoMessage("- kubeadm found"),
-			ssh.DoAbort("kubeadm NOT found in $PATH. You can specify a custom executable in the 'install.kubeadm_path' property in the provisioner.")))
-
-	kubectl_path := getKubectlFromResourceData(d)
-	checks = append(checks,
-		ssh.DoIfElse(
-			ssh.CheckBinaryExists(kubectl_path),
-			ssh.DoMessage("- kubectl found"),
-			ssh.DoAbort("kubectl NOT found in $PATH. You can specify a custom executable in the 'install.kubectl_path' property in the provisioner")))
+	for _, expected := range expectedBinaries {
+		path := expected.defaultPath(d)
+		checks = append(checks,
+			ssh.DoIfElse(
+				ssh.CheckBinaryExists(path),
+				ssh.DoMessage("- %s found", expected.name),
+				ssh.DoAbort("%s NOT found in $PATH. You can specify a custom executable in the '%s' property in the provisioner.", expected.name, expected.property)))
+	}
 
 	return checks
+}
+
+// doDeleteLocalKubeconfig deletes the current, local kubeconfig (the one specified
+// in the "config_path" attribute), but doing a backup first.
+func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Action {
+	kubeconfig := getKubeconfigFromResourceData(d)
+	kubeconfigBak := kubeconfig + ".bak"
+
+	return ssh.DoIf(
+		ssh.CheckLocalFileExists(kubeconfig),
+		ssh.ActionList{
+			ssh.DoMessage("Removing local kubeconfig (with backup)"),
+			ssh.DoMoveLocalFile(kubeconfig, kubeconfigBak),
+		},
+	)
+}
+
+// doDownloadKubeconfig downloads the "admin.conf" from the remote master
+// to the local file specified in the "config_path" attribute
+func doDownloadKubeconfig(d *schema.ResourceData) ssh.Action {
+	kubeconfig := getKubeconfigFromResourceData(d)
+	return ssh.DoDownloadFile(ssh.DefAdminKubeconfig, kubeconfig)
+}
+
+// doCheckLocalKubeconfigIsAlive checks that the local "kubeconfig" can be
+// used for accessing the API server. In case we cannot, we just print
+// a warning, as maybe the API server is not accessible from the localhost
+// where Terraform is being run.
+func doCheckLocalKubeconfigIsAlive(d *schema.ResourceData) ssh.Action {
+	return ssh.DoIfElse(
+		checkLocalKubeconfigAlive(d),
+		ssh.DoMessageInfo("the API server is accessible from here (with the current kubeconfig)"),
+		ssh.DoMessageWarn("the API server does NOT seem to be accessible from here (with the current kubeconfig)"),
+	)
 }

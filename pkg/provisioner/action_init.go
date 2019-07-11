@@ -15,14 +15,31 @@
 package provisioner
 
 import (
+	"fmt"
+
 	"github.com/hashicorp/terraform/helper/schema"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
+	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
 // doKubeadmInit runs the `kubeadm init`
 func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 	extraArgs := []string{"--skip-token-print"}
+
+	// get the join configuration
+	initConfig, _, err := common.InitConfigFromResourceData(d)
+	if err != nil {
+		return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
+	}
+
+	// ... update the nodename
+	initConfig.NodeRegistration.Name = getNodenameFromResourceData(d)
+
+	// ... and update the `config.join` section
+	if err := common.InitConfigToResourceData(d, initConfig); err != nil {
+		return ssh.ActionError(err.Error())
+	}
 
 	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Checking we have the required binaries..."),
@@ -38,7 +55,7 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 			doKubeadm(d, "init", extraArgs...),
 		),
 		doDownloadKubeconfig(d),
-		doCheckKubeconfigIsAlive(d),
+		doCheckLocalKubeconfigIsAlive(d),
 		ssh.DoPrintIpAddresses(),
 		doPrintEtcdMembers(d),
 		doPrintNodes(d),

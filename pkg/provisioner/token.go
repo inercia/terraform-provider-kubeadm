@@ -173,7 +173,7 @@ func DoSetNewToken(d *schema.ResourceData, newToken string) ssh.Action {
 
 // checkTokenIsValid checks that the current token is still valid
 func checkTokenIsValid(d *schema.ResourceData, tokens KubeadmTokensSet) ssh.CheckerFunc {
-	currentToken := getToken(d)
+	currentToken := getTokenFromResourceData(d)
 
 	return ssh.CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
 		action := DoGetCurrentRemoteTokens(d, tokens)
@@ -201,7 +201,7 @@ func checkTokenIsValid(d *schema.ResourceData, tokens KubeadmTokensSet) ssh.Chec
 // doRefreshToken uses the remote kubeadm for connecting to the API server, checking if the Token is still valid
 // and create a new token otherwise
 func doRefreshToken(d *schema.ResourceData) ssh.Action {
-	curTokenInJoinConfig := getToken(d)
+	curTokenInJoinConfig := getTokenFromResourceData(d)
 	curTokens := KubeadmTokensSet{}
 
 	// create a new, random curTokenInJoinConfig
