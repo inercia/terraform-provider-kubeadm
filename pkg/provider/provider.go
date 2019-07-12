@@ -18,27 +18,27 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/terraform/helper/schema"
 
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
 // dataSourceKubeadmCreate is responsible for creating the kubeadm configuration and certificates
 func dataSourceKubeadmCreate(d *schema.ResourceData, meta interface{}) error {
-	log.Printf("[DEBUG] [KUBEADM] dataSourceKubeadmRead: new resource = %v", d.IsNewResource())
+	ssh.Debug("dataSourceKubeadmRead: new resource = %v", d.IsNewResource())
 
 	_, ok := d.GetOk("config")
 	if !ok {
-		log.Printf("[DEBUG] [KUBEADM] no previous configuration found: creating new configuration...")
+		ssh.Debug("no previous configuration found: creating new configuration...")
 		if err := createConfigForProvisioner(d); err != nil {
 			return err
 		}
 	} else {
-		log.Printf("[DEBUG] [KUBEADM] using previous config")
+		ssh.Debug("using previous config")
 	}
 
 	if err := dataSourceVerify(d); err != nil {
@@ -58,7 +58,7 @@ func dataSourceKubeadmDelete(d *schema.ResourceData, meta interface{}) error {
 	kubeconfig, ok := d.GetOk("config_path")
 	if ok {
 		kubeconfigS := kubeconfig.(string)
-		log.Printf("[DEBUG] [KUBEADM] trying to remove current kubeconfig file %q", kubeconfigS)
+		ssh.Debug("trying to remove current kubeconfig file %q", kubeconfigS)
 		err := os.Remove(kubeconfigS)
 		if err != nil && !os.IsNotExist(err) {
 			return err
@@ -76,24 +76,24 @@ func dataSourceKubeadmUpdate(d *schema.ResourceData, meta interface{}) error {
 
 // dataSourceKubeadmExists checks if the kubeadm configuration already exists
 func dataSourceKubeadmExists(d *schema.ResourceData, meta interface{}) (bool, error) {
-	log.Printf("[DEBUG] [KUBEADM] checking if kubeadm configuration already exists...")
+	ssh.Debug("checking if kubeadm configuration already exists...")
 
 	// check we have the certificates
 	_, ok := d.GetOk("config")
 	if !ok {
-		log.Printf("[DEBUG] [KUBEADM] does not exist: no config section")
+		ssh.Debug("does not exist: no config section")
 		return false, nil
 	}
 
 	certsConfig := common.CertsConfig{}
 	err := certsConfig.FromResourceDataConfig(d)
 	if err != nil {
-		log.Printf("[DEBUG] [KUBEADM] does not exist: no certs config")
+		ssh.Debug("does not exist: no certs config")
 		return false, err
 	}
 
 	if !certsConfig.HasAllCertificates() {
-		log.Printf("[DEBUG] [KUBEADM] does not exist: empty certs")
+		ssh.Debug("does not exist: empty certs")
 		return false, nil
 	}
 
@@ -104,14 +104,14 @@ func dataSourceKubeadmExists(d *schema.ResourceData, meta interface{}) (bool, er
 func createConfigForProvisioner(d *schema.ResourceData) error {
 	var err error
 
-	log.Printf("[DEBUG] [KUBEADM] generating a random token...")
+	ssh.Debug("generating a random token...")
 	token, err := common.GetRandomToken()
 	if err != nil {
 		return err
 	}
-	log.Printf("[DEBUG] [KUBEADM] kubeadm token = %s", token)
+	ssh.Debug("kubeadm token = %s", token)
 
-	log.Printf("[DEBUG] [KUBEADM] creating kubeadm configuration for init and join")
+	ssh.Debug("creating kubeadm configuration for init and join")
 	initConfig, err := dataSourceToInitConfig(d, token)
 	if err != nil {
 		return err
@@ -125,19 +125,19 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("[DEBUG] [KUBEADM] init configuration:")
-	log.Printf("[DEBUG] [KUBEADM] ------------------------")
-	log.Printf("[DEBUG] [KUBEADM] \n%s", string(initConfigBytes))
-	log.Printf("[DEBUG] [KUBEADM] ------------------------")
+	ssh.Debug("init configuration:")
+	ssh.Debug("------------------------")
+	ssh.Debug("\n%s", string(initConfigBytes))
+	ssh.Debug("------------------------")
 
 	joinConfigBytes, err := common.JoinConfigToYAML(joinConfig)
 	if err != nil {
 		return err
 	}
-	log.Printf("[DEBUG] [KUBEADM] join configuration:")
-	log.Printf("[DEBUG] [KUBEADM] ------------------------")
-	log.Printf("[DEBUG] [KUBEADM] \n%s", string(joinConfigBytes))
-	log.Printf("[DEBUG] [KUBEADM] ------------------------")
+	ssh.Debug("join configuration:")
+	ssh.Debug("------------------------")
+	ssh.Debug("\n%s", string(joinConfigBytes))
+	ssh.Debug("------------------------")
 
 	kubeconfig := d.Get("config_path").(string)
 
@@ -196,11 +196,11 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 		return err
 	}
 
-	log.Printf("[DEBUG] [KUBEADM] -------------------------------------------------------------------------")
-	log.Printf("[DEBUG] [KUBEADM] 'data.config' after configuration:")
-	log.Printf("[DEBUG] [KUBEADM] %s", spew.Sdump(provConfig))
-	log.Printf("[DEBUG] [KUBEADM] end of provisioner config.")
-	log.Printf("[DEBUG] [KUBEADM] -------------------------------------------------------------------------")
+	ssh.Debug("-------------------------------------------------------------------------")
+	ssh.Debug("'data.config' after configuration:")
+	ssh.Debug("%s", spew.Sdump(provConfig))
+	ssh.Debug("end of provisioner config.")
+	ssh.Debug("-------------------------------------------------------------------------")
 
 	// create the ID as the hash of the init and join configurations
 	hasher := md5.New()
@@ -213,8 +213,8 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 
 // dataSourceVerify verifies the config
 func dataSourceVerify(d *schema.ResourceData) error {
-	log.Printf("[DEBUG] [KUBEADM] verifying configuration...")
+	ssh.Debug("verifying configuration...")
 	// Nothing to do at this time...
-	log.Printf("[DEBUG] [KUBEADM] ... configuration seems to be fine.")
+	ssh.Debug("... configuration seems to be fine.")
 	return nil
 }

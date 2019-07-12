@@ -16,7 +16,6 @@ package ssh
 
 import (
 	"fmt"
-	"log"
 )
 
 // CheckProcessRunning checks that a process is running with the help of `ps`
@@ -45,7 +44,7 @@ func DoEnableService(service string) Action {
 
 // CheckServiceExists checks that service exists
 func CheckServiceExists(service string) CheckerFunc {
-	log.Printf("[DEBUG] Checking if service '%s' exists", service)
+	Debug("Checking if service '%s' exists", service)
 	exists := fmt.Sprintf("systemctl --no-pager status '%s' 2>/dev/null", service)
 	return CheckExec(exists)
 }

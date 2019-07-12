@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/terraform/helper/schema"
@@ -45,9 +44,9 @@ func applyFn(ctx context.Context) error {
 	s := ctx.Value(schema.ProvRawStateKey).(*terraform.InstanceState)
 	o := ctx.Value(schema.ProvOutputKey).(terraform.UIOutput)
 
-	//log.Printf("[DEBUG] [KUBEADM] kubeadm provisioner: configuration:\n%s\n", spew.Sdump(d))
-	log.Printf("[DEBUG] [KUBEADM] connection:\n%s\n", spew.Sdump(connData))
-	log.Printf("[DEBUG] [KUBEADM] instance state:\n%s\n", spew.Sdump(s))
+	//ssh.Debug("kubeadm provisioner: configuration:\n%s\n", spew.Sdump(d))
+	ssh.Debug("connection:\n%s\n", spew.Sdump(connData))
+	ssh.Debug("instance state:\n%s\n", spew.Sdump(s))
 
 	// ensure that this is a linux machine
 	if s.Ephemeral.ConnInfo["type"] != "ssh" {
@@ -64,36 +63,62 @@ func applyFn(ctx context.Context) error {
 		return err
 	}
 
-	if err := doKubeadmSetup(d, o, comm, useSudo); err != nil {
+	cfg := ssh.Config{
+		UserOutput: o,
+		Comm:       comm,
+		UseSudo:    useSudo,
+	}
+
+	drain := d.Get("drain").(bool)
+	if drain {
+		ssh.Debug("node will be drained")
+		action := doRemoveNode(d)
+		return action.Apply(cfg)
+	}
+
+	if err := doKubeadmSetup(d, cfg); err != nil {
 		return err
 	}
 
 	// determine what to do (init, join or join --control-plane) depending on the argument provided
 	join := getJoinFromResourceData(d)
 	role := getRoleFromResourceData(d)
-	log.Printf("[DEBUG] [KUBEADM] will join %q, with role %q", join, role)
 
-	var action ssh.Action
+	actions := ssh.ActionList{}
+
+	// some common actions to do BEFORE doing anything
+	actions = append(actions,
+		ssh.DoMessageInfo("Checking we have the required binaries..."),
+		doCheckCommonBinaries(d),
+	)
+
 	if len(join) == 0 {
 		switch role {
 		case "worker":
-			action = ssh.DoAbort("role is %q while no \"join\" argument has been provided", role)
+			actions = append(actions, ssh.DoAbort("role is %q while no \"join\" argument has been provided", role))
 		default:
-			action = doKubeadmInit(d)
+			actions = append(actions, doKubeadmInit(d))
 		}
 	} else {
 		switch role {
 		case "master":
-			action = doKubeadmJoinControlPlane(d)
+			actions = append(actions, doKubeadmJoinControlPlane(d))
 		case "worker":
-			action = doKubeadmJoinWorker(d)
+			actions = append(actions, doKubeadmJoinWorker(d))
 		case "":
-			action = doKubeadmJoinWorker(d)
+			actions = append(actions, doKubeadmJoinWorker(d))
 		default:
-			o.Output(fmt.Sprintf("Unknown provisioning profile: join is %q and role is %q", join, role))
-			return ErrUnknownProvisioningProfile
+			actions = append(actions, ssh.DoAbort("unknown provisioning profile: join is %q and role is %q", join, role))
 		}
 	}
 
-	return action.Apply(o, comm, useSudo)
+	// ... and some common actions to do AFTER
+	actions = append(actions,
+		doCheckLocalKubeconfigIsAlive(d),
+		ssh.DoPrintIpAddresses(),
+		doPrintEtcdStatus(d),
+		doPrintKubeNodesSet(d),
+	)
+
+	return actions.Apply(cfg)
 }

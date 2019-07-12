@@ -15,25 +15,28 @@
 package provisioner
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
-	"log"
+	"net/url"
 	"strconv"
 	"strings"
 
-	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/hashicorp/terraform/terraform"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
 const (
-	// the local etcd endpoint used for some commands
-	localEtcdEndpoint = "127.0.0.1"
+	// the `etcdctl` command we must run
+	etcdctlCommand = "ETCDCTL_API=3 etcdctl"
 
-	// docker command for getting the etcd container
-	dockerGetEtcdContainer = "docker ps --filter name=^/k8s_etcd_etcd -q"
+	// the local etcd endpoint used for some commands
+	localEtcdEndpointIP   = "127.0.0.1"
+	localEtcdEndpointPort = 2379
+
+	// pattern for getting the etcd container
+	etcContainerPattern = "k8s_etcd_etcd"
 
 	// common arguments for etcdctl
 	// note: these arguments are valid IFF using "ETCDCTL_API=3" is defined in the environment
@@ -52,23 +55,34 @@ const (
 var (
 	// the etcd server is not running or we count not find it
 	ErrNoEtcdContainer = errors.New("could not find a etcd container")
+
+	ErrParsingEtcdOutput = errors.New("error parsing etcd output")
 )
+
+// runEtcdctlSubcommand runs a etcdctl command
+func DoRunEtcdctlSubcommand(subcommand string, args ...string) ssh.Action {
+	argEndpoints := fmt.Sprintf("--endpoints=https://%s:%d", localEtcdEndpointIP, localEtcdEndpointPort)
+
+	// build the full `etcdctl` command to run in the container
+	fullEtcdctlCommand := fmt.Sprintf("%s %s %s %s %s",
+		etcdctlCommand, argsCommon, argEndpoints, subcommand, strings.Join(args, " "))
+
+	return ssh.DoDockerExec(etcContainerPattern, fullEtcdctlCommand)
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 type EtcdEndpoint struct {
 	ID       string
-	Endpoint string
+	Endpoint url.URL
 	IsLeader bool
 }
 
-type EtcdMember struct {
-	ID         string
-	Name       string
-	Status     string
-	PeerURL    string
-	ClienAddrs string
+func (ep EtcdEndpoint) String() string {
+	return fmt.Sprintf("%s %s (leader:%t)", ep.ID, ep.Endpoint.String(), ep.IsLeader)
 }
 
-func getEndpointFromString(s string) (EtcdEndpoint, error) {
+func (ep *EtcdEndpoint) FromString(s string) error {
 	// parse something like
 	//
 	// https://127.0.0.1:2379, e942f75ad6f00855, 3.3.10, 1.8 MB, true, 2, 24139
@@ -80,167 +94,136 @@ func getEndpointFromString(s string) (EtcdEndpoint, error) {
 	//| https://127.0.0.1:2379 | e942f75ad6f00855 |  3.3.10 |  1.8 MB |      true |         2 |      24122 |
 	//+------------------------+------------------+---------+---------+-----------+-----------+------------+
 	res := strings.Split(s, ",")
+	if len(res) != 7 {
+		ssh.Debug("cannot parse as endpoint info: %q", s)
+		return ErrParsingEtcdOutput
+	}
+
 	isLeader, err := strconv.ParseBool(strings.TrimSpace(res[4]))
 	if err != nil {
-		return EtcdEndpoint{}, err
+		return err
 	}
 
-	return EtcdEndpoint{
-		Endpoint: strings.TrimSpace(res[0]),
-		ID:       strings.TrimSpace(res[1]),
-		IsLeader: isLeader,
-	}, nil
-}
-
-func getMemberFromString(s string) (EtcdMember, error) {
-	// parse something like
-	//
-	// e942f75ad6f00855, started, kubeadm-master-0, https://172.30.0.2:2380, https://172.30.0.2:2379
-	//
-	// where:
-	//+------------------+---------+------------------+-------------------------+-------------------------+
-	//|        ID        | STATUS  |       NAME       |       PEER ADDRS        |      CLIENT ADDRS       |
-	//+------------------+---------+------------------+-------------------------+-------------------------+
-	//| e942f75ad6f00855 | started | kubeadm-master-0 | https://172.30.0.2:2380 | https://172.30.0.2:2379 |
-	//+------------------+---------+------------------+-------------------------+-------------------------+
-	res := strings.Split(s, ",")
-	return EtcdMember{
-		ID:         strings.TrimSpace(res[0]),
-		Status:     strings.TrimSpace(res[1]),
-		Name:       strings.TrimSpace(res[2]),
-		PeerURL:    strings.TrimSpace(res[3]),
-		ClienAddrs: strings.TrimSpace(res[4]),
-	}, nil
-}
-
-// getEtcdContainer returns the etcd container ID
-func getEtcdContainer(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (string, error) {
-	log.Printf("[DEBUG] [KUBEADM] Getting the etcd container...")
-
-	output := []string{}
-	var interceptor ssh.OutputFunc = func(s string) {
-		output = append(output, s)
-	}
-
-	if err := ssh.DoExec(dockerGetEtcdContainer).Apply(interceptor, comm, useSudo); ssh.IsError(err) {
-		return "", err
-	}
-
-	if len(output) == 0 {
-		log.Printf("[DEBUG] [KUBEADM] etcd does not seem to be running in this machine")
-		return "", ErrNoEtcdContainer
-	}
-
-	cont := output[0]
-	cont = strings.TrimSpace(cont)
-	log.Printf("[DEBUG] etcd detected running in container: '%s'", cont)
-	return cont, nil
-}
-
-// getEndpointsArgFor returns the `etcdctl` argument for a list of etcd endpoints
-func getEndpointsArgFor(addrs []string) (string, error) {
-	urls := []string{}
-	for _, addr := range addrs {
-		urls = append(urls, fmt.Sprintf("https://[%s]:2379", addr))
-	}
-	return "--endpoints=" + strings.Join(urls, ","), nil
-}
-
-// getEtcdCtlCommand returns a 'etcdctl' command
-func getEtcdCtlCommand() (string, error) {
-	return "ETCDCTL_API=3 etcdctl", nil
-}
-
-// runEtcdctlSubcommand runs a etcdctl command
-func runEtcdctlSubcommand(o terraform.UIOutput, comm communicator.Communicator, useSudo bool, container string, endpoints []string, subcommand string) ([]string, error) {
-	output := []string{}
-
-	// build the
-	etcdctlCommand, err := getEtcdCtlCommand()
+	u, err := url.Parse(strings.TrimSpace(res[0]))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	argEndpoints, err := getEndpointsArgFor(endpoints)
-	if err != nil {
-		return nil, err
-	}
+	ep.Endpoint = *u
+	ep.ID = strings.TrimSpace(res[1])
+	ep.IsLeader = isLeader
 
-	fullEtcdctlCommand := fmt.Sprintf("%s %s %s %s", etcdctlCommand, argsCommon, argEndpoints, subcommand)
-	dockerCommand := fmt.Sprintf("docker exec -ti '%s' /bin/sh -c '%s'", container, fullEtcdctlCommand)
-
-	var interceptor ssh.OutputFunc = func(s string) {
-		output = append(output, s)
-	}
-
-	log.Printf("[DEBUG] Running command in etcd container: '%s'", dockerCommand)
-	if res := ssh.DoExec(dockerCommand).Apply(interceptor, comm, useSudo); ssh.IsError(res) {
-		return nil, res
-	}
-
-	return output, nil
+	return nil
 }
 
-// getMemberList gets the list of members in the etcd cluster
-func getMemberList(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) ([]EtcdMember, error) {
-	members := []EtcdMember{}
+type EtcdEndpointsSet map[string]EtcdEndpoint
 
-	container, err := getEtcdContainer(o, comm, useSudo)
-	if err != nil {
-		return nil, err
-	}
-
-	output, err := runEtcdctlSubcommand(o, comm, useSudo, container, []string{localEtcdEndpoint}, subcmdMembersList)
-	if err != nil {
-		return nil, err
-	}
-
-	// parse the output and get the members
-	for _, line := range output {
-		member, err := getMemberFromString(line)
-		if err != nil {
-			return nil, err
+// FromString gets a set of endpoints from a string
+func (endpoints *EtcdEndpointsSet) FromString(s string) (err error) {
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) == 0 {
+			continue
 		}
-		members = append(members, member)
+		ep := EtcdEndpoint{}
+		if err := ep.FromString(line); err != nil {
+			return err
+		}
+		ssh.Debug("adding etcd endpoint: %+v", ep)
+		(*endpoints)[ep.ID] = ep
 	}
-
-	return members, nil
+	return
 }
 
-// doPrintEtcdMembers prints the list of etcd members in the etcd cluster
-func doPrintEtcdMembers(d *schema.ResourceData) ssh.Action {
-	return ssh.ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) ssh.Action {
-		members, err := getMemberList(o, comm, useSudo)
-		if err != nil {
-			if err == ErrNoEtcdContainer {
-				return ssh.DoMessageInfo("etcd is not running in this node")
-			} else {
-				return nil
+// GetLocalEndpoint get the info for the local endpoint
+// we do that by going through all the endpoint and checking which one
+// has 127.0.0.1 in the address...
+func (endpoints EtcdEndpointsSet) GetLocalEndpoint() EtcdEndpoint {
+	var localEndpoint EtcdEndpoint
+	for _, ep := range endpoints {
+		if ep.Endpoint.Hostname() == localEtcdEndpointIP {
+			// update the local endpoint info, specially the ID
+			ssh.Debug("updating info for local etcd instance: %+v", ep)
+			localEndpoint = ep
+		}
+	}
+	return localEndpoint
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+// DoGetEndpointsList gets the list of endpoints in the etcd cluster
+func DoGetEndpointsList(eps *EtcdEndpointsSet) ssh.Action {
+	var buf bytes.Buffer
+	return ssh.ActionList{
+		ssh.DoSendingExecOutputToWriter(&buf, DoRunEtcdctlSubcommand(subcmdEndpointsList)),
+		ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+			err := eps.FromString(buf.String())
+			if err != nil {
+				return ssh.ActionError(err.Error())
 			}
-		}
-		if len(members) == 0 {
-			return ssh.DoMessageWarn("Could not get list of etcd members")
-		}
-
-		actions := ssh.ActionList{
-			ssh.DoMessage("etcd members:"),
-		}
-		for _, member := range members {
-			actions = append(actions,
-				ssh.DoMessage("- '%s' at '%s'", member.ID, member.ClienAddrs))
-		}
-		return actions
-	})
+			return nil
+		}),
+	}
 }
 
 // doRemoveIfMember removes this node from the etcd cluster iff it was a member
 func doRemoveIfMember(d *schema.ResourceData) ssh.Action {
-	return ssh.ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) ssh.Action {
-		// TODO: check if there is a etcd container running in this machine
-		// TODO: get the list of endpoints
-		// TODO: get the endpoint that has 127.0.0.1 in the endpoint URL
-		// TODO: get the ID for that endpoint
-		// TODO: run the "member remove", but using all the `--endpoints` previously obtained
-		return nil
-	})
+	eps := EtcdEndpointsSet{}
+	return ssh.ActionList{
+		ssh.DoMessageInfo("Checking if we must delete the node from the etcd cluster..."),
+		ssh.DoIfElse(
+			ssh.CheckContainerRunning(etcContainerPattern),
+			ssh.ActionList{
+				DoGetEndpointsList(&eps),
+				ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+					if len(eps) == 0 {
+						return ssh.DoMessageWarn("could not get list of etcd endpoints")
+					}
+					return nil
+				}),
+				ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+					localEndpoint := eps.GetLocalEndpoint()
+					if localEndpoint.ID == "" {
+						return ssh.DoMessageWarn("could not find the local etcd endpoint details")
+					}
+
+					// now we have the etcd ID for the etcd instance running in this machine
+					// we can run the "member remove <ID>"
+					return ssh.ActionList{
+						ssh.DoMessageInfo("Removing %q from the etcd cluster", localEndpoint.ID),
+						DoRunEtcdctlSubcommand(subcmdMemberRemove, localEndpoint.ID),
+						ssh.DoMessageInfo("%q has been removed from the etcd cluster", localEndpoint.ID),
+					}
+				}),
+			},
+			ssh.ActionList{
+				ssh.DoMessageInfo("etcd is not running in this node: no need to remove it from the etcd cluster"),
+			},
+		),
+	}
+}
+
+// doPrintEtcdStatus prints the status of etcd, if running
+func doPrintEtcdStatus(d *schema.ResourceData) ssh.Action {
+	eps := EtcdEndpointsSet{}
+	return ssh.DoIfElse(
+		ssh.CheckContainerRunning(etcContainerPattern),
+		ssh.ActionList{
+			ssh.DoMessageInfo("Checking status of etcd (if running)..."),
+			DoGetEndpointsList(&eps),
+			ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+				if len(eps) == 0 {
+					return ssh.DoMessageWarn("could not get list of etcd endpoints")
+				}
+				prints := ssh.ActionList{ssh.DoMessageInfo("Local etcd endpoints:")}
+				for _, ep := range eps {
+					prints = append(prints, ssh.DoMessageInfo("- %s", ep.String()))
+				}
+				return prints
+			})},
+		ssh.ActionList{
+			ssh.DoMessageInfo("etcd does not seem to be running in this node"),
+		},
+	)
 }

@@ -19,9 +19,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/hashicorp/terraform/communicator"
-	"github.com/hashicorp/terraform/terraform"
 )
 
 const (
@@ -34,6 +31,7 @@ func AllMatchesIPv4(s string, ipAddresses *[]string) error {
 	re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
 	submatchall := re.FindAllString(s, -1)
 	for _, element := range submatchall {
+		Debug("detected IP address: %s", element)
 		*ipAddresses = append(*ipAddresses, element)
 	}
 	return nil
@@ -44,8 +42,8 @@ func DoGetIpAddresses(ipAddresses *[]string) Action {
 	var buf bytes.Buffer
 	return ActionList{
 		DoMessageDebug(fmt.Sprintf("Getting list of IP addresses with %q", ipAddressesCmd)),
-		DoSendingOutputToWriter(DoExec(ipAddressesCmd), &buf),
-		ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		DoSendingExecOutputToWriter(&buf, DoExec(ipAddressesCmd)),
+		ActionFunc(func(Config) Action {
 			// note: this must be inside of a function for being lazy-evaluated (when we have obtained the IPs)
 			if err := AllMatchesIPv4(buf.String(), ipAddresses); err != nil {
 				return ActionError(err.Error())
@@ -59,7 +57,7 @@ func DoPrintIpAddresses() Action {
 	ipAddresses := []string{}
 	return ActionList{
 		DoGetIpAddresses(&ipAddresses),
-		ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		ActionFunc(func(Config) Action {
 			// note: this must be inside of a function for being lazy-evaluated (when we have obtained the IPs)
 			return DoMessage("IP addresses detected by the kubeadm provisioner: %s", strings.Join(ipAddresses, ", "))
 		}),

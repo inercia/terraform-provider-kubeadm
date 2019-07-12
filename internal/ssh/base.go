@@ -19,30 +19,52 @@ import (
 	"io"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/gookit/color"
 	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/terraform"
 )
 
+const (
+	// a prefix for all the outputs
+	commonMsgPrefix = ""
+)
+
+type Config struct {
+	UserOutput terraform.UIOutput
+	ExecOutput terraform.UIOutput
+	Comm       communicator.Communicator
+	UseSudo    bool
+}
+
+func (cfg Config) GetExecOutput() terraform.UIOutput {
+	if cfg.ExecOutput != nil {
+		return cfg.ExecOutput
+	}
+	return cfg.UserOutput
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 // Action is an action that can be "applied"
 type Action interface {
 	error
-	Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action
+	Apply(Config) Action
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // ActionFunc is a function that can be converted to a `Action`
 //
-// ie: 	ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+// ie: 	ActionFunc(func(Config) error {
 // 			return nil
 // }),
-type ActionFunc func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action
+type ActionFunc func(Config) Action
 
 // Apply applies an action
-func (f ActionFunc) Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-	return f(o, comm, useSudo)
+func (f ActionFunc) Apply(c Config) Action {
+	return f(c)
 }
 
 func (f ActionFunc) Error() string {
@@ -55,12 +77,12 @@ func (f ActionFunc) Error() string {
 type ActionError string
 
 // Apply applies an action
-func (_ ActionError) Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-	return nil
+func (ae ActionError) Apply(Config) Action {
+	return ae
 }
 
-func (s ActionError) Error() string {
-	return string(s)
+func (ae ActionError) Error() string {
+	return string(ae)
 }
 
 func IsError(a Action) bool {
@@ -76,38 +98,58 @@ func IsError(a Action) bool {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-// ActionList is a list of Actions
-type ActionList []Action
-
-// Apply applies an action
-func (actions ActionList) Apply(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-	localActions := actions[:]
-
+// applyList runs a list of actions, optionally ignoring errors
+func applyList(actions ActionList, ignoreErrors bool, cfg Config) Action {
 	// use a queue where we take and put things in the front
-	for len(localActions) > 0 {
-		// if some action is in the queue, just quit with that error
-		for _, action := range localActions {
-			if IsError(action) {
-				return action
+	// note that we operate on a copy of the original actions list
+	for len(actions) > 0 {
+		if !ignoreErrors {
+			// if some error is in the queue, just quit with that error
+			for _, action := range actions {
+				if IsError(action) {
+					return action
+				}
 			}
 		}
 
 		// otherwise, consume from the queue: pop the first element
-		cur := localActions[0]
-		localActions = localActions[1:]
+		cur := actions[0]
+		actions = actions[1:]
 
 		// if it nil, pass to the next element
 		if cur == nil {
 			continue
 		}
 
-		// otherwise, run the action
-		res := cur.Apply(o, comm, useSudo)
+		// if it is an error, it depends on if we ignore them
+		if IsError(cur) {
+			if ignoreErrors {
+				continue
+			} else {
+				return cur
+			}
+		}
 
+		// otherwise, run the action
+		res := cur.Apply(cfg)
 		// ... and add the resulting actions in front of the queue
-		localActions = append([]Action{res}, localActions...)
+		switch v := res.(type) {
+		case ActionList:
+			// if it is a list, expand it
+			actions = append(v, actions...)
+		default:
+			actions = append([]Action{res}, actions...)
+		}
 	}
 	return nil
+}
+
+// ActionList is a list of Actions
+type ActionList []Action
+
+// Apply applies an action
+func (actions ActionList) Apply(cfg Config) Action {
+	return applyList(actions, false, cfg)
 }
 
 func (actions ActionList) Error() string {
@@ -119,30 +161,28 @@ func (actions ActionList) Error() string {
 	return ""
 }
 
-func DoLazy(g func() Action) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		return g()
-	})
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // DoNothing is a dummy action
 func DoNothing() Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+	return ActionFunc(func(Config) Action {
 		return nil
 	})
 }
 
+func Debug(format string, args ...interface{}) {
+	log.Printf("[DEBUG] [KUBEADM] "+format, args...)
+}
+
 func DoMessageRaw(msg string) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		o.Output(msg)
+	return ActionFunc(func(cfg Config) Action {
+		cfg.UserOutput.Output(msg)
 		return nil
 	})
 }
 
 func DoMessageWithColor(msg string, c color.Color) Action {
-	return DoMessageRaw(c.Render(msg))
+	return DoMessageRaw(commonMsgPrefix + c.Render(msg))
 }
 
 // DoMessage is a dummy action that just prints a message
@@ -151,7 +191,8 @@ func DoMessage(format string, args ...interface{}) Action {
 }
 
 func DoMessageWarn(format string, args ...interface{}) Action {
-	return DoMessageWithColor(fmt.Sprintf("WARNING: "+format, args...), color.FgLightGreen)
+	msg := fmt.Sprintf("WARNING: "+format, args...)
+	return DoMessageWithColor(msg, color.FgRed)
 }
 
 func DoMessageInfo(format string, args ...interface{}) Action {
@@ -160,82 +201,67 @@ func DoMessageInfo(format string, args ...interface{}) Action {
 
 // DoMessageDebug prints a debug message
 func DoMessageDebug(format string, args ...interface{}) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		log.Printf(color.FgLightYellow.Render(fmt.Sprintf(fmt.Sprintf("[DEBUG] [KUBEADM] "+format, args...))))
+	return ActionFunc(func(cfg Config) Action {
+		Debug(format, args...)
 		return nil
 	})
 }
 
 // DoAbort is an action that prints an error message and exits
 func DoAbort(format string, args ...interface{}) Action {
-	coloredMsg := color.Style{color.FgRed, color.OpBold}.Render(fmt.Sprintf(fmt.Sprintf("FATAL: "+format, args...)))
-
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		o.Output(coloredMsg)
-		return ActionError(fmt.Sprintf(format, args...))
-	})
+	msg := fmt.Sprintf("FATAL: "+format, args...)
+	coloredMsg := color.Style{color.FgRed, color.OpBold}.Render(msg)
+	return ActionList{
+		DoMessageRaw(coloredMsg),
+		ActionError(fmt.Sprintf(format, args...)),
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // Checker implements a Check method
 type Checker interface {
-	Check(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error)
+	Check(Config) (bool, error)
 }
 
 // CheckerFunc is a function that implements the Checker interface
-type CheckerFunc func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error)
+type CheckerFunc func(Config) (bool, error)
 
 // Check implements the Checker interface in CheckerFuncs
-func (f CheckerFunc) Check(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-	return f(o, comm, useSudo)
+func (f CheckerFunc) Check(cfg Config) (bool, error) {
+	return f(cfg)
 }
 
 // DoWithCleanup runs some action and, despite the result, runs the cleanup function
-func DoWithCleanup(action, cleanup Action) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		if action == nil || IsError(action) {
-			return action
-		}
-		if IsError(cleanup) {
-			return cleanup
-		}
-		res := action.Apply(o, comm, useSudo)
-		if cleanup != nil {
-			_ = cleanup.Apply(o, comm, useSudo)
-		}
+// It returns the actions result.
+func DoWithCleanup(cleanup Action, actions Action) Action {
+	return ActionFunc(func(cfg Config) Action {
+		res := ActionList{actions}.Apply(cfg)
+		_ = ActionList{cleanup}.Apply(cfg)
 		return res
 	})
 }
 
 // DoWithError runs some action and, if some error happens, runs the exception
-func DoWithException(action, exc Action) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		if action == nil || IsError(action) {
-			return action
-		}
-		if IsError(exc) {
-			return exc
-		}
-		res := action.Apply(o, comm, useSudo)
-		if IsError(res) && exc != nil {
-			_ = exc.Apply(o, comm, useSudo)
+func DoWithException(exc Action, actions Action) Action {
+	return ActionFunc(func(cfg Config) Action {
+		res := ActionList{actions}.Apply(cfg)
+		if IsError(res) {
+			_ = ActionList{exc}.Apply(cfg)
 		}
 		return res
 	})
 }
 
 // DoIf runs an action iff the condition is true
-func DoIf(condition Checker, action Action) ActionFunc {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		res, err := condition.Check(o, comm, useSudo)
+func DoIf(condition Checker, action Action) Action {
+	return ActionFunc(func(cfg Config) Action {
+		checkPassed, err := condition.Check(cfg)
 		if err != nil {
 			return ActionError(err.Error())
 		}
-		if res {
-			if action != nil {
-				return action.Apply(o, comm, useSudo)
-			}
+		if checkPassed {
+			return ActionList{action}.Apply(cfg)
 		}
 		return nil
 	})
@@ -243,86 +269,91 @@ func DoIf(condition Checker, action Action) ActionFunc {
 
 // DoIfElse runs an action iff the condition is true, otherwise runs a different action
 func DoIfElse(condition Checker, actionIf Action, actionElse Action) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		res, err := condition.Check(o, comm, useSudo)
+	return ActionFunc(func(cfg Config) Action {
+		checkPassed, err := condition.Check(cfg)
 		if err != nil {
 			return ActionError(fmt.Sprintf("could not check condition: %s", err.Error()))
 		}
 
-		if res {
-			if actionIf != nil {
-				return actionIf.Apply(o, comm, useSudo)
-			}
-			return nil
+		if checkPassed {
+			return ActionList{actionIf}.Apply(cfg)
 		}
-		if actionElse != nil {
-			return actionElse.Apply(o, comm, useSudo)
-		}
-		return nil
+		return ActionList{actionElse}.Apply(cfg)
 	})
 }
 
 // DoTry tries to run some actions, but it is ok if some action fails
 func DoTry(actions ...Action) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		// use a queue where we take and put things in the front
-		localActions := actions[:]
-		for len(localActions) > 0 {
-			// consume from the queue: pop the first element
-			cur := localActions[0]
-			localActions = localActions[1:]
+	return ActionFunc(func(cfg Config) Action {
+		return applyList(actions, true, cfg)
+	})
+}
 
-			// if it is nil/error, pass to the next element
-			if cur == nil {
-				continue
+// DoRetry runs an action `n` times until it succeedes
+func DoRetry(times int, actions ...Action) ActionFunc {
+	return ActionFunc(func(cfg Config) Action {
+		count := times
+		var res Action
+		for count > 0 {
+			res = ActionList(actions).Apply(cfg)
+			if IsError(res) {
+				time.Sleep(1 * time.Second)
+				count -= 1
+			} else {
+				return res
 			}
-
-			// replace error by warnings
-			if IsError(cur) {
-				cur = DoMessageWarn("%s (IGNORED)", cur.Error())
-			}
-
-			// otherwise, run the action
-			res := cur.Apply(o, comm, useSudo)
-
-			// ... and add the resulting actions in front of the queue
-			localActions = append([]Action{res}, localActions...)
 		}
-		return nil
+		return res
 	})
 }
 
-// DoSendingOutputToFun runs some action redirecting each line of stdout/stderr to some function
-// make sure you trip spaces in the output, as some extra spaces can be before/after
-func DoSendingOutputToFun(action Action, interceptor OutputFunc) Action {
-	if action == nil || IsError(action) {
-		return action
-	}
-	return ActionFunc(func(_ terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		return action.Apply(interceptor, comm, useSudo)
+// DoSendingExecOutputToFun runs some action redirecting all the Do***Exec outputs
+// to some function
+// Some notes:
+// * make sure you strip spaces in the output, as some extra spaces can be before/after
+func DoSendingExecOutputToFun(interceptor OutputFunc, action ...Action) Action {
+	return ActionFunc(func(cfg Config) Action {
+		t := cfg
+		t.ExecOutput = interceptor
+		return ActionList(action).Apply(t)
 	})
 }
 
-// DoSendingOutputToWriter runs some action redirecting the output to some io.Writer
-// make sure you trip spaces in the output, as some extra spaces can be before/after
-func DoSendingOutputToWriter(action Action, writer io.Writer) Action {
-	return DoSendingOutputToFun(action, func(s string) {
+// DoSendingExecOutputToWriter runs some action redirecting all the Do***Exec outputs
+// to some io.Writer
+// Some notes:
+// * make sure you strip spaces in the output, as some extra spaces can be before/after
+func DoSendingExecOutputToWriter(writer io.Writer, action Action) Action {
+	return DoSendingExecOutputToFun(func(s string) {
 		c := strings.ReplaceAll(s, "\r", "\n")
 		_, _ = writer.Write([]byte(c))
-	})
+	}, action)
 }
 
-// DoSendingOutputToDevNull runs some action, but hiding the output
-func DoSendingOutputToDevNull(action Action) Action {
-	return DoSendingOutputToFun(action, func(s string) {
-		// do nothing with s
-	})
+// DoSendingExecOutputToDevNull runs some action redirecting all the Do***Exec outputs
+// to /dev/null
+// Some notes:
+// * make sure you trip spaces in the output, as some extra spaces can be before/after
+func DoSendingExecOutputToDevNull(action Action) Action {
+	return DoSendingExecOutputToFun(func(s string) {
+		// do nothing with "s"
+	}, action)
 }
 
 // CheckExpr returns the result of the boolean expression
 func CheckExpr(expr bool) CheckerFunc {
-	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+	return CheckerFunc(func(Config) (bool, error) {
 		return expr, nil
+	})
+}
+
+// CheckAction returns true if the Action does not return an error
+func CheckAction(action Action) CheckerFunc {
+	return CheckerFunc(func(cfg Config) (bool, error) {
+		if res := action.Apply(cfg); IsError(res) {
+			return false, nil
+		}
+		return true, nil
 	})
 }
 
@@ -331,16 +362,16 @@ func CheckFailed() CheckerFunc {
 }
 
 func CheckError(err error) CheckerFunc {
-	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+	return CheckerFunc(func(Config) (bool, error) {
 		return false, err
 	})
 }
 
 // CheckAnd applies a logical And on a group of Checks
 func CheckAnd(checks ...Checker) CheckerFunc {
-	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+	return CheckerFunc(func(cfg Config) (bool, error) {
 		for _, check := range checks {
-			pass, err := check.Check(o, comm, useSudo)
+			pass, err := check.Check(cfg)
 			if err != nil {
 				return false, err
 			}
@@ -354,9 +385,9 @@ func CheckAnd(checks ...Checker) CheckerFunc {
 
 // CheckOr applies a logical Or on a group of Checks
 func CheckOr(checks ...Checker) CheckerFunc {
-	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+	return CheckerFunc(func(cfg Config) (bool, error) {
 		for _, check := range checks {
-			pass, err := check.Check(o, comm, useSudo)
+			pass, err := check.Check(cfg)
 			if err != nil {
 				return false, err
 			}
@@ -370,8 +401,8 @@ func CheckOr(checks ...Checker) CheckerFunc {
 
 // CheckNot return the logical Not of a Check
 func CheckNot(check Checker) CheckerFunc {
-	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-		res, err := check.Check(o, comm, useSudo)
+	return CheckerFunc(func(cfg Config) (bool, error) {
+		res, err := check.Check(cfg)
 		if err != nil {
 			return false, err
 		}

@@ -12,6 +12,7 @@ GO_VERSION_MIN := $(shell echo $(GO_VERSION) | cut -f2 -d'.')
 SRC_DIRS        = pkg internal
 
 TEST           ?= $$(go list ./... 2>/dev/null |grep -v 'vendor')
+TESTARGS       ?= -vet=off
 GOFMT_FILES    ?= $$(find $(SRC_DIRS) -name '*.go' |grep -v vendor)
 WEBSITE_REPO   = github.com/hashicorp/terraform-website
 WIKI_REPO      = $(shell echo `pwd`.wiki)
@@ -56,12 +57,12 @@ vendor:
 
 test: fmtcheck
 	@echo ">>> Running tests in $(TEST)..."
-	$(GO) test $(TEST) || exit 1
-	@# echo $(TEST) | $(MOD_ENV) xargs -t -n4 go test $(TESTARGS) -timeout=30s -parallel=4
+	$(GO) test $(TESTARGS) $(TEST) || exit 1
+# echo $(TEST) | $(MOD_ENV) xargs -t -n4 go test $(TESTARGS) -timeout=30s -parallel=4
 
 testacc: fmtcheck
 	@echo ">>> Running acceptance tests in $(TEST)..."
-	TF_ACC=1 $(GO) test $(TEST) -v $(TESTARGS) -timeout 120m
+	TF_ACC=1 $(GO) test $(TEST) $(TESTARGS) -timeout 120m
 
 test-compile:
 	@if [ "$(TEST)" = "./..." ]; then \

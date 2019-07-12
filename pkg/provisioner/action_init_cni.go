@@ -16,7 +16,6 @@ package provisioner
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -43,9 +42,9 @@ func doLoadCNI(d *schema.ResourceData) ssh.Action {
 		if cniPluginOpt, ok := d.GetOk("config.cni_plugin"); ok {
 			cniPlugin := strings.TrimSpace(strings.ToLower(cniPluginOpt.(string)))
 			if len(cniPlugin) > 0 {
-				log.Printf("[DEBUG] [KUBEADM] verifying CNI plugin: %s", cniPlugin)
+				ssh.Debug("verifying CNI plugin: %s", cniPlugin)
 				if template, ok := common.CNIPluginsManifestsTemplates[cniPlugin]; ok {
-					log.Printf("[DEBUG] [KUBEADM] CNI plugin: %s", cniPlugin)
+					ssh.Debug("CNI plugin: %s", cniPlugin)
 					config := d.Get("config").(map[string]interface{})
 					replaced, err := common.ReplaceInTemplate(template, config)
 					if err != nil {

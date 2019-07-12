@@ -156,6 +156,46 @@ no absolute path is provided, it will use the default `$PATH` for finding it).
 * `kubectl_path` - (Optional) full path where `kubectl` should be found (if 
 no absolute path is provided, it will use the default `$PATH` for finding it).
 
+### Draining nodes on resource destruction
+
+You can install a [destroy-time provisioner](https://www.terraform.io/docs/provisioners/index.html#destroy-time-provisioners)
+that will drain the node from the Kubernetes cluster. In case of masters running `etcd`,
+it will also remove the `etcd` instance from the etcd cluster. 
+
+```hcl
+resource "aws_instance" "worker" {
+  count                 = "${var.worker_count}"
+  # ...
+  
+  # provisioner for the resource creation
+  provisioner "kubeadm" {
+    config = "${kubeadm.main.config}"
+    join   = "${lookup(docker_container.master.0.network_data[0], "ip_address")}"
+    role   = "worker"
+  }
+
+  # provisioner for the resource destruction
+  provisioner "kubeadm" {
+    when   = "destroy"
+    config = "${kubeadm.main.config}"
+    drain  = true
+  }
+
+  # make sure that, on rolling updates, we create a new
+  # node before destroying the previous one...
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+```
+
+Note well that you need both `provisioners`: one for _creation_ and a different
+one for _destruction_ (this is because of a Terraform limitation where provsioners
+cannot be used in both scenarios). Both provisioners must be configured with a
+`config` attribute, but the destruction provisioner needs a `when   = "destroy"`
+attribute for being executed on destruction, and a `drain = true` for signaling
+that the node must be drained from the cluster.  
+
 ### Known limitations
 
 * The `kubeadm-setup.sh` tries to does its best in order to install

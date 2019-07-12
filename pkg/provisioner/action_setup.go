@@ -19,9 +19,7 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/hashicorp/terraform/terraform"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
@@ -32,7 +30,7 @@ const (
 )
 
 // doKubeadmSetup tries to install kubeadm in the remote machine
-func doKubeadmSetup(d *schema.ResourceData, o terraform.UIOutput, comm communicator.Communicator, useSudo bool) error {
+func doKubeadmSetup(d *schema.ResourceData, cfg ssh.Config) error {
 	if _, ok := d.GetOk("install"); ok {
 		code := ""
 		descr := ""
@@ -50,7 +48,7 @@ func doKubeadmSetup(d *schema.ResourceData, o terraform.UIOutput, comm communica
 			descr = fmt.Sprintf("Uploading custom kubeadm installation script from %s...", script)
 			contents, err := ioutil.ReadFile(script)
 			if err != nil {
-				o.Output(fmt.Sprintf("Error when reading installation script %q", script))
+				cfg.UserOutput.Output(fmt.Sprintf("Error when reading installation script %q", script))
 				return err
 			}
 			code = string(contents)

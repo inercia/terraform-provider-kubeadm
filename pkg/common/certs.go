@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 
@@ -29,6 +28,8 @@ import (
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/certs"
+
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
 var (
@@ -48,8 +49,8 @@ type CertsConfig struct {
 
 // List of certificates to distribute to other control plane machines, and a placeholder to the certificates
 // See https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/#manual-certs
-func (c *CertsConfig) DistributionMap() map[string](*string) {
-	return map[string](*string){
+func (c *CertsConfig) DistributionMap() map[string]*string {
+	return map[string]*string{
 		kubeadmconstants.CACertName:                   &c.CaCrt,
 		kubeadmconstants.CAKeyName:                    &c.CaKey,
 		kubeadmconstants.ServiceAccountPublicKeyName:  &c.SaCrt,
@@ -143,14 +144,14 @@ func (c *CertsConfig) ToDisk(certsDir string) error {
 	for baseName, cert := range c.DistributionMap() {
 		certContents := []byte(*cert)
 		if len(certContents) == 0 {
-			log.Printf("[DEBUG] [KUBEADM] (empty %q: skipping)", baseName)
+			ssh.Debug("(empty %q: skipping)", baseName)
 			continue
 		}
 		if err := writeCertOrKey(baseName, certContents); err != nil {
-			log.Printf("[DEBUG] [KUBEADM] could not write certificate %q: %s", baseName, err)
+			ssh.Debug("could not write certificate %q: %s", baseName, err)
 			return err
 		}
-		log.Printf("[DEBUG] [KUBEADM] saved certificate %q", baseName)
+		ssh.Debug("saved certificate %q", baseName)
 	}
 	return nil
 }
@@ -160,16 +161,16 @@ func (c *CertsConfig) FromDisk(certsDir string) error {
 	// fill the c with the certificates contents
 	for baseName, addr := range c.DistributionMap() {
 		fullPath := path.Join(certsDir, baseName)
-		log.Printf("[DEBUG] [KUBEADM] loading the certificate %q", fullPath)
+		ssh.Debug("loading the certificate %q", fullPath)
 		cert, err := ioutil.ReadFile(fullPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				log.Printf("[DEBUG] [KUBEADM] (%q does not exist: skipping)", fullPath)
+				ssh.Debug("(%q does not exist: skipping)", fullPath)
 				continue
 			}
 			return err
 		}
-		log.Printf("[DEBUG] [KUBEADM] ... %d bytes loaded", len(cert))
+		ssh.Debug("... %d bytes loaded", len(cert))
 		*addr = string(cert)
 	}
 	return nil
@@ -186,7 +187,7 @@ func CreateCerts(d *schema.ResourceData, initCfg *kubeadmapi.InitConfiguration) 
 		return nil, err
 	}
 	defer func() {
-		log.Printf("[DEBUG] [KUBEADM] removing the temporary directory for certificates")
+		ssh.Debug("removing the temporary directory for certificates")
 		_ = os.RemoveAll(certsDir)
 	}()
 
@@ -197,14 +198,14 @@ func CreateCerts(d *schema.ResourceData, initCfg *kubeadmapi.InitConfiguration) 
 	// load any user-provided certificates
 	userCertsConfig := CertsConfig{}
 	if err := userCertsConfig.FromResourceDataCerts(d); err != nil {
-		log.Printf("[DEBUG] [KUBEADM] could not load user-provided certificates: %s", err)
+		ssh.Debug("could not load user-provided certificates: %s", err)
 		return nil, err
 	}
 	if userCertsConfig.HasSomeCertificates() {
-		log.Printf("[DEBUG] [KUBEADM] user has provided some certificates: saving them to %q", certsDir)
+		ssh.Debug("user has provided some certificates: saving them to %q", certsDir)
 		// .. and save them to the disk
 		if err := userCertsConfig.ToDisk(certsDir); err != nil {
-			log.Printf("[DEBUG] [KUBEADM] could not save user-provided certificates to %q: %s", certsDir, err)
+			ssh.Debug("could not save user-provided certificates to %q: %s", certsDir, err)
 			return nil, err
 		}
 	}
@@ -216,11 +217,11 @@ func CreateCerts(d *schema.ResourceData, initCfg *kubeadmapi.InitConfiguration) 
 	//	return nil, err
 	//}
 	//
-	//log.Printf("[DEBUG] [KUBEADM] configuration for certificates:")
-	//log.Printf("[DEBUG] [KUBEADM] ------------------------")
-	//log.Printf("[DEBUG] [KUBEADM] \n%s", string(cfgBytes))
-	//log.Printf("[DEBUG] [KUBEADM] ------------------------")
-	//log.Printf("[DEBUG] [KUBEADM] creating certificates in %q...", certsDir)
+	//ssh.Debug("configuration for certificates:")
+	//ssh.Debug("------------------------")
+	//ssh.Debug("\n%s", string(cfgBytes))
+	//ssh.Debug("------------------------")
+	//ssh.Debug("creating certificates in %q...", certsDir)
 
 	certList := certs.Certificates{
 		&certs.KubeadmCertRootCA,
@@ -231,25 +232,25 @@ func CreateCerts(d *schema.ResourceData, initCfg *kubeadmapi.InitConfiguration) 
 
 	certTree, err := certList.AsMap().CertTree()
 	if err != nil {
-		log.Printf("[DEBUG] [KUBEADM] certificates generation failed: %s", err)
+		ssh.Debug("certificates generation failed: %s", err)
 		return nil, err
 	}
 
 	if err := certTree.CreateTree(cfgCopy); err != nil {
-		log.Printf("[DEBUG] [KUBEADM] certificates generation failed: %s", err)
+		ssh.Debug("certificates generation failed: %s", err)
 		return nil, err
 	}
 
 	// Service accounts are not x509 certs, so handled separately
 	if err := certs.CreateServiceAccountKeyAndPublicKeyFiles(cfgCopy.CertificatesDir); err != nil {
-		log.Printf("[DEBUG] [KUBEADM] service account key generation failed: %s", err)
+		ssh.Debug("service account key generation failed: %s", err)
 		return nil, err
 	}
 
 	// load the certs from disk and save (some of them) to the schema, so the provisioner can use them
 	certsConfig := CertsConfig{}
 	if err := certsConfig.FromDisk(certsDir); err != nil {
-		log.Printf("[DEBUG] [KUBEADM] certificates load from %q failed: %s", certsDir, err)
+		ssh.Debug("certificates load from %q failed: %s", certsDir, err)
 		return nil, err
 	}
 
@@ -259,10 +260,10 @@ func CreateCerts(d *schema.ResourceData, initCfg *kubeadmapi.InitConfiguration) 
 		return nil, err
 	}
 
-	//log.Printf("[DEBUG] [KUBEADM] certificates:")
-	//log.Printf("[DEBUG] [KUBEADM] ------------------------")
-	//log.Printf("[DEBUG] [KUBEADM] \n%s", spew.Sdump(m))
-	//log.Printf("[DEBUG] [KUBEADM] ------------------------")
+	//ssh.Debug("certificates:")
+	//ssh.Debug("------------------------")
+	//ssh.Debug("\n%s", spew.Sdump(m))
+	//ssh.Debug("------------------------")
 
 	return m, nil
 }

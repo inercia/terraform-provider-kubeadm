@@ -17,7 +17,6 @@ package provisioner
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"strings"
@@ -122,11 +121,13 @@ func doKubeadm(d *schema.ResourceData, command string, args ...string) ssh.Actio
 		ssh.DoMessageInfo("Starting kubeadm..."),
 		ssh.DoWithException(
 			ssh.ActionList{
+				ssh.DoTry(ssh.DoDeleteFile(kubeadmConfigFilename))},
+			ssh.ActionList{
 				doUploadKubeadmConfig(d, command, kubeadmConfigFilename),
 				doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
 			},
-			ssh.DoDeleteFile(kubeadmConfigFilename)),
-		ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak"),
+		),
+		ssh.DoTry(ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak")),
 	}
 	return actions
 }
@@ -136,13 +137,14 @@ func doMaybeReset(d *schema.ResourceData, kubeadmConfigFilename string) ssh.Acti
 	return ssh.DoIf(
 		ssh.CheckFileExists(kubeadmConfigFilename),
 		ssh.ActionList{
+			ssh.DoMessageWarn("previous kubeadm config file found: resetting node"),
 			doExecKubeadmWithConfig(d, "reset", "", "--force"),
 			ssh.DoDeleteFile(kubeadmConfigFilename),
 		})
 }
 
 func doUploadKubeadmConfig(d *schema.ResourceData, command string, kubeadmConfigFilename string) ssh.Action {
-	return ssh.DoLazy(func() ssh.Action {
+	return ssh.ActionFunc(func(ssh.Config) ssh.Action {
 		// we must delay the {init|join}Config retrieval as some other functions
 		// modify it until the very last moment...
 		configBytes := []byte{}
@@ -181,33 +183,12 @@ func doUploadCerts(d *schema.ResourceData) ssh.Action {
 	actions := ssh.ActionList{}
 	for baseName, cert := range certsConfig.DistributionMap() {
 		fullPath := path.Join(certsDir, baseName)
-		log.Printf("[DEBUG] [KUBEADM] will upload certificate to %q", fullPath)
+		ssh.Debug("will upload certificate to %q", fullPath)
 		upload := ssh.DoUploadReaderToFile(strings.NewReader(*cert), fullPath)
 		actions = append(actions, upload)
 	}
 
 	return actions
-}
-
-// doPrintNodes prints the list of <nodename>:<IP> in the cluster
-func doPrintNodes(d *schema.ResourceData) ssh.Action {
-	kubeconfig := getKubeconfigFromResourceData(d)
-	if kubeconfig == "" {
-		return ssh.ActionError("no 'config_path' has been specified")
-	}
-
-	ipAddresses := map[string]string{}
-	return ssh.DoTry(
-		ssh.ActionList{
-			ssh.DoGetNodesAndIPs(getKubectlFromResourceData(d), kubeconfig, ipAddresses),
-			ssh.DoMessage("Nodes (and IPs) in cluster:"),
-			ssh.DoLazy(func() ssh.Action {
-				res := ssh.ActionList{}
-				for ip, name := range ipAddresses {
-					res = append(res, ssh.DoMessage("- ip:%s name:%s", ip, name))
-				}
-				return res
-			})})
 }
 
 // doCheckCommonBinaries checks that some common binaries neccessary are present in the remote machine
@@ -218,43 +199,9 @@ func doCheckCommonBinaries(d *schema.ResourceData) ssh.Action {
 		checks = append(checks,
 			ssh.DoIfElse(
 				ssh.CheckBinaryExists(path),
-				ssh.DoMessage("- %s found", expected.name),
+				ssh.DoMessageInfo("- %s found", expected.name),
 				ssh.DoAbort("%s NOT found in $PATH. You can specify a custom executable in the '%s' property in the provisioner.", expected.name, expected.property)))
 	}
 
 	return checks
-}
-
-// doDeleteLocalKubeconfig deletes the current, local kubeconfig (the one specified
-// in the "config_path" attribute), but doing a backup first.
-func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Action {
-	kubeconfig := getKubeconfigFromResourceData(d)
-	kubeconfigBak := kubeconfig + ".bak"
-
-	return ssh.DoIf(
-		ssh.CheckLocalFileExists(kubeconfig),
-		ssh.ActionList{
-			ssh.DoMessage("Removing local kubeconfig (with backup)"),
-			ssh.DoMoveLocalFile(kubeconfig, kubeconfigBak),
-		},
-	)
-}
-
-// doDownloadKubeconfig downloads the "admin.conf" from the remote master
-// to the local file specified in the "config_path" attribute
-func doDownloadKubeconfig(d *schema.ResourceData) ssh.Action {
-	kubeconfig := getKubeconfigFromResourceData(d)
-	return ssh.DoDownloadFile(ssh.DefAdminKubeconfig, kubeconfig)
-}
-
-// doCheckLocalKubeconfigIsAlive checks that the local "kubeconfig" can be
-// used for accessing the API server. In case we cannot, we just print
-// a warning, as maybe the API server is not accessible from the localhost
-// where Terraform is being run.
-func doCheckLocalKubeconfigIsAlive(d *schema.ResourceData) ssh.Action {
-	return ssh.DoIfElse(
-		checkLocalKubeconfigAlive(d),
-		ssh.DoMessageInfo("the API server is accessible from here (with the current kubeconfig)"),
-		ssh.DoMessageWarn("the API server does NOT seem to be accessible from here (with the current kubeconfig)"),
-	)
 }
