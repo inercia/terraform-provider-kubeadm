@@ -18,13 +18,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/go-cmd/cmd"
-	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/communicator/remote"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/mitchellh/go-linereader"
@@ -35,67 +33,62 @@ const (
 	sudoArgs = "--non-interactive"
 )
 
-// DoExecList is a runner for a list of remote commands
-func DoExecList(commands []string) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		var ae ActionError
-		for _, command := range commands {
-			if len(command) == 0 {
-				continue
-			}
-
-			if useSudo {
-				command = "sudo " + sudoArgs + " " + command
-			}
-
-			log.Printf("[DEBUG] [KUBEADM] running '%s'", command)
-
-			// TODO: reuse the same pipe's and stuff between commands
-			outR, outW := io.Pipe()
-			errR, errW := io.Pipe()
-			outDoneCh := make(chan struct{})
-			errDoneCh := make(chan struct{})
-
-			copyOutput := func(o terraform.UIOutput, r io.Reader, doneCh chan<- struct{}) {
-				defer close(doneCh)
-				lr := linereader.New(r)
-				for line := range lr.Ch {
-					o.Output(line)
-				}
-			}
-
-			go copyOutput(o, outR, outDoneCh)
-			go copyOutput(o, errR, errDoneCh)
-
-			cmd := &remote.Cmd{
-				Command: command,
-				Stdout:  outW,
-				Stderr:  errW,
-			}
-
-			if err := comm.Start(cmd); err != nil {
-				return ActionError(fmt.Sprintf("Error executing command %q: %v", cmd.Command, err))
-			}
-			waitResult := cmd.Wait()
-			if waitResult != nil {
-				cmdError, _ := waitResult.(*remote.ExitError)
-				if cmdError.ExitStatus != 0 {
-					ae = ActionError(fmt.Sprintf("Command '%q' exited with non-zero exit status: %d", cmdError.Command, cmdError.ExitStatus))
-				}
-			}
-
-			outW.Close()
-			errW.Close()
-			<-outDoneCh
-			<-errDoneCh
-		}
-		return ae
-	})
-}
-
 // DoExec is a runner for remote Commands
 func DoExec(command string) Action {
-	return DoExecList([]string{command})
+	return ActionFunc(func(cfg Config) (res Action) {
+		if len(command) == 0 {
+			return nil
+		}
+
+		if cfg.UseSudo {
+			command = "sudo " + sudoArgs + " " + command
+		}
+		command += " 2>&1"
+
+		Debug("running %q", command)
+
+		outR, outW := io.Pipe()
+		errR, errW := io.Pipe()
+		outDoneCh := make(chan struct{})
+		errDoneCh := make(chan struct{})
+
+		copyOutput := func(output terraform.UIOutput, input io.Reader, done chan<- struct{}) {
+			defer close(done)
+			lr := linereader.New(input)
+			for line := range lr.Ch {
+				output.Output(line)
+			}
+		}
+
+		go copyOutput(cfg.GetExecOutput(), outR, outDoneCh)
+		go copyOutput(cfg.GetExecOutput(), errR, errDoneCh)
+
+		cmd := &remote.Cmd{
+			Command: command,
+			Stdout:  outW,
+			Stderr:  errW,
+		}
+
+		if err := cfg.Comm.Start(cmd); err != nil {
+			return ActionError(fmt.Sprintf("Error executing command %q: %v", cmd.Command, err))
+		}
+		waitResult := cmd.Wait()
+		if waitResult != nil {
+			cmdError, _ := waitResult.(*remote.ExitError)
+			if cmdError.ExitStatus != 0 {
+				res = ActionError(fmt.Sprintf("Command %q exited with non-zero exit status: %d", cmdError.Command, cmdError.ExitStatus))
+			}
+			// otherwise, it is a communicator error
+		}
+
+		// wait until the copyOutput function is done
+		outW.Close()
+		errW.Close()
+		<-outDoneCh
+		<-errDoneCh
+
+		return
+	})
 }
 
 // DoExecScript is a runner for a script (with some random path in /tmp)
@@ -104,21 +97,23 @@ func DoExecScript(contents io.Reader) Action {
 	if err != nil {
 		return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 	}
-
 	return DoWithCleanup(
+		ActionList{
+			DoTry(DoDeleteFile(path)),
+		},
 		ActionList{
 			doRealUploadFile(contents, path),
 			DoExec(fmt.Sprintf("sh %s", path)),
-		},
-		DoTry(DoDeleteFile(path)),
-	)
+		})
 }
 
 // DoLocalExec executes a local command
 func DoLocalExec(command string, args ...string) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+	return ActionFunc(func(cfg Config) Action {
+		output := cfg.GetExecOutput()
+
 		fullCmd := fmt.Sprintf("%s %s", command, strings.Join(args, " "))
-		o.Output(fmt.Sprintf("Running local command %q...", fullCmd))
+		cfg.UserOutput.Output(fmt.Sprintf("Running local command %q...", fullCmd))
 
 		// Disable output buffering, enable streaming
 		cmdOptions := cmd.Options{
@@ -132,9 +127,9 @@ func DoLocalExec(command string, args ...string) Action {
 			for {
 				select {
 				case line := <-envCmd.Stdout:
-					o.Output(line)
+					output.Output(line)
 				case line := <-envCmd.Stderr:
-					o.Output("ERROR: " + line)
+					output.Output("ERROR: " + line)
 				}
 			}
 		}()
@@ -148,7 +143,7 @@ func DoLocalExec(command string, args ...string) Action {
 		}
 
 		if status.Exit != 0 {
-			o.Output(fmt.Sprintf("Error waiting for %q: %s [%d]",
+			cfg.UserOutput.Output(fmt.Sprintf("Error waiting for %q: %s [%d]",
 				command, status.Error.Error(), status.Exit))
 			return ActionError(status.Error.Error())
 		}
@@ -163,11 +158,11 @@ func CheckExec(cmd string) CheckerFunc {
 	const failure = "CONDITION_FAILED"
 	command := fmt.Sprintf("%s && echo '%s' || echo '%s'", cmd, success, failure)
 
-	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-		log.Printf("[DEBUG] [KUBEADM] Checking condition: '%s'", cmd)
+	return CheckerFunc(func(cfg Config) (bool, error) {
+		Debug("Checking condition: '%s'", cmd)
 		var buf bytes.Buffer
-		if res := DoSendingOutputToWriter(DoExec(command), &buf).Apply(o, comm, useSudo); IsError(res) {
-			log.Printf("[DEBUG] [KUBEADM] ERROR: check failed: %s", res)
+		if res := DoSendingExecOutputToWriter(&buf, DoExec(command)).Apply(cfg); IsError(res) {
+			Debug("ERROR: when performing check %q: %s", cmd, res)
 			return false, res
 		}
 
@@ -175,10 +170,10 @@ func CheckExec(cmd string) CheckerFunc {
 		// the command can contain both...
 		s := buf.String()
 		if strings.Contains(s, success) && !strings.Contains(s, failure) {
-			log.Printf("[DEBUG] [KUBEADM] Condition %q succeeded: %q found", cmd, success)
+			Debug("check %q succeeded (%q found in output)", cmd, success)
 			return true, nil
 		}
-		log.Printf("[DEBUG] [KUBEADM] Condition %q failed", cmd)
+		Debug("check %q failed", cmd)
 		return false, nil
 	})
 }
@@ -187,35 +182,35 @@ func CheckExec(cmd string) CheckerFunc {
 func CheckBinaryExists(cmd string) CheckerFunc {
 	command := fmt.Sprintf("command -v '%s'", cmd)
 
-	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
-		log.Printf("[DEBUG] [KUBEADM] Checking binary exists with: '%s'", cmd)
+	return CheckerFunc(func(cfg Config) (bool, error) {
+		Debug("Checking binary exists with: '%s'", cmd)
 		var buf bytes.Buffer
-		if res := DoSendingOutputToWriter(DoExec(command), &buf).Apply(o, comm, useSudo); IsError(res) {
-			log.Printf("[DEBUG] [KUBEADM] ERROR: check failed: %s", res)
+		if res := DoSendingExecOutputToWriter(&buf, DoExec(command)).Apply(cfg); IsError(res) {
+			Debug("ERROR: when performing check: %s", res)
 			return false, res
 		}
 
 		// if "command -v" doesn't print anything, it was not found
 		s := strings.TrimSpace(buf.String())
 		if s == "" {
-			log.Printf("[DEBUG] [KUBEADM] %q NOT found: empty output: output == %q", cmd, s)
+			Debug("%q NOT found: empty output: output == %q", cmd, s)
 			return false, nil
 		}
 
 		// sometimes it just returns the file name provided
 		if s == cmd {
-			log.Printf("[DEBUG] [KUBEADM] %q found: output == %q", cmd, s)
+			Debug("%q found: output == %q", cmd, s)
 			return true, nil
 		}
 
 		// if it prints the full path: check it is really there
 		if path.IsAbs(s) {
-			log.Printf("[DEBUG] [KUBEADM] checking file %q exists at %q", cmd, s)
-			return CheckFileExists(s).Check(o, comm, useSudo)
+			Debug("checking file %q exists at %q", cmd, s)
+			return CheckFileExists(s).Check(cfg)
 		}
 
 		// otherwise, just fail
-		log.Printf("[DEBUG] [KUBEADM] %q NOT found: output == %q", cmd, s)
+		Debug("%q NOT found: output == %q", cmd, s)
 		return false, nil
 	})
 }

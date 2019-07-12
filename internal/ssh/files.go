@@ -20,14 +20,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
-
-	"github.com/hashicorp/terraform/communicator"
-	"github.com/hashicorp/terraform/terraform"
 )
 
 const (
@@ -109,18 +105,23 @@ func doRealUploadFile(contents io.Reader, remote string) Action {
 		DoMkdir(dir),
 		DoMessageDebug(fmt.Sprintf("Making sure '%s' does not exist", remote)),
 		DoExec(removeCmd),
-		ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		ActionFunc(func(cfg Config) Action {
 			allContents, err := ioutil.ReadAll(contents)
 			if err != nil {
 				return ActionError(err.Error())
+			}
+
+			if len(allContents) == 0 {
+				Debug("WARNING: empty file to upload !!!")
 			}
 
 			// FIXME: for some unknown reason, we must do this conversion...
 			// passing rs.Contents to comm.Upload() leads to an empty file
 			c := strings.NewReader(string(allContents))
 
-			log.Printf("[DEBUG] [KUBEADM] Uploading to %s:\n%s\n", remote, allContents)
-			if err = comm.Upload(remote, c); err != nil {
+			Debug("Doing the real upload to %s:\n%s\n", remote, allContents)
+			if err = cfg.Comm.Upload(remote, c); err != nil {
+				Debug("ERROR: upload failed: %s", err)
 				return ActionError(err.Error())
 			}
 
@@ -157,17 +158,19 @@ func DoUploadReaderToFile(contents io.Reader, remote string) Action {
 
 	return DoWithCleanup(
 		ActionList{
+			DoTry(DoDeleteFile(tmpPath)),
+		},
+		ActionList{
 			DoMessageInfo(fmt.Sprintf("Uploading to %q", remote)),
 			DoMessageDebug(fmt.Sprintf("Uploading to temporary file %q", tmpPath)),
 			doRealUploadFile(contents, tmpPath),
 			DoMkdir(filepath.Dir(remote)),
 			DoMessageDebug(fmt.Sprintf("... and moving to final destination %s", remote)),
 			DoMoveFile(tmpPath, remote),
-		},
-		DoTry(DoDeleteFile(tmpPath)),
-	)
+		})
 }
 
+// DoUploadFileToFile uploads a local file to a remote file (using a temporary file)
 func DoUploadFileToFile(local string, remote string) Action {
 	if local == "" {
 		return ActionError("empty local file name to upload")
@@ -176,8 +179,8 @@ func DoUploadFileToFile(local string, remote string) Action {
 		return ActionError("empty remote file name to upload")
 	}
 
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-		// note: we muyst do the "Open" inside the ActionFunc, as we must delay the operation
+	return ActionFunc(func(Config) Action {
+		// note: we must do the "Open" inside the ActionFunc, as we must delay the operation
 		// just in case the file does not exists yet
 		f, err := os.Open(local)
 		if err != nil {
@@ -207,9 +210,16 @@ func DoDownloadFileToWriter(remote string, contents io.WriteCloser) Action {
 
 	return DoWithCleanup(
 		ActionList{
+			DoMessage(extraOutput),
+			ActionFunc(func(Config) Action {
+				// close the file handler
+				_ = contents.Close()
+				return nil
+			}),
+		},
+		ActionList{
 			DoMessageDebug(fmt.Sprintf("Dumping remote file %q", remote)),
-			DoSendingOutputToFun(
-				DoExec(command),
+			DoSendingExecOutputToFun(
 				func(s string) {
 					if strings.Contains(s, markStart) {
 						insideBlock = true
@@ -231,17 +241,9 @@ func DoDownloadFileToWriter(remote string, contents io.WriteCloser) Action {
 					} else {
 						extraOutput += s
 					}
-				}),
-		},
-		ActionList{
-			DoMessage(extraOutput),
-			ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-				// close the file handler
-				_ = contents.Close()
-				return nil
-			}),
-		},
-	)
+				},
+				DoExec(command)),
+		})
 }
 
 // DoWriteLocalFile writes some string in a local file
@@ -249,7 +251,7 @@ func DoWriteLocalFile(path string, contents string) Action {
 	if path == "" {
 		return ActionError("empty local file name to create")
 	}
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+	return ActionFunc(func(Config) Action {
 		localFile, err := os.Create(path)
 		if err != nil {
 			return ActionError(fmt.Sprintf("cannot create %q: %s", path, err.Error()))
@@ -289,7 +291,7 @@ func DoMoveLocalFile(src, dst string) Action {
 
 // DoDownloadFile downloads a remote file to a local file
 func DoDownloadFile(remote, local string) Action {
-	return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+	return ActionFunc(func(Config) Action {
 		localFile, err := os.Create(local)
 		if err != nil {
 			return ActionError(err.Error())
@@ -314,7 +316,7 @@ func CheckFileAbsent(path string) CheckerFunc {
 // CheckLocalFileExists checks that a local file exists
 // If the input file is empty, it returns false.
 func CheckLocalFileExists(path string) CheckerFunc {
-	return CheckerFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) (bool, error) {
+	return CheckerFunc(func(Config) (bool, error) {
 		if path == "" {
 			return false, nil
 		}

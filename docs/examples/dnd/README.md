@@ -45,3 +45,9 @@ The cluster will be made by these machines:
   * `${var.worker_count}` worker nodes, with `kubeadm` and the `kubelet` pre-installed.
 
 You should be able to `ssh` these machines, and all of them should be able to ping each other.
+
+## Status
+
+There is a bug in the Terraform Docker provider that
+prevents containers from being stopped when using `rm=true`,
+so there are some problems when re-creating resources.

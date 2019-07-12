@@ -41,15 +41,9 @@ func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
 	}
 
 	actions := ssh.ActionList{
-		ssh.DoMessageInfo("Checking we have the required binaries..."),
-		doCheckCommonBinaries(d),
 		doRefreshToken(d),
 		ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'..."),
 		doKubeadm(d, "join"),
-		doCheckLocalKubeconfigIsAlive(d),
-		ssh.DoPrintIpAddresses(),
-		doPrintEtcdMembers(d),
-		doPrintNodes(d),
 	}
 	return actions
 }
@@ -91,18 +85,11 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 		return ssh.ActionError(err.Error())
 	}
 
-	extraArgs := []string{}
 	actions := ssh.ActionList{
-		ssh.DoMessageInfo("Checking we have the required binaries..."),
-		doCheckCommonBinaries(d),
 		doRefreshToken(d),
 		ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'..."),
 		doUploadCerts(d),
-		doKubeadm(d, "join", extraArgs...),
-		doCheckLocalKubeconfigIsAlive(d),
-		ssh.DoPrintIpAddresses(),
-		doPrintEtcdMembers(d),
-		doPrintNodes(d),
+		doKubeadm(d, "join"),
 	}
 	return actions
 }

@@ -1,6 +1,6 @@
 provider "docker" {
   version = "~> 2.0.0"
-  host = "${var.daemon}"
+  host    = "${var.daemon}"
 }
 
 locals {
@@ -305,6 +305,13 @@ resource "docker_container" "master" {
     manifests = "${var.manifests}"
   }
 
+  # provisioner for removing the node from the cluster
+  provisioner "kubeadm" {
+    when   = "destroy"
+    config = "${kubeadm.main.config}"
+    drain  = true
+  }
+
   lifecycle {
     create_before_destroy = true
   }
@@ -395,6 +402,13 @@ resource "docker_container" "worker" {
     config = "${kubeadm.main.config}"
     join   = "${lookup(docker_container.master.0.network_data[0], "ip_address")}"
     role   = "worker"
+  }
+
+  # provisioner for removing the node from the cluster
+  provisioner "kubeadm" {
+    when   = "destroy"
+    config = "${kubeadm.main.config}"
+    drain  = true
   }
 
   lifecycle {

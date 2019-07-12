@@ -16,11 +16,11 @@ package provider
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
@@ -41,7 +41,7 @@ func dataSourceToJoinConfig(d *schema.ResourceData, token string) (*kubeadmapi.J
 	if _, ok := d.GetOk("runtime.0"); ok {
 		if runtimeEngineOpt, ok := d.GetOk("runtime.0.engine"); ok {
 			if socket, ok := common.DefCriSocket[runtimeEngineOpt.(string)]; ok {
-				log.Printf("[DEBUG] [KUBEADM] setting CRI socket '%s'", socket)
+				ssh.Debug("setting CRI socket '%s'", socket)
 				joinConfig.NodeRegistration.KubeletExtraArgs["container-runtime-endpoint"] = fmt.Sprintf("unix://%s", socket)
 				joinConfig.NodeRegistration.CRISocket = socket
 			} else {

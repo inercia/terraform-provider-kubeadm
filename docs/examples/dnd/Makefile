@@ -19,6 +19,11 @@ run:
 		--name $(IMAGE) \
 		$(IMAGE)
 
+ssh:
+	ssh-keygen -R "[127.0.0.1]:8022" -f $$HOME/.ssh/known_hosts
+	@echo ">>> Use 'linux' as password..."
+	ssh -p 8022 root@127.0.0.1
+
 clean:
 	sudo rm -rf docker_mirror_*
 

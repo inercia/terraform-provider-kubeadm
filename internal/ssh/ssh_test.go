@@ -17,7 +17,6 @@ package ssh
 import (
 	"fmt"
 	"io"
-	"log"
 	"time"
 
 	"github.com/hashicorp/terraform/communicator/remote"
@@ -35,27 +34,27 @@ type DummyCommunicator struct {
 }
 
 func (_ DummyCommunicator) Connect(terraform.UIOutput) error {
-	log.Printf("[DEBUG] [KUBEADM] DummyCommunicator: Connect()")
+	Debug("DummyCommunicator: Connect()")
 	return nil
 }
 
 func (_ DummyCommunicator) Disconnect() error {
-	log.Printf("[DEBUG] [KUBEADM] DummyCommunicator: Disconnect()")
+	Debug("DummyCommunicator: Disconnect()")
 	return nil
 }
 
 func (_ DummyCommunicator) Timeout() time.Duration {
-	log.Printf("[DEBUG] [KUBEADM] DummyCommunicator: Timeout()")
+	Debug("DummyCommunicator: Timeout()")
 	return 1 * time.Hour
 }
 
 func (_ DummyCommunicator) ScriptPath() string {
-	log.Printf("[DEBUG] [KUBEADM] DummyCommunicator: ScriptPath()")
+	Debug("DummyCommunicator: ScriptPath()")
 	return ""
 }
 
 func (dc DummyCommunicator) Start(cmd *remote.Cmd) error {
-	log.Printf("[DEBUG] [KUBEADM] DummyCommunicator: Start(%s)", cmd.Command)
+	Debug("DummyCommunicator: Start(%s)", cmd.Command)
 	if dc.startFunction != nil {
 		return dc.startFunction(cmd)
 	}
@@ -63,16 +62,16 @@ func (dc DummyCommunicator) Start(cmd *remote.Cmd) error {
 }
 
 func (_ DummyCommunicator) Upload(string, io.Reader) error {
-	log.Printf("[DEBUG] [KUBEADM] DummyCommunicator: Upload()")
+	Debug("DummyCommunicator: Upload()")
 	return nil
 }
 
 func (_ DummyCommunicator) UploadScript(string, io.Reader) error {
-	log.Printf("[DEBUG] [KUBEADM] DummyCommunicator: UploadScript()")
+	Debug("DummyCommunicator: UploadScript()")
 	return nil
 }
 
 func (_ DummyCommunicator) UploadDir(string, string) error {
-	log.Printf("[DEBUG] [KUBEADM] DummyCommunicator: UploadDir()")
+	Debug("DummyCommunicator: UploadDir()")
 	return nil
 }

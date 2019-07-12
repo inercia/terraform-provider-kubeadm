@@ -17,9 +17,6 @@ package ssh
 import (
 	"bytes"
 	"testing"
-
-	"github.com/hashicorp/terraform/communicator"
-	"github.com/hashicorp/terraform/terraform"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -29,7 +26,7 @@ func TestApply(t *testing.T) {
 	errorMsg := "some error"
 	actions := ActionList{
 		DoMessage("test"),
-		ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		ActionFunc(func(Config) Action {
 			counter = counter + 1
 			return nil
 		}),
@@ -38,10 +35,8 @@ func TestApply(t *testing.T) {
 		ActionError(errorMsg),
 	}
 
-	o := DummyOutput{}
-	comm := DummyCommunicator{}
-
-	err := actions.Apply(o, comm, false)
+	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
+	err := actions.Apply(cfg)
 	if err == nil {
 		t.Fatal("Error: no error detected")
 	}
@@ -54,36 +49,214 @@ func TestApply(t *testing.T) {
 
 }
 
-func TestDoCatchingOutput(t *testing.T) {
-	expected := "this is a test"
+func TestDoSendingOutput(t *testing.T) {
+	expected := "1234"
 
 	var buf bytes.Buffer
+	var buf2 bytes.Buffer
 	actions := ActionList{
-		DoSendingOutputToWriter(
-			ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
-				o.Output(expected)
-				return nil
-			}), &buf),
+		DoSendingExecOutputToWriter(&buf, ActionList{
+			ActionFunc(func(cfg Config) Action {
+				return doEcho("1")
+			}),
+			DoSendingExecOutputToWriter(&buf2,
+				ActionFunc(func(Config) Action {
+					return doEcho("(this is another message that should go to another buffer)")
+				})),
+			ActionFunc(func(Config) Action {
+				return doEcho("2")
+			}),
+			DoIfElse(
+				CheckLocalFileExists("/tmp/some/file/that/does/not/exist"),
+				DoLocalExec("ls /"),
+				ActionFunc(func(Config) Action {
+					return ActionList{
+						doEcho("3"),
+						doEcho("4"),
+					}
+				})),
+		}),
 	}
 
-	o := DummyOutput{}
-	comm := DummyCommunicator{}
-
-	err := actions.Apply(o, comm, false)
+	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
+	err := actions.Apply(cfg)
 	if err != nil {
 		t.Fatalf("Error: error detected: %s", err)
 	}
+	t.Logf("Received: %q", buf.String())
 	if buf.String() != expected {
-		t.Fatalf("Error: the output, %q, has not been the expected value: %q", buf.String(), expected)
+		t.Fatalf("Error: %q was not expected. We expected %q", buf.String(), expected)
 	}
 }
 
-func TestDoLazy(t *testing.T) {
+//func doLazy(af ActionFunc) func()Action {
+//	return func()Action {
+//		af.Apply()
+//	}
+//}
+
+func DoLazy(af ActionFunc) func() Action {
+	return func() Action {
+		return ActionFunc(func(cfg Config) Action {
+			return af(cfg)
+		})
+	}
+}
+
+func tFunc(something string) Action {
+	return ActionFunc(func(Config) Action {
+		return doEcho("(OOOO)")
+	})
+}
+
+func TestDoSendingOutputToFun(t *testing.T) {
+	expected := "12345"
+	received := ""
+	trashBuffer := ""
+
+	//tFunc := func() Action {
+	//	return ActionFunc(func(Config) Action {
+	//		return doEcho("(and to trash)")
+	//	})
+	//}
+
+	actions := ActionList{
+		DoSendingExecOutputToFun(func(s string) {
+			received += s
+		}, ActionList{
+			ActionFunc(func(cfg Config) Action {
+				return doEcho("1")
+			}),
+			DoSendingExecOutputToFun(
+				func(s string) {
+					trashBuffer += s
+				}, ActionFunc(func(Config) Action {
+					return doEcho("(VVVV)")
+				})),
+			DoSendingExecOutputToDevNull(DoLocalExec("ls", "/tmp")),
+			// this works:
+			DoSendingExecOutputToFun(
+				func(s string) {
+					trashBuffer += s
+				},
+				doEcho("(XXXX)")),
+			// this works:
+			DoSendingExecOutputToFun(
+				func(s string) {
+					trashBuffer += s
+				},
+				ActionList{
+					doEcho("(MMMM)"),
+					doEcho("(NNNN)"),
+					ActionFunc(func(Config) Action {
+						return doEcho("(LLLL)")
+					}),
+				}),
+			// this doesnt
+			DoSendingExecOutputToFun(
+				func(s string) {
+					trashBuffer += s
+				},
+				func() Action {
+					return ActionFunc(func(Config) Action {
+						return doEcho("(YYYY)")
+					})
+				}()),
+			// this doesnt
+			DoSendingExecOutputToFun(
+				func(s string) {
+					trashBuffer += s
+				},
+				tFunc("")),
+			// this doesnt
+			DoSendingExecOutputToFun(
+				func(s string) {
+					trashBuffer += s
+				},
+				DoLazy(
+					ActionFunc(func(Config) Action {
+						return doEcho("(ZZZZ)")
+					}))()),
+			ActionFunc(func(Config) Action {
+				return doEcho("2")
+			}),
+			DoTry(ActionFunc(func(Config) Action {
+				return doEcho("3")
+			})),
+			DoTry(ActionError("an error")),
+			DoWithCleanup(DoNothing(), ActionFunc(func(Config) Action {
+				return doEcho("4")
+			})),
+			DoIfElse(CheckExpr(false),
+				nil,
+				ActionFunc(func(Config) Action {
+					return doEcho("5")
+				}),
+			),
+		}),
+	}
+
+	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
+	err := actions.Apply(cfg)
+	if err != nil {
+		t.Fatalf("Error: error detected: %s", err)
+	}
+	t.Logf("Received: %q", received)
+	if received != expected {
+		t.Fatalf("Error: %q was not expected. We expected %q", received, expected)
+	}
+}
+
+// TestDoSendingOutputToFunWithError checks that we can send output to
+// a function and an Error aborts the whole execution
+func TestDoSendingOutputToFunWithError(t *testing.T) {
+	received := ""
+	someOtherBuffer := ""
+
+	actions := ActionList{
+		DoSendingExecOutputToFun(func(s string) {
+			received += s
+		}, ActionList{
+			ActionFunc(func(cfg Config) Action {
+				return doEcho("1")
+			}),
+			DoSendingExecOutputToFun(
+				func(s string) {
+					someOtherBuffer += s
+				},
+				ActionFunc(func(Config) Action {
+					return doEcho("'this is another message that should go to another buffer'")
+				})),
+			DoTry(ActionError("this should be ignored")),
+			DoIfElse(CheckExpr(false),
+				nil,
+				ActionFunc(func(Config) Action {
+					return doEcho("2")
+				}),
+			),
+			ActionError("some error"),
+		}),
+	}
+
+	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
+	err := actions.Apply(cfg)
+	if err == nil {
+		t.Fatalf("Error: no error detected (and we expected one)")
+	}
+	if received != "" {
+		t.Fatalf("Error: we received something (when execution was supposed to be aborted immediately)")
+	}
+	t.Logf("good! an error has been received (and it was expected): %s", err)
+}
+
+// TestActionList checks that an ActionList respects the order
+// of actions.
+func TestActionList(t *testing.T) {
 	expected := "12345678"
 
 	path := ""
 	doRecordPath := func(num string) Action {
-		return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		return ActionFunc(func(Config) Action {
 			path += num
 			return nil
 		})
@@ -92,11 +265,11 @@ func TestDoLazy(t *testing.T) {
 	actions := ActionList{
 		doRecordPath("1"),
 		nil,
-		DoLazy(func() Action {
+		ActionFunc(func(Config) Action {
 			return ActionList{
 				doRecordPath("2"),
 				doRecordPath("3"),
-				DoLazy(func() Action {
+				ActionFunc(func(Config) Action {
 					return ActionList{
 						doRecordPath("4"),
 						nil,
@@ -105,15 +278,15 @@ func TestDoLazy(t *testing.T) {
 				}),
 			}
 		}),
-		DoLazy(func() Action {
+		ActionFunc(func(Config) Action {
 			return ActionList{
 				nil,
 				doRecordPath("6"),
 				DoIfElse(CheckExpr(true),
-					DoLazy(func() (res Action) {
+					ActionFunc(func(Config) Action {
 						return doRecordPath("7")
 					}),
-					DoLazy(func() (res Action) {
+					ActionFunc(func(Config) Action {
 						return doRecordPath("XXX")
 					}),
 				),
@@ -125,9 +298,8 @@ func TestDoLazy(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	o := DummyOutput{}
-	comm := DummyCommunicator{}
-	res := DoSendingOutputToWriter(&actions, &buf).Apply(o, comm, false)
+	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
+	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(cfg)
 	if IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}
@@ -139,7 +311,7 @@ func TestDoLazy(t *testing.T) {
 func TestIfThenElse(t *testing.T) {
 	path := ""
 	doRecordPath := func(num string) Action {
-		return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		return ActionFunc(func(Config) Action {
 			path += num
 			return nil
 		})
@@ -149,21 +321,21 @@ func TestIfThenElse(t *testing.T) {
 	actions := ActionList{
 		doRecordPath("000"),
 		DoIfElse(CheckExpr(true),
-			DoLazy(func() (res Action) {
+			ActionFunc(func(Config) Action {
 				return doRecordPath("111")
 			}),
-			DoLazy(func() (res Action) {
+			ActionFunc(func(Config) Action {
 				return doRecordPath("XXX")
 			}),
 		),
 		DoIfElse(CheckExpr(true),
 			nil,
-			DoLazy(func() (res Action) {
+			ActionFunc(func(Config) Action {
 				return doRecordPath("YYY")
 			}),
 		),
 		DoIfElse(CheckExpr(false),
-			DoLazy(func() (res Action) {
+			ActionFunc(func(Config) Action {
 				return doRecordPath("YYY")
 			}),
 			nil,
@@ -174,9 +346,8 @@ func TestIfThenElse(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	o := DummyOutput{}
-	comm := DummyCommunicator{}
-	res := DoSendingOutputToWriter(&actions, &buf).Apply(o, comm, false)
+	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
+	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(cfg)
 	if IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}
@@ -190,7 +361,7 @@ func TestDoTry(t *testing.T) {
 
 	path := ""
 	doRecordPath := func(num string) Action {
-		return ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+		return ActionFunc(func(Config) Action {
 			path += num
 			return nil
 		})
@@ -205,7 +376,7 @@ func TestDoTry(t *testing.T) {
 			),
 			nil,
 			nil,
-			ActionFunc(func(o terraform.UIOutput, comm communicator.Communicator, useSudo bool) Action {
+			ActionFunc(func(Config) Action {
 				return ActionError("some error")
 			}),
 			// this ActionList is never executed, as the presence of an error makes the whole list errored
@@ -213,7 +384,7 @@ func TestDoTry(t *testing.T) {
 				doRecordPath("XXX"),
 				ActionError("some error"),
 			},
-			DoLazy(func() (res Action) {
+			ActionFunc(func(Config) Action {
 				return ActionList{
 					doRecordPath("3"),
 				}
@@ -226,13 +397,16 @@ func TestDoTry(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	o := DummyOutput{}
-	comm := DummyCommunicator{}
-	res := DoSendingOutputToWriter(&actions, &buf).Apply(o, comm, false)
+	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
+	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(cfg)
 	if IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}
 	if path != expected {
 		t.Fatalf("Error: unexpected contents: %q, expected: %q", path, expected)
 	}
+}
+
+func doEcho(msg string) Action {
+	return DoLocalExec("/bin/echo", msg)
 }

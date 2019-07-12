@@ -23,7 +23,7 @@ The `kubeadm` provider does some things for you:
     the provider will automatically generate a new token when the old
     one has expired or has been removed.  
 
-* Automatic drain of nodes, removal from etcd cluster... on node destruction. (see [this issue](https://github.com/inercia/terraform-provider-kubeadm/issues/5))
+* Automatic draining of nodes, removal from etcd cluster... on node destruction. (see [this issue](https://github.com/inercia/terraform-provider-kubeadm/issues/5))
 
     You can install a [destroy-time provisioner](https://www.terraform.io/docs/provisioners/index.html#destroy-time-provisioners)
     that will drain the node from the etcd cluster. In case of masters running `etcd`,

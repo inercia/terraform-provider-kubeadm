@@ -7,7 +7,7 @@
 # https://developers.redhat.com/blog/2014/05/05/running-systemd-within-docker-container/
 # https://developers.redhat.com/blog/2016/09/13/running-systemd-in-a-non-privileged-container/
 
-ARG BASE_IMAGE="opensuse/tumbleweed"
+ARG BASE_IMAGE="opensuse/leap:15.1"
 FROM ${BASE_IMAGE}
 
 # NOTE: ARCH must be defined again after FROM
@@ -54,6 +54,11 @@ RUN    zypper ar --refresh --enable --no-gpgcheck \
     && echo "ReadKMsg=no" >> /etc/systemd/journald.conf \
     && systemctl enable docker.service \
     && systemctl enable sshd.service
+
+# use some customized Docker settings
+#COPY daemon.json /etc/docker/daemon.json
+
+RUN mkdir -p /etc/systemd/system/docker.service.d
 
 # Install CNI binaries to /opt/cni/bin
 RUN mkdir -p /opt/cni && ln -s /usr/lib/cni /opt/cni/bin

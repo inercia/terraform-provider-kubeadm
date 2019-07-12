@@ -20,23 +20,29 @@ import (
 	"github.com/hashicorp/terraform/communicator/remote"
 )
 
-func TestCheckBinaryExists(t *testing.T) {
+func TestGetNodesAndIPs(t *testing.T) {
 	count := 0
 
+	nodesIPs := []string{
+		"172.20.0.16",
+		"172.20.0.32",
+	}
+	nodesOutput := `
+kubeadm-master-0 172.20.0.16
+kubeadm-worker-0 172.20.0.32
+`
 	// overwrite the startFunction
 	comm := DummyCommunicator{}
 	comm.startFunction = func(cmd *remote.Cmd) error {
 		t.Logf("it is running %q", cmd.Command)
 		switch count {
 		case 0:
-			t.Log("returning full path to kubeadm")
-			cmd.Init()
-			cmd.Stdout.Write([]byte("  /usr/bin/kubeadm\r  "))
-			cmd.SetExitStatus(0, nil)
-		case 1:
-			t.Log("returning CONDITION_SUCCEEDED")
 			cmd.Init()
 			cmd.Stdout.Write([]byte("CONDITION_SUCCEEDED"))
+			cmd.SetExitStatus(0, nil)
+		case 1:
+			cmd.Init()
+			cmd.Stdout.Write([]byte(nodesOutput))
 			cmd.SetExitStatus(0, nil)
 		}
 
@@ -44,12 +50,18 @@ func TestCheckBinaryExists(t *testing.T) {
 		return nil
 	}
 
+	nodes := KubeNodesSet{}
 	cfg := Config{UserOutput: DummyOutput{}, Comm: comm, UseSudo: false}
-	exists, err := CheckBinaryExists("kubeadm").Check(cfg)
-	if err != nil {
-		t.Fatalf("Error: %s", err)
+	res := DoGetKubeNodesSet("kubectl", "some-kubeconfig", &nodes).Apply(cfg)
+	if IsError(res) {
+		t.Fatalf("Error: %s", res.Error())
 	}
-	if !exists {
-		t.Fatalf("Error: unexpected result for exists: %t", exists)
+	if len(nodes) != 2 {
+		t.Fatalf("Error: wrong number of nodes: %d nodes found in %q", len(nodes), nodes)
+	}
+	for _, ip := range nodesIPs {
+		if _, ok := nodes[ip]; !ok {
+			t.Fatalf("Error: %q not found in nodes: %q", ip, nodes)
+		}
 	}
 }

@@ -42,8 +42,6 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 	}
 
 	actions := ssh.ActionList{
-		ssh.DoMessageInfo("Checking we have the required binaries..."),
-		doCheckCommonBinaries(d),
 		ssh.DoMessageInfo("Initializing the cluster with 'kubadm init'..."),
 		doDeleteLocalKubeconfig(d),
 		doUploadCerts(d),
@@ -55,10 +53,6 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 			doKubeadm(d, "init", extraArgs...),
 		),
 		doDownloadKubeconfig(d),
-		doCheckLocalKubeconfigIsAlive(d),
-		ssh.DoPrintIpAddresses(),
-		doPrintEtcdMembers(d),
-		doPrintNodes(d),
 		doLoadCNI(d),
 		doLoadDashboard(d),
 		doLoadHelm(d),

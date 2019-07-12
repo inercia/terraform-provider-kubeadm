@@ -17,7 +17,6 @@ package common
 import (
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
@@ -25,6 +24,8 @@ import (
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/config"
+
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
 const (
@@ -92,7 +93,7 @@ func YAMLToInitConfig(configBytes []byte) (*kubeadmapi.InitConfiguration, error)
 
 // InitConfigToYAML converts a InitConfiguration to YAML
 func InitConfigToYAML(initConfig *kubeadmapi.InitConfiguration) ([]byte, error) {
-	log.Printf("[DEBUG] [KUBEADM] initialization configuration to YAML")
+	ssh.Debug("initialization configuration to YAML")
 	kubeadmscheme.Scheme.Default(initConfig)
 	return config.MarshalInitConfigurationToBytes(initConfig, apiVersion)
 }
@@ -128,7 +129,7 @@ func InitConfigFromResourceData(d *schema.ResourceData) (*kubeadmapi.InitConfigu
 		return nil, nil, err
 	}
 
-	// log.Printf("[DEBUG] [KUBEADM] init config:\n%s\n", configBytes)
+	// ssh.Debug("init config:\n%s\n", configBytes)
 	return initConfig, configBytes, nil
 }
 
@@ -182,7 +183,7 @@ func YAMLToJoinConfig(configBytes []byte) (*kubeadmapi.JoinConfiguration, error)
 
 // JoinConfigToYAML converts a JoinConfiguration to YAML
 func JoinConfigToYAML(joinConfig *kubeadmapi.JoinConfiguration) ([]byte, error) {
-	log.Printf("[DEBUG] [KUBEADM] join configuration to YAML")
+	ssh.Debug("join configuration to YAML")
 	kubeadmscheme.Scheme.Default(joinConfig)
 	nodebytes, err := kubeadmutil.MarshalToYamlForCodecs(joinConfig, apiVersion, kubeadmscheme.Codecs)
 	if err != nil {
@@ -228,7 +229,7 @@ func JoinConfigFromResourceData(d *schema.ResourceData) (*kubeadmapi.JoinConfigu
 		return nil, nil, err
 	}
 
-	// log.Printf("[DEBUG] [KUBEADM] join config:\n%s\n", configBytes)
+	// ssh.Debug("join config:\n%s\n", configBytes)
 	return joinConfig, configBytes, nil
 }
 

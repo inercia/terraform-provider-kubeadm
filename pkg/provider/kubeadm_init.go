@@ -16,7 +16,6 @@ package provider
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"regexp"
 	"strconv"
@@ -24,13 +23,14 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 
+	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
 // dataSourceToInitConfig copies some settings from the
 // Terraform `data` definition to a kubeadm Init configuration
 func dataSourceToInitConfig(d *schema.ResourceData, token string) (*kubeadmapi.InitConfiguration, error) {
-	log.Printf("[DEBUG] [KUBEADM] creating initialization configuration...")
+	ssh.Debug("creating initialization configuration...")
 
 	initConfig := &kubeadmapi.InitConfiguration{
 		ClusterConfiguration: kubeadmapi.ClusterConfiguration{
@@ -115,7 +115,7 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) (*kubeadmapi.I
 	if _, ok := d.GetOk("runtime.0"); ok {
 		if runtimeEngineOpt, ok := d.GetOk("runtime.0.engine"); ok {
 			if socket, ok := common.DefCriSocket[runtimeEngineOpt.(string)]; ok {
-				log.Printf("[DEBUG] [KUBEADM] setting CRI socket '%s'", socket)
+				ssh.Debug("setting CRI socket '%s'", socket)
 				initConfig.NodeRegistration.KubeletExtraArgs["container-runtime-endpoint"] = fmt.Sprintf("unix://%s", socket)
 				initConfig.NodeRegistration.CRISocket = socket
 			} else {
