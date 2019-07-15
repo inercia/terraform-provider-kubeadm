@@ -50,10 +50,23 @@ resource "libvirt_domain" "master" {
   provisioner "kubeadm" {
     # there is no "join", so this will be the first node in the cluster: the seeder
     config = "${kubeadm.main.config}"
+
+    # when creating multiple masters, the first one (the _seeder_) must join="",
+    # and the rest will join it afterwards...
+    join      = "${count.index == 0 ? "" : libvirt_domain.master.network_interface.0.addresses.0}"
+    role      = "master"
+
     install {
       # this will try to install "kubeadm" automatically in this machine
       auto = true
     }
+  }
+
+  # provisioner for removing the node from the cluster
+  provisioner "kubeadm" {
+    when   = "destroy"
+    config = "${kubeadm.main.config}"
+    drain  = true
   }
 }
 
@@ -73,6 +86,13 @@ resource "libvirt_domain" "minion" {
       # this will try to install "kubeadm" automatically in this machine
       auto = true
     }
+  }
+
+  # provisioner for removing the node from the cluster
+  provisioner "kubeadm" {
+    when   = "destroy"
+    config = "${kubeadm.main.config}"
+    drain  = true
   }
 }
 ```
@@ -140,6 +160,7 @@ any previous notice. To see what is left or planned, see the
 
 ```console
 $ mkdir -p $HOME/.terraform.d/plugins
+$ # with go>=1.12
 $ go build -v -o $HOME/.terraform.d/plugins/terraform-provider-kubeadm \
     github.com/inercia/terraform-provider-kubeadm/cmd/terraform-provider-kubeadm
 $ go build -v -o $HOME/.terraform.d/plugins/terraform-provisioner-kubeadm \
