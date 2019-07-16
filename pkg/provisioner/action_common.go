@@ -44,13 +44,21 @@ var expectedBinaries = []struct {
 		defaultPath: getKubectlFromResourceData,
 		property:    "install.kubectl_path",
 	},
+	//{
+	//	name:        "hostname",
+	//	defaultPath: nil,
+	//	property:    "",
+	//},
 }
 
 // getKubeadmIgnoredChecksArg returns the kubeadm arguments for the ignored checks
 func getKubeadmIgnoredChecksArg(d *schema.ResourceData) string {
 	ignoredChecks := common.DefIgnorePreflightChecks[:]
-	if checksOpt, ok := d.GetOk("ignore_checks"); ok {
-		ignoredChecks = append(ignoredChecks, checksOpt.([]string)...)
+	if checksOptRaw, ok := d.GetOk("ignore_checks"); ok {
+		checksOpts := checksOptRaw.([]interface{})
+		for _, check := range checksOpts {
+			ignoredChecks = append(ignoredChecks, check.(string))
+		}
 	}
 	ignoredChecks = common.StringSliceUnique(ignoredChecks) // remove all the duplicates
 
@@ -83,41 +91,10 @@ func doExecKubeadmWithConfig(d *schema.ResourceData, command string, cfg string,
 }
 
 // doKubeadm is the common kubeadm call, both for the `init` as well as well as for the `join`.
-func doKubeadm(d *schema.ResourceData, command string, args ...string) ssh.Action {
-	kubeadmConfigFilename := ""
-	switch command {
-	case "init":
-		kubeadmConfigFilename = common.DefKubeadmInitConfPath
-	case "join":
-		kubeadmConfigFilename = common.DefKubeadmJoinConfPath
-	}
-
-	// NOTE: the "install" block is optional, so there will be no
-	// default values for "install.0.XXX" if the "install" block has not been given...
-	sysconfigPath := d.Get("install.0.sysconfig_path").(string)
-	if len(sysconfigPath) == 0 {
-		sysconfigPath = common.DefKubeletSysconfigPath
-	}
-
-	servicePath := d.Get("install.0.service_path").(string)
-	if len(servicePath) == 0 {
-		servicePath = common.DefKubeletServicePath
-	}
-
-	dropinPath := d.Get("install.0.dropin_path").(string)
-	if len(dropinPath) == 0 {
-		dropinPath = common.DefKubeadmDropinPath
-	}
-
+func doKubeadm(d *schema.ResourceData, kubeadmConfigFilename string, command string, args ...string) ssh.Action {
+	// run kubeadm... if something goes wrong, delete the "kubeadm-*.conf" file created
+	// otherwise, back up the config file
 	actions := ssh.ActionList{
-		doPrepareCRI(),
-		ssh.DoEnableService("kubelet.service"),
-		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletSysconfigCode), sysconfigPath),
-		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), servicePath),
-		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), dropinPath),
-		doMaybeReset(d, kubeadmConfigFilename),
-		// run kubeadm... if something goes wrong, delete the "kubeadm.conf" file created
-		// otherwise, back up the config file
 		ssh.DoMessageInfo("Starting kubeadm..."),
 		ssh.DoWithException(
 			ssh.ActionList{
@@ -132,8 +109,8 @@ func doKubeadm(d *schema.ResourceData, command string, args ...string) ssh.Actio
 	return actions
 }
 
-// doMaybeReset maybe "reset"s with kubeadm if /etc/kubernetes/kubeadm-* exists
-func doMaybeReset(d *schema.ResourceData, kubeadmConfigFilename string) ssh.Action {
+// doMaybeResetWorker maybe "reset"s with kubeadm if /etc/kubernetes/kubeadm-* exists
+func doMaybeResetWorker(d *schema.ResourceData, kubeadmConfigFilename string) ssh.Action {
 	return ssh.DoIf(
 		ssh.CheckFileExists(kubeadmConfigFilename),
 		ssh.ActionList{
@@ -180,7 +157,9 @@ func doUploadCerts(d *schema.ResourceData) ssh.Action {
 		certsDir = certsDirRaw.(string)
 	}
 
-	actions := ssh.ActionList{}
+	actions := ssh.ActionList{
+		ssh.DoMessageInfo("Uploading certificates..."),
+	}
 	for baseName, cert := range certsConfig.DistributionMap() {
 		fullPath := path.Join(certsDir, baseName)
 		ssh.Debug("will upload certificate to %q", fullPath)
@@ -191,16 +170,52 @@ func doUploadCerts(d *schema.ResourceData) ssh.Action {
 	return actions
 }
 
+// doLoadCloudProviderManager uploads the cloud-config to /etc/kubernetes/cloud.conf if necessary
+func doLoadCloudProviderManager(d *schema.ResourceData) ssh.Action {
+	cloudProviderRaw, ok := d.GetOk("config.cloud_provider")
+	if !ok {
+		return nil
+	}
+
+	cloudProvider := cloudProviderRaw.(string)
+	if len(cloudProvider) == 0 {
+		return nil
+	}
+
+	config := d.Get("config").(map[string]interface{})
+	replaced, err := common.ReplaceInTemplate(assets.CloudProviderCode, config)
+	if err != nil {
+		return ssh.ActionError(fmt.Sprintf("could not replace variables in cloud controller manager manifest for %q: %s", cloudProvider, err))
+	}
+	manifest := ssh.Manifest{Inline: replaced}
+
+	actions := ssh.ActionList{
+		ssh.DoMessageInfo("Loading cloud controller manager for %q", cloudProvider),
+		doRemoteKubectlApply(d, []ssh.Manifest{manifest}),
+	}
+	return actions
+}
+
 // doCheckCommonBinaries checks that some common binaries neccessary are present in the remote machine
 func doCheckCommonBinaries(d *schema.ResourceData) ssh.Action {
+
 	checks := ssh.ActionList{}
 	for _, expected := range expectedBinaries {
-		path := expected.defaultPath(d)
+		path := expected.name
+		if expected.defaultPath != nil {
+			path = expected.defaultPath(d)
+		}
+
+		abortMsg := fmt.Sprintf("%s NOT found in $PATH.", expected.name)
+		if expected.property != "" {
+			abortMsg += fmt.Sprintf(" You can specify a custom executable in the '%s' property in the provisioner.", expected.property)
+		}
+
 		checks = append(checks,
 			ssh.DoIfElse(
 				ssh.CheckBinaryExists(path),
 				ssh.DoMessageInfo("- %s found", expected.name),
-				ssh.DoAbort("%s NOT found in $PATH. You can specify a custom executable in the '%s' property in the provisioner.", expected.name, expected.property)))
+				ssh.DoAbort(abortMsg)))
 	}
 
 	return checks

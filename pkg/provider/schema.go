@@ -15,6 +15,9 @@
 package provider
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/helper/validation"
 	"github.com/hashicorp/terraform/terraform"
@@ -225,9 +228,35 @@ func dataSourceKubeadm() *schema.Resource {
 			"version": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				ForceNew:    true,
 				Default:     common.DefKubernetesVersion,
+				ForceNew:    true,
 				Description: "Kubernetes version to use (Example: v1.15.0).",
+			},
+			"cloud": {
+				Type:     schema.TypeList,
+				Optional: true,
+				ForceNew: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"provider": {
+							Type:         schema.TypeString,
+							Optional:     true,
+							Description:  fmt.Sprintf("cloud provider name: %s", strings.Join(common.DefSupportedCloudProviders, ",")),
+							ValidateFunc: validation.StringInSlice(common.DefSupportedCloudProviders, true),
+						},
+						"config": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: fmt.Sprintf("cloud provider configuration (mandatory for: %s)", strings.Join(common.DefCloudConfigMandatory, ",")),
+						},
+						"manager_flags": {
+							Type:        schema.TypeString,
+							Optional:    true,
+							Description: "additional arguments for the cloud-controller-manager",
+						},
+					},
+				},
 			},
 			"runtime": {
 				Type:     schema.TypeList,

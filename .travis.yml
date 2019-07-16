@@ -30,7 +30,8 @@ env:
     - LC_ALL=C.UTF-8
     - LANG=C.UTF-8
     - CI=travis
-    - CI=true
+    - IS_CI=true
+    - E2E_CLEANUP=true
 
 jobs:
   include:

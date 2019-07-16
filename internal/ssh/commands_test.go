@@ -23,9 +23,9 @@ import (
 func TestCheckBinaryExists(t *testing.T) {
 	count := 0
 
-	// overwrite the startFunction
+	// overwrite the StartFunction
 	comm := DummyCommunicator{}
-	comm.startFunction = func(cmd *remote.Cmd) error {
+	comm.StartFunction = func(cmd *remote.Cmd) error {
 		t.Logf("it is running %q", cmd.Command)
 		switch count {
 		case 0:

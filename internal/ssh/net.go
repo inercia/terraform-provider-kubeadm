@@ -15,51 +15,18 @@
 package ssh
 
 import (
-	"bytes"
-	"fmt"
 	"regexp"
-	"strings"
 )
 
-const (
-	// a "portable" command that can print the list of IPs ... this should work in "most" linuxes (fingers crossed)
-	ipAddressesCmd = `ip addr show | grep -Po 'inet \K[\d.]+' || hostname --all-ip-addresses || hostname -I`
-)
-
-// AllMatchesIPv4 matches all the IPs in a string
-func AllMatchesIPv4(s string, ipAddresses *[]string) error {
+// AllMatchesIPv4 return all matches of IPs in a string
+func AllMatchesIPv4(s string) (ips []string) {
 	re := regexp.MustCompile(`(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}`)
 	submatchall := re.FindAllString(s, -1)
-	for _, element := range submatchall {
-		Debug("detected IP address: %s", element)
-		*ipAddresses = append(*ipAddresses, element)
+	for _, ip := range submatchall {
+		if ip == "127.0.0.1" {
+			continue
+		}
+		ips = append(ips, ip)
 	}
-	return nil
-}
-
-// DoGetIpAddresses gets the list of IP addresses
-func DoGetIpAddresses(ipAddresses *[]string) Action {
-	var buf bytes.Buffer
-	return ActionList{
-		DoMessageDebug(fmt.Sprintf("Getting list of IP addresses with %q", ipAddressesCmd)),
-		DoSendingExecOutputToWriter(&buf, DoExec(ipAddressesCmd)),
-		ActionFunc(func(Config) Action {
-			// note: this must be inside of a function for being lazy-evaluated (when we have obtained the IPs)
-			if err := AllMatchesIPv4(buf.String(), ipAddresses); err != nil {
-				return ActionError(err.Error())
-			}
-			return nil
-		}),
-	}
-}
-
-func DoPrintIpAddresses() Action {
-	ipAddresses := []string{}
-	return ActionList{
-		DoGetIpAddresses(&ipAddresses),
-		ActionFunc(func(Config) Action {
-			// note: this must be inside of a function for being lazy-evaluated (when we have obtained the IPs)
-			return DoMessage("IP addresses detected by the kubeadm provisioner: %s", strings.Join(ipAddresses, ", "))
-		}),
-	}
+	return
 }

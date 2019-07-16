@@ -289,15 +289,29 @@ func DoTry(actions ...Action) Action {
 	})
 }
 
+// Retry is the configuration used for retrying things
+type Retry struct {
+	Times int
+
+	// Interval is the
+	Interval time.Duration
+}
+
 // DoRetry runs an action `n` times until it succeedes
-func DoRetry(times int, actions ...Action) ActionFunc {
+func DoRetry(run Retry, actions ...Action) ActionFunc {
+	interval := 1 * time.Second
+	if run.Interval > 0 {
+		interval = run.Interval
+	}
+
 	return ActionFunc(func(cfg Config) Action {
-		count := times
+		count := run.Times
 		var res Action
 		for count > 0 {
 			res = ActionList(actions).Apply(cfg)
 			if IsError(res) {
-				time.Sleep(1 * time.Second)
+				_ = DoMessageWarn("failed... retrying in %d seconds...", interval/time.Second).Apply(cfg)
+				time.Sleep(interval)
 				count -= 1
 			} else {
 				return res

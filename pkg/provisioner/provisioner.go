@@ -18,12 +18,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
 
+	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
+	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
 var (
@@ -69,6 +72,10 @@ func applyFn(ctx context.Context) error {
 		UseSudo:    useSudo,
 	}
 
+	//
+	// resource destruction
+	//
+
 	drain := d.Get("drain").(bool)
 	if drain {
 		ssh.Debug("node will be drained")
@@ -76,26 +83,51 @@ func applyFn(ctx context.Context) error {
 		return action.Apply(cfg)
 	}
 
-	if err := doKubeadmSetup(d, cfg); err != nil {
-		return err
-	}
+	//
+	// resource creation
+	//
+
+	actions := ssh.ActionList{}
+
+	// add the actions for installing kubeadm
+	actions = append(actions, doKubeadmSetup(d))
 
 	// determine what to do (init, join or join --control-plane) depending on the argument provided
 	join := getJoinFromResourceData(d)
 	role := getRoleFromResourceData(d)
 
-	actions := ssh.ActionList{}
+	// NOTE: the "install" block is optional, so there will be no
+	// default values for "install.0.XXX" if the "install" block has not been given...
+	sysconfigPath := d.Get("install.0.sysconfig_path").(string)
+	if len(sysconfigPath) == 0 {
+		sysconfigPath = common.DefKubeletSysconfigPath
+	}
 
-	// some common actions to do BEFORE doing anything
+	servicePath := d.Get("install.0.service_path").(string)
+	if len(servicePath) == 0 {
+		servicePath = common.DefKubeletServicePath
+	}
+
+	dropinPath := d.Get("install.0.dropin_path").(string)
+	if len(dropinPath) == 0 {
+		dropinPath = common.DefKubeadmDropinPath
+	}
+
+	// some common actions to do BEFORE doing initting/joining
 	actions = append(actions,
 		ssh.DoMessageInfo("Checking we have the required binaries..."),
 		doCheckCommonBinaries(d),
+		doPrepareCRI(),
+		ssh.DoEnableService("kubelet.service"),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletSysconfigCode), sysconfigPath),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), servicePath),
+		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), dropinPath),
 	)
 
 	if len(join) == 0 {
 		switch role {
 		case "worker":
-			actions = append(actions, ssh.DoAbort("role is %q while no \"join\" argument has been provided", role))
+			actions = append(actions, ssh.ActionError(fmt.Sprintf("role is %q while no \"join\" argument has been provided", role)))
 		default:
 			actions = append(actions, doKubeadmInit(d))
 		}
@@ -108,16 +140,15 @@ func applyFn(ctx context.Context) error {
 		case "":
 			actions = append(actions, doKubeadmJoinWorker(d))
 		default:
-			actions = append(actions, ssh.DoAbort("unknown provisioning profile: join is %q and role is %q", join, role))
+			actions = append(actions, ssh.ActionError(fmt.Sprintf("unknown provisioning profile: join is %q and role is %q", join, role)))
 		}
 	}
 
-	// ... and some common actions to do AFTER
+	// ... and some common actions to do AFTER initting/joining
 	actions = append(actions,
+		ssh.DoMessageInfo("Gathering some info about this node..."),
 		doCheckLocalKubeconfigIsAlive(d),
-		ssh.DoPrintIpAddresses(),
 		doPrintEtcdStatus(d),
-		doPrintKubeNodesSet(d),
 	)
 
 	return actions.Apply(cfg)

@@ -182,6 +182,23 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 		provConfig["cni_pod_cidr"] = common.DefPodCIDR
 	}
 
+	if cloudProviderRaw, ok := d.GetOk("cloud.0.provider"); ok && len(cloudProviderRaw.(string)) > 0 {
+		cloudProvider := cloudProviderRaw.(string)
+		provConfig["cloud_provider"] = cloudProvider
+
+		// check if have some extra flags...
+		if managerFlagsRaw, ok := d.GetOk("cloud.0.manager_flags"); ok && len(managerFlagsRaw.(string)) > 0 {
+			managerFlags := managerFlagsRaw.(string)
+			provConfig["cloud_provider_flags"] = managerFlags
+		}
+
+		// ... and maybe if we have some cloud-provider config file
+		if cloudConfigRaw, ok := d.GetOk("cloud.0.config"); ok && len(cloudConfigRaw.(string)) > 0 {
+			cloudConfig := cloudConfigRaw.(string)
+			provConfig["cloud_config"] = common.ToTerraformSafeString([]byte(cloudConfig))
+		}
+	}
+
 	// create all the certs and set them in some `d.config` fields, so the provisioner
 	// can upload them to the machines in the Control Plane
 	certConfig, err := common.CreateCerts(d, initConfig)

@@ -25,12 +25,12 @@ import (
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
-const (
-	defaultKubeadmSetup = "kubeadm-setup"
-)
-
 // doKubeadmSetup tries to install kubeadm in the remote machine
-func doKubeadmSetup(d *schema.ResourceData, cfg ssh.Config) error {
+// the auto-installation can be
+// 1) our built-in auto-installation script
+// 2) a user-provided script in some path
+// 3) an inlined user-provided script
+func doKubeadmSetup(d *schema.ResourceData) ssh.Action {
 	if _, ok := d.GetOk("install"); ok {
 		code := ""
 		descr := ""
@@ -39,17 +39,20 @@ func doKubeadmSetup(d *schema.ResourceData, cfg ssh.Config) error {
 		script := d.Get("install.0.script").(string)
 
 		if auto {
-			descr = "Uploading built-in kubeadm installation script..."
+			ssh.Debug("will upload the builtin auto-installation script")
+			descr = "Uploading and running built-in kubeadm installation script..."
 			code = assets.KubeadmSetupScriptCode
 		} else if len(inline) > 0 {
-			descr = "Uploading inlined installation script..."
+			ssh.Debug("will upload auto-installation script from inlined script: %d bytes", len(inline))
+			descr = "Uploading and running inlined installation script..."
 			code = "#!/bin/sh\n" + inline
 		} else if len(script) > 0 {
-			descr = fmt.Sprintf("Uploading custom kubeadm installation script from %s...", script)
+			ssh.Debug("will upload auto-installation from custom script from %q", script)
+			descr = fmt.Sprintf("Uploading and running custom kubeadm script from %s...", script)
 			contents, err := ioutil.ReadFile(script)
 			if err != nil {
-				cfg.UserOutput.Output(fmt.Sprintf("Error when reading installation script %q", script))
-				return err
+				errMsg := fmt.Sprintf("when reading kubeadm setup script %q: %s", script, err.Error())
+				return ssh.ActionError(errMsg)
 			}
 			code = string(contents)
 		}
@@ -59,5 +62,7 @@ func doKubeadmSetup(d *schema.ResourceData, cfg ssh.Config) error {
 			ssh.DoExecScript(strings.NewReader(code)),
 		}
 	}
-	return nil
+	return ssh.ActionList{
+		ssh.DoMessageWarn("no auto-installation: assuming kubeadm is installed in the target node."),
+	}
 }

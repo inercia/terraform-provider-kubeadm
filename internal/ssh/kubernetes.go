@@ -26,10 +26,6 @@ const (
 	DefAdminKubeconfig = "/etc/kubernetes/admin.conf"
 )
 
-const (
-	kubectlNodesIPsCmd = `get nodes --output=jsonpath='{range .items[*]}{.metadata.name} {.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}'`
-)
-
 // Manifest represents a manifest, that can be a local file name, a remote URL or inlined
 type Manifest struct {
 	Path   string
@@ -79,56 +75,22 @@ var (
 type KubeNode struct {
 	Nodename string
 	IP       string
-}
-
-// NewKubeNodeFromString creates a new node info from a string
-func NewKubeNodeFromString(s string) (n KubeNode, err error) {
-	// parse "<NAME> <IP>"
-	r := strings.Fields(s)
-	if len(r) == 2 {
-		ip := strings.TrimSpace(r[1])
-		nodename := strings.TrimSpace(r[0])
-		Debug("obtained kube node info: ip:%s nodename:%s", ip, nodename)
-		n.IP = ip
-		n.Nodename = nodename
-	} else {
-		Debug("could not parse node info: %q", s)
-		err = ErrParseNodename
-	}
-	return
+	Hostname string
 }
 
 func (kn KubeNode) String() string {
-	return fmt.Sprintf("%s[%s]", kn.Nodename, kn.IP)
-}
-
-// KubeNodesSet is a set ok node infos
-type KubeNodesSet map[string]KubeNode
-
-func (kns KubeNodesSet) String() (s string) {
-	ss := []string{}
-	for _, kn := range kns {
-		ss = append(ss, kn.String())
+	name := kn.Nodename
+	if kn.Hostname != kn.Nodename {
+		name = fmt.Sprintf("%s/%s", kn.Nodename, kn.Hostname)
 	}
-	return strings.Join(ss, ",")
+	if kn.IP != "" {
+		name = fmt.Sprintf("%s(%s)", name, kn.IP)
+	}
+	return name
 }
 
-// DoGetKubeNodesSet gets a map with (IPs, node-info), with the node info
-// obtained with some magic kubectl command
-func DoGetKubeNodesSet(kubectl string, kubeconfig string, nodes *KubeNodesSet) Action {
-	return DoSendingExecOutputToFun(
-		func(s string) {
-			if len(s) == 0 {
-				return
-			}
-			if n, err := NewKubeNodeFromString(s); err != nil {
-				Debug("could not parse node info from %q", s)
-			} else {
-				Debug("adding node info %q", n)
-				(*nodes)[n.IP] = n
-			}
-		},
-		DoRemoteKubectl(kubectl, kubeconfig, kubectlNodesIPsCmd))
+func (kn KubeNode) IsEmpty() bool {
+	return kn.Nodename == "" && kn.IP == "" && kn.Hostname == ""
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -155,7 +117,8 @@ func DoRemoteKubectl(kubectl string, kubeconfig string, args ...string) Action {
 					return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 				}
 
-				return DoRetry(3,
+				return DoRetry(
+					Retry{Times: 3},
 					DoWithCleanup(
 						DoTry(DoDeleteFile(remoteKubeconfig)),
 						ActionList{

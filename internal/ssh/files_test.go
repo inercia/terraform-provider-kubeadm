@@ -96,9 +96,9 @@ func TestCheckFileExists(t *testing.T) {
 		DoTry(DoDeleteLocalFile(name1)).Apply(cfg)
 	}()
 
-	// overwrite the startFunction, returning CONDITION_SUCCEEDED
+	// overwrite the StartFunction, returning CONDITION_SUCCEEDED
 	comm := DummyCommunicator{}
-	comm.startFunction = func(cmd *remote.Cmd) error {
+	comm.StartFunction = func(cmd *remote.Cmd) error {
 		cmd.Init()
 		cmd.Stdout.Write([]byte("CONDITION_SUCCEEDED"))
 		cmd.SetExitStatus(0, nil)

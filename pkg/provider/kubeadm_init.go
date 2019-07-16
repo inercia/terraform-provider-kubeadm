@@ -139,6 +139,26 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) (*kubeadmapi.I
 		}
 	}
 
+	// check if we have some cloud-provider
+	// if that is the case, we use the "external" cloud provider.
+	// the provisioner will have to load a "manifest" for running this externla cloud provider manager
+	if cloudProvRaw, ok := d.GetOk("cloud.0.provider"); ok && len(cloudProvRaw.(string)) > 0 {
+		if initConfig.NodeRegistration.KubeletExtraArgs == nil {
+			initConfig.NodeRegistration.KubeletExtraArgs = map[string]string{}
+		}
+		initConfig.NodeRegistration.KubeletExtraArgs["cloud-provider"] = "external"
+
+		if initConfig.ClusterConfiguration.APIServer.ExtraArgs == nil {
+			initConfig.ClusterConfiguration.APIServer.ExtraArgs = map[string]string{}
+		}
+		initConfig.ClusterConfiguration.APIServer.ExtraArgs["cloud-provider"] = "external"
+
+		if initConfig.ClusterConfiguration.ControllerManager.ExtraArgs == nil {
+			initConfig.ClusterConfiguration.ControllerManager.ExtraArgs = map[string]string{}
+		}
+		initConfig.ClusterConfiguration.ControllerManager.ExtraArgs["cloud-provider"] = "external"
+	}
+
 	if _, ok := d.GetOk("cni.0"); ok {
 		if arg, ok := d.GetOk("cni.0.bin_dir"); ok {
 			initConfig.NodeRegistration.KubeletExtraArgs["cni-bin-dir"] = arg.(string)
@@ -148,7 +168,7 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) (*kubeadmapi.I
 		}
 	}
 
-	if versionOpt, ok := d.GetOk("version"); ok {
+	if versionOpt, ok := d.GetOk("version"); ok && len(versionOpt.(string)) > 0 {
 		initConfig.KubernetesVersion = versionOpt.(string)
 	}
 

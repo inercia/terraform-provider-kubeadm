@@ -73,3 +73,8 @@ ci-check-env:
 
 ci-setup: ci-check-env ci-install-tf-lxd ci-install-lxd $(TF_SSH_KEY)
 
+ci-cleanup:
+	terraform init
+	terraform destroy --auto-approve
+	rm -f *.log
+

@@ -84,6 +84,21 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		// Computed: true,
 		Optional: true,
 	},
+	"cloud_provider": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"cloud_config": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"cloud_provider_flags": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
 	"dashboard_enabled": {
 		Type: schema.TypeBool,
 		// Computed: true,

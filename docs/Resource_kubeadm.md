@@ -35,6 +35,7 @@ administrative privileges.
 * `addons` - (Optional) Addons to deploy (see section below).
 * `api` - (Optional) API server configuration (see section below).
 * `certs` - (Optional) user-provided certificates (see section below).
+* `cloud` - (Optional) cloud provider configuration (see section below).
 * `cni` - (Optional) CNI configuration (see section below).
 * `etcd`  - (Optional) `etcd` configuration (see section below).
 * `images`  - (Optional) images used for running the different services (see section below).
@@ -276,6 +277,42 @@ resource "kubeadm" "main" {
 
 * `endpoints` - (Optional) list of etcd servers URLs, as `host:port`.
 
+
+### `cloud`
+
+The `cloud` block provides some configuration for  the cloud provider.
+
+Example:
+
+```hcl
+resource "kubeadm" "main" {
+ cloud {
+   provider = "openstack"
+   manager_flags = "--allocate-node-cidrs=true --configure-cloud-routes=true --cluster-cidr=172.17.0.0/16"
+   config =<<EOF
+[Global]
+username=user
+password=pass
+auth-url=https://<keystone_ip>/identity/v3
+tenant-id=c869168a828847f39f7f06edd7305637
+domain-id=2a73b8f597c04551a0fdc8e95544be8a
+
+[LoadBalancer]
+subnet-id=6937f8fa-858d-4bc9-a3a5-18d2c957166a
+EOF       
+ }
+}
+```
+
+#### Arguments
+
+* `provider` - (Optional) the [cloud provider](https://kubernetes.io/docs/concepts/cluster-administration/cloud-providers/)
+to use. Can be `aws`, `azure`, `cloudstack`, `gce`, `openstack`, etc.
+* `manager_flags` - (Optional) some additional flags for the cloud provider manager.
+* `config` - (Optional) the Cloud Provider configuration. This can be read from a file
+(with something like `file("${path.module}/cloud.conf")`), from a `template` or provided 
+inline with a _heredoc_ block.
+
 ### `runtime`
 
 The `runtime` block provides some operational configuration for different components
@@ -321,7 +358,7 @@ but can also be directly accessible in case you need it.
   something like:
     ```hcl
     data "template_file" "script" {
-      template = <<-EOT
+      template = <<EOT
       # write a config file ready for doing a `kubeadm join` 
       write_files:
         -   encoding:    b64
@@ -342,6 +379,8 @@ but can also be directly accessible in case you need it.
       }
     }
     ```
+  * `cloud_provider`, `cloud_provider_flags`, `cloud_config` - the cloud
+  provider configuration. 
   * `ca_crt`
   * `ca_key`
   * `sa_crt`
