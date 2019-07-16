@@ -303,6 +303,10 @@ resource "docker_container" "master" {
     role      = "master"
     join      = "${count.index == 0 ? "" : docker_container.master.0.ip_address}"
     manifests = "${var.manifests}"
+
+    ignore_checks = [
+      "KubeletVersion",  // the kubelet version in the base image can be very different
+    ]
   }
 
   # provisioner for removing the node from the cluster
@@ -402,6 +406,10 @@ resource "docker_container" "worker" {
     config = "${kubeadm.main.config}"
     join   = "${lookup(docker_container.master.0.network_data[0], "ip_address")}"
     role   = "worker"
+
+    ignore_checks = [
+      "KubeletVersion",  // the kubelet version in the base image can be very different
+    ]
   }
 
   # provisioner for removing the node from the cluster

@@ -24,8 +24,6 @@ import (
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
 	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/config"
-
-	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 )
 
 const (
@@ -93,7 +91,6 @@ func YAMLToInitConfig(configBytes []byte) (*kubeadmapi.InitConfiguration, error)
 
 // InitConfigToYAML converts a InitConfiguration to YAML
 func InitConfigToYAML(initConfig *kubeadmapi.InitConfiguration) ([]byte, error) {
-	ssh.Debug("initialization configuration to YAML")
 	kubeadmscheme.Scheme.Default(initConfig)
 	return config.MarshalInitConfigurationToBytes(initConfig, apiVersion)
 }
@@ -183,7 +180,6 @@ func YAMLToJoinConfig(configBytes []byte) (*kubeadmapi.JoinConfiguration, error)
 
 // JoinConfigToYAML converts a JoinConfiguration to YAML
 func JoinConfigToYAML(joinConfig *kubeadmapi.JoinConfiguration) ([]byte, error) {
-	ssh.Debug("join configuration to YAML")
 	kubeadmscheme.Scheme.Default(joinConfig)
 	nodebytes, err := kubeadmutil.MarshalToYamlForCodecs(joinConfig, apiVersion, kubeadmscheme.Codecs)
 	if err != nil {

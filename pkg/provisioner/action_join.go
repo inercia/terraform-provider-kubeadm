@@ -16,12 +16,21 @@ package provisioner
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
 	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
+)
+
+const (
+	// retry 6 times to join
+	joinRetryTimes = 6
+
+	// ... waiting 30 seconds between each try
+	joinRetryInterval = 30 * time.Second
 )
 
 // doKubeadmJoinWorker runs the `kubeadm join`
@@ -41,9 +50,19 @@ func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
 	}
 
 	actions := ssh.ActionList{
-		doRefreshToken(d),
-		ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'..."),
-		doKubeadm(d, "join"),
+		doMaybeResetWorker(d, common.DefKubeadmJoinConfPath),
+		ssh.DoRetry(
+			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
+			ssh.ActionList{
+				doCheckLocalKubeconfigExists(d),
+				doRefreshToken(d),
+			}),
+		ssh.DoRetry(
+			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
+			ssh.ActionList{
+				ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'..."),
+				doKubeadm(d, common.DefKubeadmJoinConfPath, "join"),
+			}),
 	}
 	return actions
 }
@@ -86,10 +105,31 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 	}
 
 	actions := ssh.ActionList{
-		doRefreshToken(d),
-		ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'..."),
-		doUploadCerts(d),
-		doKubeadm(d, "join"),
+		doMaybeResetMaster(d, common.DefKubeadmJoinConfPath),
+		ssh.DoRetry(
+			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
+			ssh.ActionList{
+				doCheckLocalKubeconfigExists(d),
+				doRefreshToken(d),
+			}),
+		ssh.DoRetry(
+			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
+			ssh.ActionList{
+				ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'..."),
+				doUploadCerts(d), // (we must upload certs because a "kubeadm reset" wipes them...)
+				doKubeadm(d, common.DefKubeadmJoinConfPath, "join"),
+			}),
 	}
 	return actions
+}
+
+// doCheckLocalKubeconfigExists checks that there is a local kubeconfig
+func doCheckLocalKubeconfigExists(d *schema.ResourceData) ssh.Action {
+	kubeconfig := getKubeconfigFromResourceData(d)
+
+	return ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+		return ssh.DoIf(
+			ssh.CheckNot(ssh.CheckLocalFileExists(kubeconfig)),
+			ssh.DoMessageWarn("no local kubeconfig found at %q", kubeconfig))
+	})
 }

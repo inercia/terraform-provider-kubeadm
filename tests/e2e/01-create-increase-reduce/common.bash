@@ -1,20 +1,30 @@
 #!/usr/bin/env bash
 
-# common Terraform arguments
-export COMMON_TF_ARGS="--auto-approve"
-
 export PATH=/opt/bin:$PATH
+
+# common Terraform arguments
+export TF_COMMON_ARGS="--auto-approve"
+
+export TF_LOG_FILENAME="$E2E_ENV/terraform.log"
+
 
 ######################################################################################
 
-log()      { echo >&2 ">>> $@"; }
-failed()   { log "FAILED: $@" ; }
-warn()     { log "WARNING: $@" ; }
-abort()    { log ">>>>>>>>>> FATAL: $@ <<<<<<<<<<< <<<" ; exit 1 ; }
+RED="\e[31m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+NC="\e[0m"
+BOLD="\e[1m"
+
+log()      { echo -e >&2 ">>> $@"; }
+info()     { log "${INFO} $@${NC}" ;}
+failed()   { log "${RED}FAILED: $@${NC}" ; }
+warn()     { log "${RED}WARNING: $@${NC}" ; }
+abort()    { log "${RED}${BOLD}>>>>>>>>>> FATAL: $@ <<<<<<<<<<< <<<${NC}" ; exit 1 ; }
 section()  {
-    log " ---------------------------------------------------------------"
-    log $@
-    log " ---------------------------------------------------------------"
+    log "${GREEN} ---------------------------------------------------------------${NC}"
+    log "${GREEN} $@${NC}"
+    log "${GREEN} ---------------------------------------------------------------${NC}"
 }
 
 ######################################################################################
@@ -24,12 +34,12 @@ download_k8s_bin() {
 
     RELEASE="$(curl -sSL https://dl.k8s.io/release/stable.txt)"
 
-    log "Downloading $bin..."
+    info "Downloading $bin..."
     cd /tmp
     curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/amd64/$bin
     [ -f $bin ] || abort "$bin was not downloaded with curl"
 
-    log "Moving $bin to /opt/bin with the right permissions ..."
+    info "Moving $bin to /opt/bin with the right permissions ..."
     chmod 755 $bin
     mkdir -p /opt/bin
     sudo mv $bin /opt/bin/
@@ -50,7 +60,7 @@ check_exp_nodes() {
 
     [ -f $KUBECONFIG ] || abort "no kubeconfig found at $KUBECONFIG"
 
-    echo ">>> Checking we can get cluster info with kubectl..."
+    info "Checking we can get cluster info with kubectl..."
     kubectl --kubeconfig=$KUBECONFIG get nodes
     [ $? -eq 0 ] || abort "could not get the nodes with kubectl"
 
@@ -58,17 +68,19 @@ check_exp_nodes() {
     [ $? -eq 0 ] || abort "could not get the number of nodes with kubectl"
 
     exp_num_nodes=$((exp_num_masters + exp_num_workers))
-    echo ">>> Checking we have $exp_num_nodes nodes..."
+    info "Checking we have $exp_num_nodes nodes..."
     curr_num_nodes=$(echo "$output" | grep -c "kubernetes.io/hostname")
     if [ $curr_num_nodes -ne $exp_num_nodes ] ; then
         abort "current number of nodes, $curr_num_nodes, do not match $exp_num_nodes"
     fi
+    info "... good, we have $exp_num_nodes nodes..."
 
-    echo ">>> Checking we have $exp_num_masters masters..."
+    info "Checking we have $exp_num_masters masters..."
     curr_num_masters=$(echo "$output" | grep -c "node-role.kubernetes.io/master")
     if [ $curr_num_masters -ne $exp_num_masters ] ; then
         abort "current number of masters, $curr_num_masters, do not match $exp_num_masters"
     fi
+    info "... good, we have $exp_num_masters masters..."
 }
 
 ######################################################################################
@@ -79,16 +91,33 @@ tf_apply() {
     local num_workers=$1
     shift
 
+    local log_filename="$E2E_ENV/terraform.log"
+
+    info "running 'terraform apply' for masters:$num_masters workers:$num_workers"
+    exec 3>$TF_LOG_FILENAME
+    TF_LOG=DEBUG \
     TF_VAR_master_count=$num_masters TF_VAR_worker_count=$num_workers \
-        terraform apply $COMMON_TF_ARGS $@
-    [ $? -eq 0 ] || \
+        terraform apply $TF_COMMON_ARGS $@ 2>&3 | tee -a >(tee >&3)
+    res=$?
+    exec 3>&-
+
+    [ $res -eq 0 ] || \
         abort "could not apply Terraform script for masters:$num_masters workers:$num_workers"
+    info "'terraform apply' was successful"
 }
 
 tf_destroy() {
-    terraform destroy $COMMON_TF_ARGS $@
-    [ $? -eq 0 ] || \
-        abort "could not destroy Terraform cluster"
+    local log_filename="$E2E_ENV/terraform.log"
+
+    info "running 'terraform destroy'"
+    exec 3>$TF_LOG_FILENAME
+    TF_LOG=DEBUG \
+        terraform destroy $TF_COMMON_ARGS $@ 2>&3 | tee -a >(tee >&3)
+    res=$?
+    exec 3>&-
+
+    [ $res -eq 0 ] || abort "could not destroy Terraform cluster"
+    info "'terraform destroy' was successful"
 }
 
 ######################################################################################
@@ -102,8 +131,8 @@ kubeadm_token_list() {
 
     [ -f $KUBECONFIG ] || abort "no kubeconfig found at $KUBECONFIG"
 
-    log "Current list of tokens:"
-    kubeadm token list --kubeconfig=$KUBECONFIG
+    info "Current list of tokens:"
+    kubeadm token list --kubeconfig="$KUBECONFIG"
 }
 
 kubeadm_token_flush() {
@@ -111,14 +140,14 @@ kubeadm_token_flush() {
 
     [ -f $KUBECONFIG ] || abort "no kubeconfig found at $KUBECONFIG"
 
-    TOKENS=$(kubeadm token list --kubeconfig=$KUBECONFIG | grep -E "[a-z0-9]{6}\.[a-z0-9]{16}" | cut -f1 -d" ")
-    log "Removing all the tokens..."
+    TOKENS=$(kubeadm token list --kubeconfig="$KUBECONFIG" | grep -E "[a-z0-9]{6}\.[a-z0-9]{16}" | cut -f1 -d" ")
+    info "Removing all the tokens..."
     for token in $TOKENS ; do
-        log "... removing token $token"
-        kubeadm token delete --kubeconfig=$KUBECONFIG $token
+        info "... removing token $token"
+        kubeadm token delete --kubeconfig="$KUBECONFIG" $token
     done
 
-    log "Listing tokens after 'flush':"
+    info "Listing tokens after 'flush':"
     kubeadm_token_list
 }
 

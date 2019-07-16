@@ -30,7 +30,7 @@ import (
 
 const (
 	// arguments for "sudo"
-	sudoArgs = "--non-interactive"
+	sudoArgs = "--non-interactive -E"
 )
 
 // DoExec is a runner for remote Commands
@@ -43,7 +43,6 @@ func DoExec(command string) Action {
 		if cfg.UseSudo {
 			command = "sudo " + sudoArgs + " " + command
 		}
-		command += " 2>&1"
 
 		Debug("running %q", command)
 
@@ -76,7 +75,9 @@ func DoExec(command string) Action {
 		if waitResult != nil {
 			cmdError, _ := waitResult.(*remote.ExitError)
 			if cmdError.ExitStatus != 0 {
-				res = ActionError(fmt.Sprintf("Command %q exited with non-zero exit status: %d", cmdError.Command, cmdError.ExitStatus))
+				msg := fmt.Sprintf("Command %q exited with non-zero exit status: %d", cmdError.Command, cmdError.ExitStatus)
+				Debug(msg)
+				res = ActionError(msg)
 			}
 			// otherwise, it is a communicator error
 		}
@@ -169,18 +170,20 @@ func CheckExec(cmd string) CheckerFunc {
 		// check _only_ the `success` appears, as some other error/log message about
 		// the command can contain both...
 		s := buf.String()
+		Debug("check: output: %q", s)
 		if strings.Contains(s, success) && !strings.Contains(s, failure) {
-			Debug("check %q succeeded (%q found in output)", cmd, success)
+			Debug("check: %q succeeded (%q found in output)", cmd, success)
 			return true, nil
 		}
-		Debug("check %q failed", cmd)
+		Debug("check: %q failed", cmd)
 		return false, nil
 	})
 }
 
 // CheckBinaryExists checks that a binary exists in the path
 func CheckBinaryExists(cmd string) CheckerFunc {
-	command := fmt.Sprintf("command -v '%s'", cmd)
+	// note: start 'command' in a subshell, as it doesn't mix well with 'sudo'
+	command := fmt.Sprintf("sh -c \"command -v '%s'\"", cmd)
 
 	return CheckerFunc(func(cfg Config) (bool, error) {
 		Debug("Checking binary exists with: '%s'", cmd)

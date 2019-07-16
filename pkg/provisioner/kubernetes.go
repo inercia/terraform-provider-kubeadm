@@ -15,9 +15,20 @@
 package provisioner
 
 import (
+	"bytes"
+	"strings"
+
 	"github.com/hashicorp/terraform/helper/schema"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
+)
+
+const (
+	// command for getting the machine-id
+	machineIDCmd = `cat /etc/machine-id`
+
+	// command for getting a map of "machine-id <-> nodename"
+	kubectlGetNodenameCmd = `get nodes -o yaml -o=jsonpath='{range .items[*]}{.status.nodeInfo.machineID}{"\t"}{.metadata.name}{"\n"}{end}'`
 )
 
 // doRemoteKubectl runs a remote kubectl with the kubeconfig specified in the schema
@@ -76,31 +87,6 @@ func doKubectlDeleteNode(d *schema.ResourceData, nodename string) ssh.Action {
 	}
 }
 
-// doPrintKubeNodesSet prints the list of <nodename>:<IP> in the cluster
-func doPrintKubeNodesSet(d *schema.ResourceData) ssh.Action {
-	kubeconfig := getKubeconfigFromResourceData(d)
-	if kubeconfig == "" {
-		return ssh.ActionError("no 'config_path' has been specified")
-	}
-
-	nodes := ssh.KubeNodesSet{}
-	return ssh.DoTry(
-		ssh.ActionList{
-			ssh.DoGetKubeNodesSet(getKubectlFromResourceData(d), kubeconfig, &nodes),
-			ssh.DoMessageInfo("Gathering Kubernetes nodes (and IPs) in the cluster..."),
-			ssh.ActionFunc(func(ssh.Config) ssh.Action {
-				if len(nodes) == 0 {
-					return ssh.DoMessageWarn("no Kubernetes nodes detected.")
-				}
-
-				res := ssh.ActionList{}
-				for ip, node := range nodes {
-					res = append(res, ssh.DoMessageInfo("- ip:%s nodename:%s", ip, node.Nodename))
-				}
-				return res
-			})})
-}
-
 // doDeleteLocalKubeconfig deletes the current, local kubeconfig (the one specified
 // in the "config_path" attribute), but doing a backup first.
 func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Action {
@@ -114,6 +100,56 @@ func doDeleteLocalKubeconfig(d *schema.ResourceData) ssh.Action {
 			ssh.DoMoveLocalFile(kubeconfig, kubeconfigBak),
 		},
 	)
+}
+
+// DoGetNodename tries to get the nodename
+func DoGetNodename(d *schema.ResourceData, node *ssh.KubeNode) ssh.Action {
+	// maybe we can get it just from the `ResourceData`
+	nodename := getNodenameFromResourceData(d)
+	if len(nodename) > 0 {
+		ssh.Debug("got nodename %q from resource data", node.Nodename)
+		node.Nodename = nodename
+		return nil
+	}
+
+	kubectl := getKubectlFromResourceData(d)
+	kubeconfig := getKubeconfigFromResourceData(d)
+
+	// otherwise, access the remote host
+	return ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+		// first, get the machine ID
+		ssh.Debug("trying to get the machine ID...")
+		var buf bytes.Buffer
+		res := ssh.DoSendingExecOutputToWriter(&buf, ssh.DoExec(machineIDCmd)).Apply(cfg)
+		if ssh.IsError(res) {
+			return res
+		}
+		ssh.Debug("... output: %q", buf.String())
+		machineID := strings.TrimSpace(buf.String())
+		ssh.Debug("... machineID: %q", machineID)
+
+		res = ssh.DoSendingExecOutputToFun(
+			func(s string) {
+				if len(s) == 0 {
+					return
+				}
+				ssh.Debug("trying to find nodename in %q", s)
+				if strings.Contains(s, machineID) {
+					// parse:
+					// bf38f8ac633e4f64a4924b0ed7b25946        kubeadm-master-0
+					fields := strings.Fields(s)
+					if len(fields) < 2 {
+						ssh.Debug("could not get the nodename from fields: %+v", fields)
+						return
+					}
+					node.Nodename = strings.TrimSpace(fields[1])
+					ssh.Debug("... detected nodename %q", node.Nodename)
+				}
+			},
+			ssh.DoRemoteKubectl(kubectl, kubeconfig, kubectlGetNodenameCmd)).Apply(cfg)
+
+		return res
+	})
 }
 
 // doDownloadKubeconfig downloads the "admin.conf" from the remote master

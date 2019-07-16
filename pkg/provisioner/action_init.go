@@ -16,6 +16,7 @@ package provisioner
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform/helper/schema"
 
@@ -42,21 +43,54 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 	}
 
 	actions := ssh.ActionList{
-		ssh.DoMessageInfo("Initializing the cluster with 'kubadm init'..."),
+		// * if a "admin.conf" is there and the cluster is alive, do nothing
+		//   (just try to reload CNI, Helm and so)
+		// * if a partial setup is detected (ie, cluster is not alive, some manifests are there...)
+		//   try to reset the node
+		// * in any other case, do a regular "kubeadm init"
 		doDeleteLocalKubeconfig(d),
-		doUploadCerts(d),
-		// check if there is a (valid) admin.conf there
-		// in that case, skip the "kubeadm init"
 		ssh.DoIfElse(
 			checkAdminConfAlive(d),
-			ssh.DoMessageWarn("admin.conf already exists: skipping `kubeadm init`"),
-			doKubeadm(d, "init", extraArgs...),
+			ssh.ActionList{
+				ssh.DoMessageInfo("There is a 'admin.conf' in this master pointing to a live cluster: skipping any setup"),
+			},
+			ssh.ActionList{
+				doMaybeResetMaster(d, common.DefKubeadmInitConfPath),
+				doUploadCerts(d), // (we must upload certs because a "kubeadm reset" wipes them...)
+				ssh.DoRetry(
+					ssh.Retry{Times: 3, Interval: 15 * time.Second},
+					ssh.ActionList{
+						ssh.DoMessageInfo("Initializing the cluster with 'kubadm init'..."),
+						doKubeadm(d, common.DefKubeadmInitConfPath, "init", extraArgs...),
+					},
+				),
+			},
 		),
+		// we always download the kubeconfig and try to do a "kubeactl apply -f" of manifests
 		doDownloadKubeconfig(d),
 		doLoadCNI(d),
 		doLoadDashboard(d),
 		doLoadHelm(d),
+		doLoadCloudProviderManager(d),
 		doLoadManifests(d),
 	}
 	return actions
+}
+
+// doMaybeResetMaster maybe "reset"s the master with kubeadm if
+// it is detected as "partially" setup:
+// ie, /etc/kubernetes/kubeadm-*.conf exist AND /etc/kubernetes/manifests/* exist
+func doMaybeResetMaster(d *schema.ResourceData, kubeadmConfigFilename string) ssh.Action {
+	return ssh.DoIf(
+		ssh.CheckOr(
+			ssh.CheckFileExists(kubeadmConfigFilename),
+			ssh.CheckFileExists("/etc/kubernetes/manifests/kube-apiserver.yaml"),
+			ssh.CheckFileExists("/etc/kubernetes/manifests/kube-controller-manager.yaml"),
+			ssh.CheckFileExists("/etc/kubernetes/manifests/kube-scheduler.yaml"),
+		),
+		ssh.ActionList{
+			ssh.DoMessageWarn("previous kubeadm config file found: resetting node"),
+			doExecKubeadmWithConfig(d, "reset", "", "--force"),
+			ssh.DoDeleteFile(kubeadmConfigFilename),
+		})
 }

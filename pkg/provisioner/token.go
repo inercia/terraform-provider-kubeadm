@@ -177,10 +177,15 @@ func checkTokenIsValid(d *schema.ResourceData, tokens KubeadmTokensSet) ssh.Chec
 	return ssh.CheckerFunc(func(cfg ssh.Config) (bool, error) {
 		action := DoGetCurrentRemoteTokens(d, tokens)
 		if err := action.Apply(cfg); ssh.IsError(err) {
-			return false, fmt.Errorf("cannot check token is valid: %s", err)
+			_ = ssh.DoMessageWarn("could not check if token is still valid: will try to create a new token").Apply(cfg)
+			return false, nil
 		}
 
 		ssh.Debug("%d tokens obtained", len(tokens))
+		if len(tokens) == 0 {
+			_ = ssh.DoMessageWarn("no tokens obtained").Apply(cfg)
+		}
+
 		for _, token := range tokens {
 			if token.Token == currentToken {
 				ssh.Debug("current token, %q, found in the list of tokens", currentToken)
@@ -189,10 +194,10 @@ func checkTokenIsValid(d *schema.ResourceData, tokens KubeadmTokensSet) ssh.Chec
 					ssh.Debug("token %q seems to be expired", currentToken)
 					return false, nil
 				}
-
 				return true, nil
 			}
 		}
+
 		return false, nil
 	})
 }
@@ -218,7 +223,7 @@ func doRefreshToken(d *schema.ResourceData) ssh.Action {
 				ssh.DoMessageWarn("%q is not valid token anymore: will create a new token %q...", curTokenInJoinConfig, newToken),
 				ssh.DoSendingExecOutputToDevNull(DoExecKubeadmToken(d, fmt.Sprintf("create --ttl=%s %s", newJoinTokenTTL, newToken))),
 				DoSetNewToken(d, newToken),
-				ssh.DoMessage("New token %q created successfully.", newToken),
+				ssh.DoMessageInfo("New token %q created successfully.", newToken),
 			}),
 	}
 }

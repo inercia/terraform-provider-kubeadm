@@ -23,6 +23,9 @@ const (
 
 	DefServiceCIDR = "10.96.0.0/12"
 
+	// kubernetes version to deploy
+	// notes: * leaving it empty leads to some instabililties
+	//        * 1.15.1 seems to be broken (some etcd problems)
 	DefKubernetesVersion = "v1.15.0"
 
 	DefDNSDomain = "cluster.local"
@@ -99,4 +102,27 @@ var (
 	DefKubeletSettings = map[string]string{
 		"network-plugin": "cni",
 	}
+)
+
+// cloud-provider configuration and constants
+var (
+	// DefSupportedCloudProviders is the list of Cloud Providers supported
+	DefSupportedCloudProviders = []string{
+		"aws",
+		"azure",
+		"cloudstack",
+		"gce",
+		"openstack",
+		"ovirt",
+		"photon",
+		"vsphere",
+	}
+
+	// DefCloudConfigMandatory is the list of Cloud Providers where the cloud-config is mandatory
+	DefCloudConfigMandatory = []string{
+		"openstack",
+	}
+
+	// DefCloudConfigFilename  is the default cloud config inn the nodes
+	DefCloudConfigFilename = "/etc/kubernetes/cloud.conf"
 )

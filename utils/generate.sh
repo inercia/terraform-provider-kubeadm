@@ -40,6 +40,8 @@ done
 
 rm -f $OUT_FILE
 
+grep \` $IN_FILES && abort "input file cannot contain character \`"
+
 echo   "// Code generated automatically with go generate; DO NOT EDIT." > $OUT_FILE
 echo                                     >> $OUT_FILE
 echo   "package $OUT_PACKAGE"            >> $OUT_FILE

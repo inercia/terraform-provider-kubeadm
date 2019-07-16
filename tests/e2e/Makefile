@@ -1,5 +1,9 @@
 all: ci-tests
 
+RED   := \e[31m
+GREEN := \e[32m
+NC    := \e[0m
+
 ci-setup:
 	mkdir -p "$TRAVIS_BUILD_DIR/snaps-cache"
 
@@ -18,16 +22,39 @@ ci-setup:
 	unzip terraform_0.11.13_linux_amd64.zip
 	sudo mv terraform /usr/local/bin/
 
+ci-cleanup:
+	@[ -n "$$E2E_CLEANUP" ] && \
+		echo -e ">>>$(RED) Destroying cluster... $(NC)\n" && \
+		make -C $$E2E_ENV ci-cleanup || /bin/true
+
+ci-logs:
+	@[ -f $$E2E_ENV/terraform.log ] || echo -e ">>>$(RED) No logs stored at $$E2E_ENV/terraform.log $(NC)"
+	@[ -f $$E2E_ENV/terraform.log -a -n "$$IS_CI" ] && \
+		echo -e "\n\n\n\n\n\n"                      && \
+		cat $$E2E_ENV/terraform.log                 && \
+		echo -e "\n\n\n\n\n\n"                      || \
+		/bin/true
+	@[ -f $$E2E_ENV/terraform.log ]                                          && \
+		echo -e ">>>$(RED) Logs available at $$E2E_ENV/terraform.log $(NC)"  || \
+		/bin/true
+
 ci-tests:
-	@echo ">>> Starting tests suites:"
+	@echo -e ">>>$(GREEN) Starting tests suites: $(NC)"
 	@echo
+	@rm -f $$E2E_ENV/terraform.log
 	@for d in `pwd`/[0-9]* ; do \
-		echo ">>> Running testsuite $$d" ; \
+		echo -e ">>>$(GREEN) Running testsuite `basename $$d` $(NC)" ; \
 		for i in $$d/[0-9]*-*.sh ; do \
-			echo ">>> Running $$i" ; \
+			echo -e ">>>$(GREEN) Running step `basename $$d`/`basename $$i .sh`$(NC)" ; \
 			$$i ; \
 			if [ $$? -ne 0 ] ; then \
-                echo ">>> FAILED: $$i"  ; \
+                echo -e ">>>$(RED) FAILED: $$i $(NC)" ; \
+				echo -e ">>>" ; \
+				echo -e ">>>" ; \
+                make ci-cleanup ; \
+                echo -e ">>>" ; \
+				echo -e ">>>" ; \
+                make ci-logs ; \
                 exit 1  ; \
             fi ; \
 		done ; \

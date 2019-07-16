@@ -72,7 +72,11 @@ test-compile:
 	fi
 	$(GO) test -c $(TEST) $(TESTARGS)
 
-tests-e2e: ci-tests-e2e
+tests-e2e:   ci-tests-e2e
+e2e:         ci-tests-e2e
+e2e-cleanup: ci-tests-e2e-cleanup
+e2e-destroy: ci-tests-e2e-cleanup
+e2e-logs:    ci-tests-e2e-logs
 
 ################################################
 
@@ -113,6 +117,12 @@ ci-tests-unit: test
 
 ci-tests-e2e: build
 	@make -C tests/e2e ci-tests
+
+ci-tests-e2e-cleanup:
+	@make -C tests/e2e ci-cleanup E2E_CLEANUP="true"
+
+ci-tests-e2e-logs:
+	@make -C tests/e2e ci-logs
 
 ci: ci-tests
 

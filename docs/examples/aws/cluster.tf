@@ -412,8 +412,13 @@ resource "kubeadm" "main" {
     services   = "10.25.0.0/16"
   }
 
+  cloud {
+    # note: maybe the AWS cloud-provider requires the right IAM permissions
+    provider = "aws"
+  }
+
   runtime {
-    engine = "docker"
+    engine         = "docker"
   }
 
   cni {
@@ -461,6 +466,10 @@ resource "aws_instance" "bastion" {
     volume_size           = 20
     delete_on_termination = true
   }
+}
+
+output "bastion" {
+  value = "${aws_instance.bastion.public_ip}"
 }
 
 ###########################################
@@ -549,6 +558,13 @@ resource "null_resource" "masters" {
       auto = true
     }
   }
+
+  # provisioner for removing the node from the cluster
+  provisioner "kubeadm" {
+    when   = "destroy"
+    config = "${kubeadm.main.config}"
+    drain  = true
+  }
 }
 
 output "master.public_ip" {
@@ -620,6 +636,13 @@ resource "aws_instance" "workers" {
     install {
       auto = true
     }
+  }
+
+  # provisioner for removing the node from the cluster
+  provisioner "kubeadm" {
+    when   = "destroy"
+    config = "${kubeadm.main.config}"
+    drain  = true
   }
 }
 

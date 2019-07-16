@@ -30,7 +30,7 @@ func (_ DummyOutput) Output(s string) {
 }
 
 type DummyCommunicator struct {
-	startFunction func(cmd *remote.Cmd) error
+	StartFunction func(cmd *remote.Cmd) error
 }
 
 func (_ DummyCommunicator) Connect(terraform.UIOutput) error {
@@ -55,8 +55,8 @@ func (_ DummyCommunicator) ScriptPath() string {
 
 func (dc DummyCommunicator) Start(cmd *remote.Cmd) error {
 	Debug("DummyCommunicator: Start(%s)", cmd.Command)
-	if dc.startFunction != nil {
-		return dc.startFunction(cmd)
+	if dc.StartFunction != nil {
+		return dc.StartFunction(cmd)
 	}
 	return nil
 }

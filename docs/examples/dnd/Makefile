@@ -31,7 +31,7 @@ clean:
 # CI
 ###################################################################
 
-# entrypoints: ci-setup
+# entrypoints: ci-setup, ci-cleanup
 
 # install the requiirements for the CI environment
 # this assumes we are running in Travis, in a Ubuntu distro
@@ -47,3 +47,8 @@ ci-setup:
 
 	@echo ">>> Re-enabling the Docker service..."
 	sudo systemctl enable --now docker
+
+ci-cleanup:
+	terraform init
+	terraform destroy --auto-approve
+	rm -f *.log

@@ -42,11 +42,10 @@ func TestAllMatchesIPv4(t *testing.T) {
 		return false
 	}
 
-	r := []string{}
-	_ = AllMatchesIPv4(str1, &r)
+	ips := AllMatchesIPv4(str1)
 	for _, expected := range str1Addresseses {
-		if !inList(r, expected) {
-			t.Fatalf("%q is not in the result: %q", expected, r)
+		if !inList(ips, expected) {
+			t.Fatalf("Error: %q is not in the result", expected)
 		}
 	}
 }

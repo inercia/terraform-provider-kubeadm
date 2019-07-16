@@ -44,7 +44,7 @@ func DoEnableService(service string) Action {
 
 // CheckServiceExists checks that service exists
 func CheckServiceExists(service string) CheckerFunc {
-	Debug("Checking if service '%s' exists", service)
+	Debug("will check if service '%s' exists", service)
 	exists := fmt.Sprintf("systemctl --no-pager status '%s' 2>/dev/null", service)
 	return CheckExec(exists)
 }

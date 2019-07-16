@@ -12,10 +12,11 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 NUM_MASTERS=3
 NUM_WORKERS=3
 
+[ -d $E2E_ENV ] || abort "directory $E2E_ENV does not seem to exist"
 cd $E2E_ENV
 
 TF_ARGS=""
-[ -f "ci.tfvars" ] && [ "$CI" = "true" ] && TF_ARGS="$TF_ARGS -var-file=ci.tfvars"
+[ -f "ci.tfvars" ] && [ "$IS_CI" = "true" ] && TF_ARGS="$TF_ARGS -var-file=ci.tfvars"
 
 export KUBECONFIG=$E2E_ENV/kubeconfig.local
 

@@ -56,5 +56,10 @@ func dataSourceToJoinConfig(d *schema.ResourceData, token string) (*kubeadmapi.J
 		}
 	}
 
+	// check if we have some cloud-provider
+	if cloudProvRaw, ok := d.GetOk("cloud.0.provider"); ok && len(cloudProvRaw.(string)) > 0 {
+		joinConfig.NodeRegistration.KubeletExtraArgs["cloud-provider"] = "external"
+	}
+
 	return joinConfig, nil
 }

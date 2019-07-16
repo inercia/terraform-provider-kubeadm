@@ -17,6 +17,7 @@ package ssh
 import (
 	"bytes"
 	"testing"
+	"time"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -404,6 +405,27 @@ func TestDoTry(t *testing.T) {
 	}
 	if path != expected {
 		t.Fatalf("Error: unexpected contents: %q, expected: %q", path, expected)
+	}
+}
+
+func TestDoRetry(t *testing.T) {
+	count := 0
+	actions := ActionList{
+		DoRetry(Retry{Times: 3, Interval: 100 * time.Millisecond},
+			ActionFunc(func(Config) Action {
+				count += 1
+				return ActionError("an error")
+			}),
+		),
+	}
+
+	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
+	res := actions.Apply(cfg)
+	if !IsError(res) {
+		t.Fatalf("Error: error detected: %s", res)
+	}
+	if count != 3 {
+		t.Fatalf("Error: unexpected number of retries: %d, expected: %q", count, 3)
 	}
 }
 

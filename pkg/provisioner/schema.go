@@ -163,12 +163,18 @@ func Provisioner() terraform.ResourceProvisioner {
 
 // getJoinFromResourceData returns the "joined host" from the ResourceData
 func getJoinFromResourceData(d *schema.ResourceData) string {
-	return strings.TrimSpace(d.Get("join").(string))
+	if opt, ok := d.GetOk("join"); ok {
+		return strings.TrimSpace(opt.(string))
+	}
+	return ""
 }
 
 // getRoleFromResourceData returns the "role" host from the ResourceData
 func getRoleFromResourceData(d *schema.ResourceData) string {
-	return strings.TrimSpace(strings.ToLower(d.Get("role").(string)))
+	if opt, ok := d.GetOk("role"); ok {
+		return strings.TrimSpace(opt.(string))
+	}
+	return ""
 }
 
 // getKubeconfigFromResourceData returns the kubeconfig parameter passed in the `config_path`
@@ -186,30 +192,29 @@ func getKubeconfigFromResourceData(d *schema.ResourceData) string {
 
 // getKubeadmFromResourceData returns the kubeadm binary path from the config
 func getKubeadmFromResourceData(d *schema.ResourceData) string {
-	kubeadm_path := d.Get("install.0.kubeadm_path").(string)
-	if len(kubeadm_path) == 0 {
-		kubeadm_path = common.DefKubeadmPath
+	if kubeadmPathOpt, ok := d.GetOk("install.0.kubeadm_path"); ok {
+		return kubeadmPathOpt.(string)
 	}
-	return kubeadm_path
+	return common.DefKubeadmPath
 }
 
 // getTokenFromResourceData returns the current token in the ResourceData
 func getTokenFromResourceData(d *schema.ResourceData) string {
-	config := d.Get("config").(map[string]interface{})
-	t, ok := config["token"]
-	if !ok {
-		return ""
+	if configOpt, ok := d.GetOk("config"); ok {
+		config := configOpt.(map[string]interface{})
+		if t, ok := config["token"]; ok {
+			return t.(string)
+		}
 	}
-	return t.(string)
+	return ""
 }
 
 // getKubectlFromResourceData returns the kubectl binary path from the config
 func getKubectlFromResourceData(d *schema.ResourceData) string {
-	kubectl_path := d.Get("install.0.kubectl_path").(string)
-	if len(kubectl_path) == 0 {
-		kubectl_path = common.DefKubectlPath
+	if kubectlPathOpt, ok := d.GetOk("install.0.kubectl_path"); ok {
+		return kubectlPathOpt.(string)
 	}
-	return kubectl_path
+	return common.DefKubectlPath
 }
 
 // getNodenameFromResourceData returns the nodename specified in the ResourceData

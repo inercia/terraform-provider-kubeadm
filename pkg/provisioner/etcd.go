@@ -216,7 +216,7 @@ func doPrintEtcdStatus(d *schema.ResourceData) ssh.Action {
 				if len(eps) == 0 {
 					return ssh.DoMessageWarn("could not get list of etcd endpoints")
 				}
-				prints := ssh.ActionList{ssh.DoMessageInfo("Local etcd endpoints:")}
+				prints := ssh.ActionList{ssh.DoMessageInfo("%d etcd endpoints available:", len(eps))}
 				for _, ep := range eps {
 					prints = append(prints, ssh.DoMessageInfo("- %s", ep.String()))
 				}
