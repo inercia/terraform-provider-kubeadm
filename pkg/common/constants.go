@@ -23,7 +23,7 @@ const (
 
 	DefServiceCIDR = "10.96.0.0/12"
 
-	DefKubernetesVersion = "v1.14.1"
+	DefKubernetesVersion = "v1.15.0"
 
 	DefDNSDomain = "cluster.local"
 
