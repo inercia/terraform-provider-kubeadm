@@ -55,6 +55,10 @@ func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
 			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
 			ssh.ActionList{
 				doCheckLocalKubeconfigExists(d),
+			}),
+		ssh.DoRetry(
+			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
+			ssh.ActionList{
 				doRefreshToken(d),
 			}),
 		ssh.DoRetry(
@@ -110,6 +114,10 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
 			ssh.ActionList{
 				doCheckLocalKubeconfigExists(d),
+			}),
+		ssh.DoRetry(
+			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
+			ssh.ActionList{
 				doRefreshToken(d),
 			}),
 		ssh.DoRetry(
