@@ -15,6 +15,7 @@
 package ssh
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -105,7 +106,7 @@ func DoRemoteKubectl(kubectl string, kubeconfig string, args ...string) Action {
 			DoExec(fmt.Sprintf("kubectl --kubeconfig=%s %s", DefAdminKubeconfig, argsStr)),
 		},
 		ActionList{
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				// delay the kubeconfig check:
 				if kubeconfig == "" {
 					return ActionError("no kubeconfig provided, and no remote admin.conf found")
@@ -138,7 +139,7 @@ func DoRemoteKubectlApply(kubectl string, kubeconfig string, manifests []Manifes
 		switch {
 		case manifest.Inline != "":
 			actions = append(actions,
-				ActionFunc(func(Config) Action {
+				ActionFunc(func(context.Context) Action {
 					remoteManifest, err := GetTempFilename()
 					if err != nil {
 						return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
@@ -155,7 +156,7 @@ func DoRemoteKubectlApply(kubectl string, kubeconfig string, manifests []Manifes
 
 		case manifest.Path != "":
 			actions = append(actions,
-				ActionFunc(func(Config) Action {
+				ActionFunc(func(context.Context) Action {
 					// it is a file: upload the file to a temporary, remote file and then `kubectl apply -f` it
 					remoteManifest, err := GetTempFilename()
 					if err != nil {

@@ -16,6 +16,7 @@ package ssh
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -31,11 +32,11 @@ var (
 )
 
 // getContainer returns the ID of a container
-func GetContainer(cfg Config, pattern string) (string, error) {
+func GetContainer(ctx context.Context, pattern string) (string, error) {
 
 	cmd := fmt.Sprintf(dockerGetContainer, pattern)
 	var buf bytes.Buffer
-	if err := DoSendingExecOutputToWriter(&buf, DoExec(cmd)).Apply(cfg); IsError(err) {
+	if err := DoSendingExecOutputToWriter(&buf, DoExec(cmd)).Apply(ctx); IsError(err) {
 		return "", err
 	}
 
@@ -53,8 +54,8 @@ func GetContainer(cfg Config, pattern string) (string, error) {
 
 // DoDockerExec runs a `docker exec` command in a container
 func DoDockerExec(pattern string, command string) Action {
-	return ActionFunc(func(cfg Config) Action {
-		cid, err := GetContainer(cfg, pattern)
+	return ActionFunc(func(ctx context.Context) Action {
+		cid, err := GetContainer(ctx, pattern)
 		if err != nil {
 			return ActionError(err.Error())
 		}
@@ -69,8 +70,8 @@ func DoDockerExec(pattern string, command string) Action {
 
 // CheckContainerRunning checks if we can get the CID for a pattern
 func CheckContainerRunning(pattern string) CheckerFunc {
-	return CheckerFunc(func(cfg Config) (bool, error) {
-		cid, err := GetContainer(cfg, pattern)
+	return CheckerFunc(func(ctx context.Context) (bool, error) {
+		cid, err := GetContainer(ctx, pattern)
 		if err != nil {
 			return false, nil
 		}

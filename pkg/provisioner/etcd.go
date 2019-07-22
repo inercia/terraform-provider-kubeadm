@@ -16,6 +16,7 @@ package provisioner
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -157,7 +158,7 @@ func DoGetEndpointsList(eps *EtcdEndpointsSet) ssh.Action {
 	var buf bytes.Buffer
 	return ssh.ActionList{
 		ssh.DoSendingExecOutputToWriter(&buf, DoRunEtcdctlSubcommand(subcmdEndpointsList)),
-		ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+		ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 			err := eps.FromString(buf.String())
 			if err != nil {
 				return ssh.ActionError(err.Error())
@@ -176,13 +177,13 @@ func doRemoveIfMember(d *schema.ResourceData) ssh.Action {
 			ssh.CheckContainerRunning(etcContainerPattern),
 			ssh.ActionList{
 				DoGetEndpointsList(&eps),
-				ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+				ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 					if len(eps) == 0 {
 						return ssh.DoMessageWarn("could not get list of etcd endpoints")
 					}
 					return nil
 				}),
-				ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+				ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 					localEndpoint := eps.GetLocalEndpoint()
 					if localEndpoint.ID == "" {
 						return ssh.DoMessageWarn("could not find the local etcd endpoint details")
@@ -212,7 +213,7 @@ func doPrintEtcdStatus(d *schema.ResourceData) ssh.Action {
 		ssh.ActionList{
 			ssh.DoMessageInfo("Checking status of etcd (if running)..."),
 			DoGetEndpointsList(&eps),
-			ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+			ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 				if len(eps) == 0 {
 					return ssh.DoMessageWarn("could not get list of etcd endpoints")
 				}

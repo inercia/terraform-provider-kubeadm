@@ -16,6 +16,7 @@ package ssh
 
 import (
 	"bytes"
+	"context"
 	"testing"
 	"time"
 )
@@ -27,7 +28,7 @@ func TestApply(t *testing.T) {
 	errorMsg := "some error"
 	actions := ActionList{
 		DoMessage("test"),
-		ActionFunc(func(Config) Action {
+		ActionFunc(func(context.Context) Action {
 			counter = counter + 1
 			return nil
 		}),
@@ -36,8 +37,8 @@ func TestApply(t *testing.T) {
 		ActionError(errorMsg),
 	}
 
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
-	err := actions.Apply(cfg)
+	ctx := NewTestingContext()
+	err := actions.Apply(ctx)
 	if err == nil {
 		t.Fatal("Error: no error detected")
 	}
@@ -57,20 +58,20 @@ func TestDoSendingOutput(t *testing.T) {
 	var buf2 bytes.Buffer
 	actions := ActionList{
 		DoSendingExecOutputToWriter(&buf, ActionList{
-			ActionFunc(func(cfg Config) Action {
+			ActionFunc(func(ctx context.Context) Action {
 				return doEcho("1")
 			}),
 			DoSendingExecOutputToWriter(&buf2,
-				ActionFunc(func(Config) Action {
+				ActionFunc(func(context.Context) Action {
 					return doEcho("(this is another message that should go to another buffer)")
 				})),
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				return doEcho("2")
 			}),
 			DoIfElse(
 				CheckLocalFileExists("/tmp/some/file/that/does/not/exist"),
 				DoLocalExec("ls /"),
-				ActionFunc(func(Config) Action {
+				ActionFunc(func(context.Context) Action {
 					return ActionList{
 						doEcho("3"),
 						doEcho("4"),
@@ -79,8 +80,8 @@ func TestDoSendingOutput(t *testing.T) {
 		}),
 	}
 
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
-	err := actions.Apply(cfg)
+	ctx := NewTestingContext()
+	err := actions.Apply(ctx)
 	if err != nil {
 		t.Fatalf("Error: error detected: %s", err)
 	}
@@ -98,14 +99,14 @@ func TestDoSendingOutput(t *testing.T) {
 
 func DoLazy(af ActionFunc) func() Action {
 	return func() Action {
-		return ActionFunc(func(cfg Config) Action {
-			return af(cfg)
+		return ActionFunc(func(ctx context.Context) Action {
+			return af(ctx)
 		})
 	}
 }
 
 func tFunc(something string) Action {
-	return ActionFunc(func(Config) Action {
+	return ActionFunc(func(context.Context) Action {
 		return doEcho("(OOOO)")
 	})
 }
@@ -116,7 +117,7 @@ func TestDoSendingOutputToFun(t *testing.T) {
 	trashBuffer := ""
 
 	//tFunc := func() Action {
-	//	return ActionFunc(func(Config) Action {
+	//	return ActionFunc(func(context.Context) Action {
 	//		return doEcho("(and to trash)")
 	//	})
 	//}
@@ -125,13 +126,13 @@ func TestDoSendingOutputToFun(t *testing.T) {
 		DoSendingExecOutputToFun(func(s string) {
 			received += s
 		}, ActionList{
-			ActionFunc(func(cfg Config) Action {
+			ActionFunc(func(ctx context.Context) Action {
 				return doEcho("1")
 			}),
 			DoSendingExecOutputToFun(
 				func(s string) {
 					trashBuffer += s
-				}, ActionFunc(func(Config) Action {
+				}, ActionFunc(func(context.Context) Action {
 					return doEcho("(VVVV)")
 				})),
 			DoSendingExecOutputToDevNull(DoLocalExec("ls", "/tmp")),
@@ -149,7 +150,7 @@ func TestDoSendingOutputToFun(t *testing.T) {
 				ActionList{
 					doEcho("(MMMM)"),
 					doEcho("(NNNN)"),
-					ActionFunc(func(Config) Action {
+					ActionFunc(func(context.Context) Action {
 						return doEcho("(LLLL)")
 					}),
 				}),
@@ -159,7 +160,7 @@ func TestDoSendingOutputToFun(t *testing.T) {
 					trashBuffer += s
 				},
 				func() Action {
-					return ActionFunc(func(Config) Action {
+					return ActionFunc(func(context.Context) Action {
 						return doEcho("(YYYY)")
 					})
 				}()),
@@ -175,30 +176,30 @@ func TestDoSendingOutputToFun(t *testing.T) {
 					trashBuffer += s
 				},
 				DoLazy(
-					ActionFunc(func(Config) Action {
+					ActionFunc(func(context.Context) Action {
 						return doEcho("(ZZZZ)")
 					}))()),
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				return doEcho("2")
 			}),
-			DoTry(ActionFunc(func(Config) Action {
+			DoTry(ActionFunc(func(context.Context) Action {
 				return doEcho("3")
 			})),
 			DoTry(ActionError("an error")),
-			DoWithCleanup(DoNothing(), ActionFunc(func(Config) Action {
+			DoWithCleanup(DoNothing(), ActionFunc(func(context.Context) Action {
 				return doEcho("4")
 			})),
 			DoIfElse(CheckExpr(false),
 				nil,
-				ActionFunc(func(Config) Action {
+				ActionFunc(func(context.Context) Action {
 					return doEcho("5")
 				}),
 			),
 		}),
 	}
 
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
-	err := actions.Apply(cfg)
+	ctx := NewTestingContext()
+	err := actions.Apply(ctx)
 	if err != nil {
 		t.Fatalf("Error: error detected: %s", err)
 	}
@@ -218,20 +219,20 @@ func TestDoSendingOutputToFunWithError(t *testing.T) {
 		DoSendingExecOutputToFun(func(s string) {
 			received += s
 		}, ActionList{
-			ActionFunc(func(cfg Config) Action {
+			ActionFunc(func(ctx context.Context) Action {
 				return doEcho("1")
 			}),
 			DoSendingExecOutputToFun(
 				func(s string) {
 					someOtherBuffer += s
 				},
-				ActionFunc(func(Config) Action {
+				ActionFunc(func(context.Context) Action {
 					return doEcho("'this is another message that should go to another buffer'")
 				})),
 			DoTry(ActionError("this should be ignored")),
 			DoIfElse(CheckExpr(false),
 				nil,
-				ActionFunc(func(Config) Action {
+				ActionFunc(func(context.Context) Action {
 					return doEcho("2")
 				}),
 			),
@@ -239,8 +240,8 @@ func TestDoSendingOutputToFunWithError(t *testing.T) {
 		}),
 	}
 
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
-	err := actions.Apply(cfg)
+	ctx := NewTestingContext()
+	err := actions.Apply(ctx)
 	if err == nil {
 		t.Fatalf("Error: no error detected (and we expected one)")
 	}
@@ -257,7 +258,7 @@ func TestActionList(t *testing.T) {
 
 	path := ""
 	doRecordPath := func(num string) Action {
-		return ActionFunc(func(Config) Action {
+		return ActionFunc(func(context.Context) Action {
 			path += num
 			return nil
 		})
@@ -266,11 +267,11 @@ func TestActionList(t *testing.T) {
 	actions := ActionList{
 		doRecordPath("1"),
 		nil,
-		ActionFunc(func(Config) Action {
+		ActionFunc(func(context.Context) Action {
 			return ActionList{
 				doRecordPath("2"),
 				doRecordPath("3"),
-				ActionFunc(func(Config) Action {
+				ActionFunc(func(context.Context) Action {
 					return ActionList{
 						doRecordPath("4"),
 						nil,
@@ -279,15 +280,15 @@ func TestActionList(t *testing.T) {
 				}),
 			}
 		}),
-		ActionFunc(func(Config) Action {
+		ActionFunc(func(context.Context) Action {
 			return ActionList{
 				nil,
 				doRecordPath("6"),
 				DoIfElse(CheckExpr(true),
-					ActionFunc(func(Config) Action {
+					ActionFunc(func(context.Context) Action {
 						return doRecordPath("7")
 					}),
-					ActionFunc(func(Config) Action {
+					ActionFunc(func(context.Context) Action {
 						return doRecordPath("XXX")
 					}),
 				),
@@ -299,8 +300,8 @@ func TestActionList(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
-	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(cfg)
+	ctx := NewTestingContext()
+	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(ctx)
 	if IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}
@@ -312,7 +313,7 @@ func TestActionList(t *testing.T) {
 func TestIfThenElse(t *testing.T) {
 	path := ""
 	doRecordPath := func(num string) Action {
-		return ActionFunc(func(Config) Action {
+		return ActionFunc(func(context.Context) Action {
 			path += num
 			return nil
 		})
@@ -322,21 +323,21 @@ func TestIfThenElse(t *testing.T) {
 	actions := ActionList{
 		doRecordPath("000"),
 		DoIfElse(CheckExpr(true),
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				return doRecordPath("111")
 			}),
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				return doRecordPath("XXX")
 			}),
 		),
 		DoIfElse(CheckExpr(true),
 			nil,
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				return doRecordPath("YYY")
 			}),
 		),
 		DoIfElse(CheckExpr(false),
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				return doRecordPath("YYY")
 			}),
 			nil,
@@ -347,8 +348,8 @@ func TestIfThenElse(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
-	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(cfg)
+	ctx := NewTestingContext()
+	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(ctx)
 	if IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}
@@ -362,7 +363,7 @@ func TestDoTry(t *testing.T) {
 
 	path := ""
 	doRecordPath := func(num string) Action {
-		return ActionFunc(func(Config) Action {
+		return ActionFunc(func(context.Context) Action {
 			path += num
 			return nil
 		})
@@ -377,7 +378,7 @@ func TestDoTry(t *testing.T) {
 			),
 			nil,
 			nil,
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				return ActionError("some error")
 			}),
 			// this ActionList is never executed, as the presence of an error makes the whole list errored
@@ -385,7 +386,7 @@ func TestDoTry(t *testing.T) {
 				doRecordPath("XXX"),
 				ActionError("some error"),
 			},
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				return ActionList{
 					doRecordPath("3"),
 				}
@@ -398,8 +399,8 @@ func TestDoTry(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
-	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(cfg)
+	ctx := NewTestingContext()
+	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(ctx)
 	if IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}
@@ -412,15 +413,15 @@ func TestDoRetry(t *testing.T) {
 	count := 0
 	actions := ActionList{
 		DoRetry(Retry{Times: 3, Interval: 100 * time.Millisecond},
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				count += 1
 				return ActionError("an error")
 			}),
 		),
 	}
 
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
-	res := actions.Apply(cfg)
+	ctx := NewTestingContext()
+	res := actions.Apply(ctx)
 	if !IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}

@@ -16,36 +16,16 @@ package ssh
 
 import (
 	"testing"
-
-	"github.com/hashicorp/terraform/communicator/remote"
 )
 
 func TestCheckBinaryExists(t *testing.T) {
-	count := 0
-
-	// overwrite the StartFunction
-	comm := DummyCommunicator{}
-	comm.StartFunction = func(cmd *remote.Cmd) error {
-		t.Logf("it is running %q", cmd.Command)
-		switch count {
-		case 0:
-			t.Log("returning full path to kubeadm")
-			cmd.Init()
-			cmd.Stdout.Write([]byte("  /usr/bin/kubeadm\r  "))
-			cmd.SetExitStatus(0, nil)
-		case 1:
-			t.Log("returning CONDITION_SUCCEEDED")
-			cmd.Init()
-			cmd.Stdout.Write([]byte("CONDITION_SUCCEEDED"))
-			cmd.SetExitStatus(0, nil)
-		}
-
-		count += 1
-		return nil
+	responses := []string{
+		"  /usr/bin/kubeadm\r  ",
+		"CONDITION_SUCCEEDED",
 	}
 
-	cfg := Config{UserOutput: DummyOutput{}, Comm: comm, UseSudo: false}
-	exists, err := CheckBinaryExists("kubeadm").Check(cfg)
+	ctx := NewTestingContextWithResponses(responses)
+	exists, err := CheckBinaryExists("kubeadm").Check(ctx)
 	if err != nil {
 		t.Fatalf("Error: %s", err)
 	}

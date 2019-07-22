@@ -15,6 +15,7 @@
 package ssh
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -22,35 +23,22 @@ import (
 	"time"
 
 	"github.com/gookit/color"
-	"github.com/hashicorp/terraform/communicator"
-	"github.com/hashicorp/terraform/terraform"
 )
+
+// type used for schema package context keys
+type contextKey string
 
 const (
 	// a prefix for all the outputs
 	commonMsgPrefix = ""
 )
 
-type Config struct {
-	UserOutput terraform.UIOutput
-	ExecOutput terraform.UIOutput
-	Comm       communicator.Communicator
-	UseSudo    bool
-}
-
-func (cfg Config) GetExecOutput() terraform.UIOutput {
-	if cfg.ExecOutput != nil {
-		return cfg.ExecOutput
-	}
-	return cfg.UserOutput
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // Action is an action that can be "applied"
 type Action interface {
 	error
-	Apply(Config) Action
+	Apply(context.Context) Action
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -60,11 +48,11 @@ type Action interface {
 // ie: 	ActionFunc(func(Config) error {
 // 			return nil
 // }),
-type ActionFunc func(Config) Action
+type ActionFunc func(ctx context.Context) Action
 
 // Apply applies an action
-func (f ActionFunc) Apply(c Config) Action {
-	return f(c)
+func (f ActionFunc) Apply(ctx context.Context) Action {
+	return f(ctx)
 }
 
 func (f ActionFunc) Error() string {
@@ -77,7 +65,7 @@ func (f ActionFunc) Error() string {
 type ActionError string
 
 // Apply applies an action
-func (ae ActionError) Apply(Config) Action {
+func (ae ActionError) Apply(context.Context) Action {
 	return ae
 }
 
@@ -99,7 +87,7 @@ func IsError(a Action) bool {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // applyList runs a list of actions, optionally ignoring errors
-func applyList(actions ActionList, ignoreErrors bool, cfg Config) Action {
+func applyList(actions ActionList, ignoreErrors bool, ctx context.Context) Action {
 	// use a queue where we take and put things in the front
 	// note that we operate on a copy of the original actions list
 	for len(actions) > 0 {
@@ -131,7 +119,7 @@ func applyList(actions ActionList, ignoreErrors bool, cfg Config) Action {
 		}
 
 		// otherwise, run the action
-		res := cur.Apply(cfg)
+		res := cur.Apply(ctx)
 		// ... and add the resulting actions in front of the queue
 		switch v := res.(type) {
 		case ActionList:
@@ -148,8 +136,8 @@ func applyList(actions ActionList, ignoreErrors bool, cfg Config) Action {
 type ActionList []Action
 
 // Apply applies an action
-func (actions ActionList) Apply(cfg Config) Action {
-	return applyList(actions, false, cfg)
+func (actions ActionList) Apply(ctx context.Context) Action {
+	return applyList(actions, false, ctx)
 }
 
 func (actions ActionList) Error() string {
@@ -165,7 +153,7 @@ func (actions ActionList) Error() string {
 
 // DoNothing is a dummy action
 func DoNothing() Action {
-	return ActionFunc(func(Config) Action {
+	return ActionFunc(func(context.Context) Action {
 		return nil
 	})
 }
@@ -175,8 +163,9 @@ func Debug(format string, args ...interface{}) {
 }
 
 func DoMessageRaw(msg string) Action {
-	return ActionFunc(func(cfg Config) Action {
-		cfg.UserOutput.Output(msg)
+	return ActionFunc(func(ctx context.Context) Action {
+		output := GetUserOutputFromContext(ctx)
+		output.Output(msg)
 		return nil
 	})
 }
@@ -201,7 +190,7 @@ func DoMessageInfo(format string, args ...interface{}) Action {
 
 // DoMessageDebug prints a debug message
 func DoMessageDebug(format string, args ...interface{}) Action {
-	return ActionFunc(func(cfg Config) Action {
+	return ActionFunc(func(ctx context.Context) Action {
 		Debug(format, args...)
 		return nil
 	})
@@ -221,33 +210,33 @@ func DoAbort(format string, args ...interface{}) Action {
 
 // Checker implements a Check method
 type Checker interface {
-	Check(Config) (bool, error)
+	Check(context.Context) (bool, error)
 }
 
 // CheckerFunc is a function that implements the Checker interface
-type CheckerFunc func(Config) (bool, error)
+type CheckerFunc func(context.Context) (bool, error)
 
 // Check implements the Checker interface in CheckerFuncs
-func (f CheckerFunc) Check(cfg Config) (bool, error) {
-	return f(cfg)
+func (f CheckerFunc) Check(ctx context.Context) (bool, error) {
+	return f(ctx)
 }
 
 // DoWithCleanup runs some action and, despite the result, runs the cleanup function
 // It returns the actions result.
 func DoWithCleanup(cleanup Action, actions Action) Action {
-	return ActionFunc(func(cfg Config) Action {
-		res := ActionList{actions}.Apply(cfg)
-		_ = ActionList{cleanup}.Apply(cfg)
+	return ActionFunc(func(ctx context.Context) Action {
+		res := ActionList{actions}.Apply(ctx)
+		_ = ActionList{cleanup}.Apply(ctx)
 		return res
 	})
 }
 
 // DoWithError runs some action and, if some error happens, runs the exception
 func DoWithException(exc Action, actions Action) Action {
-	return ActionFunc(func(cfg Config) Action {
-		res := ActionList{actions}.Apply(cfg)
+	return ActionFunc(func(ctx context.Context) Action {
+		res := ActionList{actions}.Apply(ctx)
 		if IsError(res) {
-			_ = ActionList{exc}.Apply(cfg)
+			_ = ActionList{exc}.Apply(ctx)
 		}
 		return res
 	})
@@ -255,13 +244,13 @@ func DoWithException(exc Action, actions Action) Action {
 
 // DoIf runs an action iff the condition is true
 func DoIf(condition Checker, action Action) Action {
-	return ActionFunc(func(cfg Config) Action {
-		checkPassed, err := condition.Check(cfg)
+	return ActionFunc(func(ctx context.Context) Action {
+		checkPassed, err := condition.Check(ctx)
 		if err != nil {
 			return ActionError(err.Error())
 		}
 		if checkPassed {
-			return ActionList{action}.Apply(cfg)
+			return ActionList{action}.Apply(ctx)
 		}
 		return nil
 	})
@@ -269,23 +258,23 @@ func DoIf(condition Checker, action Action) Action {
 
 // DoIfElse runs an action iff the condition is true, otherwise runs a different action
 func DoIfElse(condition Checker, actionIf Action, actionElse Action) Action {
-	return ActionFunc(func(cfg Config) Action {
-		checkPassed, err := condition.Check(cfg)
+	return ActionFunc(func(ctx context.Context) Action {
+		checkPassed, err := condition.Check(ctx)
 		if err != nil {
 			return ActionError(fmt.Sprintf("could not check condition: %s", err.Error()))
 		}
 
 		if checkPassed {
-			return ActionList{actionIf}.Apply(cfg)
+			return ActionList{actionIf}.Apply(ctx)
 		}
-		return ActionList{actionElse}.Apply(cfg)
+		return ActionList{actionElse}.Apply(ctx)
 	})
 }
 
 // DoTry tries to run some actions, but it is ok if some action fails
 func DoTry(actions ...Action) Action {
-	return ActionFunc(func(cfg Config) Action {
-		return applyList(actions, true, cfg)
+	return ActionFunc(func(ctx context.Context) Action {
+		return applyList(actions, true, ctx)
 	})
 }
 
@@ -304,13 +293,13 @@ func DoRetry(run Retry, actions ...Action) ActionFunc {
 		interval = run.Interval
 	}
 
-	return ActionFunc(func(cfg Config) Action {
+	return ActionFunc(func(ctx context.Context) Action {
 		count := run.Times
 		var res Action
 		for count > 0 {
-			res = ActionList(actions).Apply(cfg)
+			res = ActionList(actions).Apply(ctx)
 			if IsError(res) {
-				_ = DoMessageWarn("failed... retrying in %d seconds...", interval/time.Second).Apply(cfg)
+				_ = DoMessageWarn("failed... retrying in %d seconds...", interval/time.Second).Apply(ctx)
 				time.Sleep(interval)
 				count -= 1
 			} else {
@@ -326,10 +315,9 @@ func DoRetry(run Retry, actions ...Action) ActionFunc {
 // Some notes:
 // * make sure you strip spaces in the output, as some extra spaces can be before/after
 func DoSendingExecOutputToFun(interceptor OutputFunc, action ...Action) Action {
-	return ActionFunc(func(cfg Config) Action {
-		t := cfg
-		t.ExecOutput = interceptor
-		return ActionList(action).Apply(t)
+	return ActionFunc(func(ctx context.Context) Action {
+		newCtx := NewContext(ctx, GetUserOutputFromContext(ctx), interceptor, GetCommFromContext(ctx), GetUseSudoFromContext(ctx))
+		return ActionList(action).Apply(newCtx)
 	})
 }
 
@@ -356,15 +344,15 @@ func DoSendingExecOutputToDevNull(action Action) Action {
 
 // CheckExpr returns the result of the boolean expression
 func CheckExpr(expr bool) CheckerFunc {
-	return CheckerFunc(func(Config) (bool, error) {
+	return CheckerFunc(func(context.Context) (bool, error) {
 		return expr, nil
 	})
 }
 
 // CheckAction returns true if the Action does not return an error
 func CheckAction(action Action) CheckerFunc {
-	return CheckerFunc(func(cfg Config) (bool, error) {
-		if res := action.Apply(cfg); IsError(res) {
+	return CheckerFunc(func(ctx context.Context) (bool, error) {
+		if res := action.Apply(ctx); IsError(res) {
 			return false, nil
 		}
 		return true, nil
@@ -376,16 +364,16 @@ func CheckFailed() CheckerFunc {
 }
 
 func CheckError(err error) CheckerFunc {
-	return CheckerFunc(func(Config) (bool, error) {
+	return CheckerFunc(func(context.Context) (bool, error) {
 		return false, err
 	})
 }
 
 // CheckAnd applies a logical And on a group of Checks
 func CheckAnd(checks ...Checker) CheckerFunc {
-	return CheckerFunc(func(cfg Config) (bool, error) {
+	return CheckerFunc(func(ctx context.Context) (bool, error) {
 		for _, check := range checks {
-			pass, err := check.Check(cfg)
+			pass, err := check.Check(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -399,9 +387,9 @@ func CheckAnd(checks ...Checker) CheckerFunc {
 
 // CheckOr applies a logical Or on a group of Checks
 func CheckOr(checks ...Checker) CheckerFunc {
-	return CheckerFunc(func(cfg Config) (bool, error) {
+	return CheckerFunc(func(ctx context.Context) (bool, error) {
 		for _, check := range checks {
-			pass, err := check.Check(cfg)
+			pass, err := check.Check(ctx)
 			if err != nil {
 				return false, err
 			}
@@ -415,8 +403,8 @@ func CheckOr(checks ...Checker) CheckerFunc {
 
 // CheckNot return the logical Not of a Check
 func CheckNot(check Checker) CheckerFunc {
-	return CheckerFunc(func(cfg Config) (bool, error) {
-		res, err := check.Check(cfg)
+	return CheckerFunc(func(ctx context.Context) (bool, error) {
+		res, err := check.Check(ctx)
 		if err != nil {
 			return false, err
 		}

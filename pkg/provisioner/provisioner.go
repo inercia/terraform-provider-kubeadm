@@ -66,11 +66,8 @@ func applyFn(ctx context.Context) error {
 		return err
 	}
 
-	cfg := ssh.Config{
-		UserOutput: o,
-		Comm:       comm,
-		UseSudo:    useSudo,
-	}
+	// add some extra things to the context
+	newCtx := ssh.NewContext(ctx, o, o, comm, useSudo)
 
 	//
 	// resource destruction
@@ -80,7 +77,7 @@ func applyFn(ctx context.Context) error {
 	if drain {
 		ssh.Debug("node will be drained")
 		action := doRemoveNode(d)
-		return action.Apply(cfg)
+		return action.Apply(newCtx)
 	}
 
 	//
@@ -151,5 +148,5 @@ func applyFn(ctx context.Context) error {
 		doPrintEtcdStatus(d),
 	)
 
-	return actions.Apply(cfg)
+	return actions.Apply(newCtx)
 }

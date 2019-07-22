@@ -15,10 +15,12 @@
 package ssh
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"time"
 
+	"github.com/hashicorp/terraform/communicator"
 	"github.com/hashicorp/terraform/communicator/remote"
 	"github.com/hashicorp/terraform/terraform"
 )
@@ -30,7 +32,6 @@ func (_ DummyOutput) Output(s string) {
 }
 
 type DummyCommunicator struct {
-	StartFunction func(cmd *remote.Cmd) error
 }
 
 func (_ DummyCommunicator) Connect(terraform.UIOutput) error {
@@ -55,9 +56,6 @@ func (_ DummyCommunicator) ScriptPath() string {
 
 func (dc DummyCommunicator) Start(cmd *remote.Cmd) error {
 	Debug("DummyCommunicator: Start(%s)", cmd.Command)
-	if dc.StartFunction != nil {
-		return dc.StartFunction(cmd)
-	}
 	return nil
 }
 
@@ -74,4 +72,37 @@ func (_ DummyCommunicator) UploadScript(string, io.Reader) error {
 func (_ DummyCommunicator) UploadDir(string, string) error {
 	Debug("DummyCommunicator: UploadDir()")
 	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////
+
+func NewTestingContextWithCommunicator(comm communicator.Communicator) context.Context {
+	ctx := context.Background()
+	out := DummyOutput{}
+	return NewContext(ctx, out, out, comm, false)
+}
+
+func NewTestingContext() context.Context {
+	return NewTestingContextWithCommunicator(DummyCommunicator{})
+}
+
+type dummyCommunicatorWithResponses struct {
+	DummyCommunicator
+
+	responses []string
+	counter   *int
+}
+
+func (dc dummyCommunicatorWithResponses) Start(cmd *remote.Cmd) error {
+	cmd.Init()
+	cmd.Stdout.Write([]byte(dc.responses[*dc.counter]))
+	cmd.SetExitStatus(0, nil)
+	*dc.counter += 1
+	return nil
+}
+
+func NewTestingContextWithResponses(responses []string) context.Context {
+	counter := 0
+	comm := dummyCommunicatorWithResponses{responses: responses, counter: &counter}
+	return NewTestingContextWithCommunicator(comm)
 }

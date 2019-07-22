@@ -57,7 +57,7 @@ vendor:
 
 test: fmtcheck
 	@echo ">>> Running tests in $(TEST)..."
-	$(GO) test $(TESTARGS) $(TEST) || exit 1
+	$(GO) test -race $(TESTARGS) $(TEST) || exit 1
 # echo $(TEST) | $(MOD_ENV) xargs -t -n4 go test $(TESTARGS) -timeout=30s -parallel=4
 
 testacc: fmtcheck

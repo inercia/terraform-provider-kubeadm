@@ -15,6 +15,8 @@
 package provisioner
 
 import (
+	"context"
+
 	"github.com/hashicorp/terraform/helper/schema"
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
@@ -35,7 +37,7 @@ func doDrainKubernetesNode(d *schema.ResourceData) ssh.Action {
 	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Checking if we must drain the node from the Kubernetes cluster..."),
 		DoGetNodename(d, &localKubeNode),
-		ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+		ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 			if localKubeNode.IsEmpty() {
 				return ssh.DoMessageWarn("could not find Kubernetes nodename for this node")
 			}

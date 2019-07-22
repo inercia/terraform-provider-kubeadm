@@ -16,6 +16,7 @@ package provisioner
 
 import (
 	"bytes"
+	"context"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -116,11 +117,11 @@ func DoGetNodename(d *schema.ResourceData, node *ssh.KubeNode) ssh.Action {
 	kubeconfig := getKubeconfigFromResourceData(d)
 
 	// otherwise, access the remote host
-	return ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+	return ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 		// first, get the machine ID
 		ssh.Debug("trying to get the machine ID...")
 		var buf bytes.Buffer
-		res := ssh.DoSendingExecOutputToWriter(&buf, ssh.DoExec(machineIDCmd)).Apply(cfg)
+		res := ssh.DoSendingExecOutputToWriter(&buf, ssh.DoExec(machineIDCmd)).Apply(ctx)
 		if ssh.IsError(res) {
 			return res
 		}
@@ -146,7 +147,7 @@ func DoGetNodename(d *schema.ResourceData, node *ssh.KubeNode) ssh.Action {
 					ssh.Debug("... detected nodename %q", node.Nodename)
 				}
 			},
-			ssh.DoRemoteKubectl(kubectl, kubeconfig, kubectlGetNodenameCmd)).Apply(cfg)
+			ssh.DoRemoteKubectl(kubectl, kubeconfig, kubectlGetNodenameCmd)).Apply(ctx)
 
 		return res
 	})

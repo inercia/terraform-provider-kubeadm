@@ -17,8 +17,6 @@ package ssh
 import (
 	"os"
 	"testing"
-
-	"github.com/hashicorp/terraform/communicator/remote"
 )
 
 func TestTempFilenames(t *testing.T) {
@@ -57,14 +55,14 @@ func TestTempFilenames(t *testing.T) {
 }
 
 func TestCheckLocalFileExists(t *testing.T) {
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
+	ctx := NewTestingContext()
 
 	name1, err := GetTempFilename()
 	if err != nil {
 		t.Fatalf("Error: %s", err)
 	}
 	defer func() {
-		DoTry(DoDeleteLocalFile(name1)).Apply(cfg)
+		DoTry(DoDeleteLocalFile(name1)).Apply(ctx)
 	}()
 
 	f, err := os.Create(name1)
@@ -76,7 +74,7 @@ func TestCheckLocalFileExists(t *testing.T) {
 		t.Fatalf("Error: %s", err)
 	}
 
-	exists, err := CheckLocalFileExists(name1).Check(cfg)
+	exists, err := CheckLocalFileExists(name1).Check(ctx)
 	if err != nil {
 		t.Fatalf("Error: %s", err)
 	}
@@ -86,27 +84,18 @@ func TestCheckLocalFileExists(t *testing.T) {
 }
 
 func TestCheckFileExists(t *testing.T) {
-	cfg := Config{UserOutput: DummyOutput{}, Comm: DummyCommunicator{}, UseSudo: false}
-
+	ctx := NewTestingContext()
 	name1, err := GetTempFilename()
 	if err != nil {
 		t.Fatalf("Error: %s", err)
 	}
 	defer func() {
-		DoTry(DoDeleteLocalFile(name1)).Apply(cfg)
+		DoTry(DoDeleteLocalFile(name1)).Apply(ctx)
 	}()
 
-	// overwrite the StartFunction, returning CONDITION_SUCCEEDED
-	comm := DummyCommunicator{}
-	comm.StartFunction = func(cmd *remote.Cmd) error {
-		cmd.Init()
-		cmd.Stdout.Write([]byte("CONDITION_SUCCEEDED"))
-		cmd.SetExitStatus(0, nil)
-		return nil
-	}
-	cfg = Config{UserOutput: DummyOutput{}, Comm: comm, UseSudo: false}
-
-	exists, err := CheckFileExists(name1).Check(cfg)
+	// return a CONDITION_SUCCEEDED
+	ctx = NewTestingContextWithResponses([]string{"CONDITION_SUCCEEDED"})
+	exists, err := CheckFileExists(name1).Check(ctx)
 	if err != nil {
 		t.Fatalf("Error: %s", err)
 	}

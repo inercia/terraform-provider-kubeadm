@@ -16,6 +16,7 @@ package provisioner
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -135,7 +136,7 @@ func DoGetCurrentRemoteTokens(d *schema.ResourceData, kts KubeadmTokensSet) ssh.
 	// run "kubeadm token list" in the remote host, uploading the kubeconfig before
 	return ssh.ActionList{
 		ssh.DoSendingExecOutputToWriter(&buf, DoExecKubeadmToken(d, "list")),
-		ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+		ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 			ssh.Debug("parsing kubeadm output")
 			ssh.Debug("%s", buf.String())
 			if err := kts.FromString(buf.String()); err != nil {
@@ -149,7 +150,7 @@ func DoGetCurrentRemoteTokens(d *schema.ResourceData, kts KubeadmTokensSet) ssh.
 
 // SetNewToken sets a new token in the configuration in the ResourceData
 func DoSetNewToken(d *schema.ResourceData, newToken string) ssh.Action {
-	return ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+	return ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 		// update the token in "config.join"
 		ssh.Debug("getting current join configuration")
 		joinConfig, _, err := common.JoinConfigFromResourceData(d)
@@ -174,16 +175,16 @@ func DoSetNewToken(d *schema.ResourceData, newToken string) ssh.Action {
 func checkTokenIsValid(d *schema.ResourceData, tokens KubeadmTokensSet) ssh.CheckerFunc {
 	currentToken := getTokenFromResourceData(d)
 
-	return ssh.CheckerFunc(func(cfg ssh.Config) (bool, error) {
+	return ssh.CheckerFunc(func(ctx context.Context) (bool, error) {
 		action := DoGetCurrentRemoteTokens(d, tokens)
-		if err := action.Apply(cfg); ssh.IsError(err) {
-			_ = ssh.DoMessageWarn("could not check if token is still valid: will try to create a new token").Apply(cfg)
+		if err := action.Apply(ctx); ssh.IsError(err) {
+			_ = ssh.DoMessageWarn("could not check if token is still valid: will try to create a new token").Apply(ctx)
 			return false, nil
 		}
 
 		ssh.Debug("%d tokens obtained", len(tokens))
 		if len(tokens) == 0 {
-			_ = ssh.DoMessageWarn("no tokens obtained").Apply(cfg)
+			_ = ssh.DoMessageWarn("no tokens obtained").Apply(ctx)
 		}
 
 		for _, token := range tokens {

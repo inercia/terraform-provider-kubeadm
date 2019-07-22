@@ -15,6 +15,7 @@
 package ssh
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -105,7 +106,7 @@ func doRealUploadFile(contents io.Reader, remote string) Action {
 		DoMkdir(dir),
 		DoMessageDebug(fmt.Sprintf("Making sure '%s' does not exist", remote)),
 		DoExec(removeCmd),
-		ActionFunc(func(cfg Config) Action {
+		ActionFunc(func(ctx context.Context) Action {
 			allContents, err := ioutil.ReadAll(contents)
 			if err != nil {
 				return ActionError(err.Error())
@@ -119,8 +120,10 @@ func doRealUploadFile(contents io.Reader, remote string) Action {
 			// passing rs.Contents to comm.Upload() leads to an empty file
 			c := strings.NewReader(string(allContents))
 
+			comm := GetCommFromContext(ctx)
+
 			Debug("Doing the real upload to %s:\n%s\n", remote, allContents)
-			if err = cfg.Comm.Upload(remote, c); err != nil {
+			if err = comm.Upload(remote, c); err != nil {
 				Debug("ERROR: upload failed: %s", err)
 				return ActionError(err.Error())
 			}
@@ -179,7 +182,7 @@ func DoUploadFileToFile(local string, remote string) Action {
 		return ActionError("empty remote file name to upload")
 	}
 
-	return ActionFunc(func(Config) Action {
+	return ActionFunc(func(context.Context) Action {
 		// note: we must do the "Open" inside the ActionFunc, as we must delay the operation
 		// just in case the file does not exists yet
 		f, err := os.Open(local)
@@ -211,7 +214,7 @@ func DoDownloadFileToWriter(remote string, contents io.WriteCloser) Action {
 	return DoWithCleanup(
 		ActionList{
 			DoMessage(extraOutput),
-			ActionFunc(func(Config) Action {
+			ActionFunc(func(context.Context) Action {
 				// close the file handler
 				_ = contents.Close()
 				return nil
@@ -251,7 +254,7 @@ func DoWriteLocalFile(path string, contents string) Action {
 	if path == "" {
 		return ActionError("empty local file name to create")
 	}
-	return ActionFunc(func(Config) Action {
+	return ActionFunc(func(context.Context) Action {
 		localFile, err := os.Create(path)
 		if err != nil {
 			return ActionError(fmt.Sprintf("cannot create %q: %s", path, err.Error()))
@@ -291,7 +294,7 @@ func DoMoveLocalFile(src, dst string) Action {
 
 // DoDownloadFile downloads a remote file to a local file
 func DoDownloadFile(remote, local string) Action {
-	return ActionFunc(func(Config) Action {
+	return ActionFunc(func(context.Context) Action {
 		localFile, err := os.Create(local)
 		if err != nil {
 			return ActionError(err.Error())
@@ -316,7 +319,7 @@ func CheckFileAbsent(path string) CheckerFunc {
 // CheckLocalFileExists checks that a local file exists
 // If the input file is empty, it returns false.
 func CheckLocalFileExists(path string) CheckerFunc {
-	return CheckerFunc(func(Config) (bool, error) {
+	return CheckerFunc(func(context.Context) (bool, error) {
 		if path == "" {
 			return false, nil
 		}

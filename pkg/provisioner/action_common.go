@@ -16,6 +16,7 @@ package provisioner
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -121,7 +122,7 @@ func doMaybeResetWorker(d *schema.ResourceData, kubeadmConfigFilename string) ss
 }
 
 func doUploadKubeadmConfig(d *schema.ResourceData, command string, kubeadmConfigFilename string) ssh.Action {
-	return ssh.ActionFunc(func(ssh.Config) ssh.Action {
+	return ssh.ActionFunc(func(context.Context) ssh.Action {
 		// we must delay the {init|join}Config retrieval as some other functions
 		// modify it until the very last moment...
 		configBytes := []byte{}

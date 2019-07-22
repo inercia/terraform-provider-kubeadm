@@ -15,6 +15,7 @@
 package provisioner
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -135,7 +136,7 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 func doCheckLocalKubeconfigExists(d *schema.ResourceData) ssh.Action {
 	kubeconfig := getKubeconfigFromResourceData(d)
 
-	return ssh.ActionFunc(func(cfg ssh.Config) ssh.Action {
+	return ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 		return ssh.DoIf(
 			ssh.CheckNot(ssh.CheckLocalFileExists(kubeconfig)),
 			ssh.DoMessageWarn("no local kubeconfig found at %q", kubeconfig))

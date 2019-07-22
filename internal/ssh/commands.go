@@ -16,13 +16,15 @@ package ssh
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"path"
 	"strings"
-	"time"
 
-	"github.com/go-cmd/cmd"
+	"github.com/armon/circbuf"
 	"github.com/hashicorp/terraform/communicator/remote"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/mitchellh/go-linereader"
@@ -31,16 +33,32 @@ import (
 const (
 	// arguments for "sudo"
 	sudoArgs = "--non-interactive -E"
+
+	// maxBufSize limits how much output we collect from a local
+	// invocation. This is to prevent TF memory usage from growing
+	// to an enormous amount due to a faulty process.
+	maxBufSize = 8 * 1024
 )
+
+func copyOutput(output terraform.UIOutput, input io.Reader, done chan<- struct{}) {
+	defer close(done)
+	lr := linereader.New(input)
+	for line := range lr.Ch {
+		output.Output(line)
+	}
+}
 
 // DoExec is a runner for remote Commands
 func DoExec(command string) Action {
-	return ActionFunc(func(cfg Config) (res Action) {
+	return ActionFunc(func(ctx context.Context) (res Action) {
 		if len(command) == 0 {
 			return nil
 		}
 
-		if cfg.UseSudo {
+		execOutput := GetExecOutputFromContext(ctx)
+		comm := GetCommFromContext(ctx)
+
+		if GetUseSudoFromContext(ctx) {
 			command = "sudo " + sudoArgs + " " + command
 		}
 
@@ -51,16 +69,8 @@ func DoExec(command string) Action {
 		outDoneCh := make(chan struct{})
 		errDoneCh := make(chan struct{})
 
-		copyOutput := func(output terraform.UIOutput, input io.Reader, done chan<- struct{}) {
-			defer close(done)
-			lr := linereader.New(input)
-			for line := range lr.Ch {
-				output.Output(line)
-			}
-		}
-
-		go copyOutput(cfg.GetExecOutput(), outR, outDoneCh)
-		go copyOutput(cfg.GetExecOutput(), errR, errDoneCh)
+		go copyOutput(execOutput, outR, outDoneCh)
+		go copyOutput(execOutput, errR, errDoneCh)
 
 		cmd := &remote.Cmd{
 			Command: command,
@@ -68,7 +78,7 @@ func DoExec(command string) Action {
 			Stderr:  errW,
 		}
 
-		if err := cfg.Comm.Start(cmd); err != nil {
+		if err := comm.Start(cmd); err != nil {
 			return ActionError(fmt.Sprintf("Error executing command %q: %v", cmd.Command, err))
 		}
 		waitResult := cmd.Wait()
@@ -82,11 +92,16 @@ func DoExec(command string) Action {
 			// otherwise, it is a communicator error
 		}
 
-		// wait until the copyOutput function is done
-		outW.Close()
-		errW.Close()
-		<-outDoneCh
-		<-errDoneCh
+		_ = outW.Close()
+		_ = errW.Close()
+
+		select {
+		// wait until the copyOutput function is done (for stdout and the stderr)
+		case <-outDoneCh:
+			<-errDoneCh
+		// .. or until the context is done
+		case <-ctx.Done():
+		}
 
 		return
 	})
@@ -110,45 +125,71 @@ func DoExecScript(contents io.Reader) Action {
 
 // DoLocalExec executes a local command
 func DoLocalExec(command string, args ...string) Action {
-	return ActionFunc(func(cfg Config) Action {
-		output := cfg.GetExecOutput()
+	return ActionFunc(func(ctx context.Context) Action {
+		userOutput := GetUserOutputFromContext(ctx)
+		execOutput := GetExecOutputFromContext(ctx)
 
 		fullCmd := fmt.Sprintf("%s %s", command, strings.Join(args, " "))
-		cfg.UserOutput.Output(fmt.Sprintf("Running local command %q...", fullCmd))
+		userOutput.Output(fmt.Sprintf("Running local command %q...", fullCmd))
 
-		// Disable output buffering, enable streaming
-		cmdOptions := cmd.Options{
-			Buffered:  false,
-			Streaming: true,
+		// Setup the reader that will read the output from the command.
+		// We use an os.Pipe so that the *os.File can be passed directly to the
+		// process, and not rely on goroutines copying the data which may block.
+		// See golang.org/issue/18874
+		pr, pw, err := os.Pipe()
+		if err != nil {
+			return ActionError(fmt.Sprintf("failed to initialize pipe for output: %s", err))
 		}
 
-		envCmd := cmd.NewCmdOptions(cmdOptions, command, args...)
+		//var cmdEnv []string
+		//cmdEnv = os.Environ()
+		//cmdEnv = append(cmdEnv, env...)
 
-		go func() {
-			for {
-				select {
-				case line := <-envCmd.Stdout:
-					output.Output(line)
-				case line := <-envCmd.Stderr:
-					output.Output("ERROR: " + line)
-				}
-			}
-		}()
+		// Setup the command
+		cmd := exec.CommandContext(ctx, command, args...)
+		cmd.Stderr = pw
+		cmd.Stdout = pw
 
-		// Run and wait for Cmd to return
-		status := <-envCmd.Start()
+		// Dir specifies the working directory of the command.
+		// If Dir is the empty string (this is default), runs the command
+		// in the calling process's current directory.
+		//cmd.Dir = workingdir
 
-		// Cmd has finished but wait for goroutine to print all lines
-		for len(envCmd.Stdout) > 0 || len(envCmd.Stderr) > 0 {
-			time.Sleep(10 * time.Millisecond)
+		// Env specifies the environment of the command.
+		// By default will use the calling process's environment
+		//cmd.Env = cmdEnv
+
+		output, _ := circbuf.NewBuffer(maxBufSize)
+
+		// Write everything we read from the pipe to the output buffer too
+		tee := io.TeeReader(pr, output)
+
+		// copy the teed output to the UI output
+		copyDoneCh := make(chan struct{})
+		go copyOutput(execOutput, tee, copyDoneCh)
+
+		// Start the command
+		err = cmd.Start()
+		if err == nil {
+			err = cmd.Wait()
 		}
 
-		if status.Exit != 0 {
-			cfg.UserOutput.Output(fmt.Sprintf("Error waiting for %q: %s [%d]",
-				command, status.Error.Error(), status.Exit))
-			return ActionError(status.Error.Error())
+		// Close the write-end of the pipe so that the goroutine mirroring output
+		// ends properly.
+		_ = pw.Close()
+
+		// Cancelling the command may block the pipe reader if the file descriptor
+		// was passed to a child process which hasn't closed it. In this case the
+		// copyOutput goroutine will just hang out until exit.
+		select {
+		case <-copyDoneCh:
+		case <-ctx.Done():
 		}
 
+		if err != nil {
+			msg := fmt.Sprintf("Error running command '%s': %v", command, err)
+			return ActionError(msg)
+		}
 		return nil
 	})
 }
@@ -159,10 +200,10 @@ func CheckExec(cmd string) CheckerFunc {
 	const failure = "CONDITION_FAILED"
 	command := fmt.Sprintf("%s && echo '%s' || echo '%s'", cmd, success, failure)
 
-	return CheckerFunc(func(cfg Config) (bool, error) {
+	return CheckerFunc(func(ctx context.Context) (bool, error) {
 		Debug("Checking condition: '%s'", cmd)
 		var buf bytes.Buffer
-		if res := DoSendingExecOutputToWriter(&buf, DoExec(command)).Apply(cfg); IsError(res) {
+		if res := DoSendingExecOutputToWriter(&buf, DoExec(command)).Apply(ctx); IsError(res) {
 			Debug("ERROR: when performing check %q: %s", cmd, res)
 			return false, res
 		}
@@ -185,10 +226,10 @@ func CheckBinaryExists(cmd string) CheckerFunc {
 	// note: start 'command' in a subshell, as it doesn't mix well with 'sudo'
 	command := fmt.Sprintf("sh -c \"command -v '%s'\"", cmd)
 
-	return CheckerFunc(func(cfg Config) (bool, error) {
+	return CheckerFunc(func(ctx context.Context) (bool, error) {
 		Debug("Checking binary exists with: '%s'", cmd)
 		var buf bytes.Buffer
-		if res := DoSendingExecOutputToWriter(&buf, DoExec(command)).Apply(cfg); IsError(res) {
+		if res := DoSendingExecOutputToWriter(&buf, DoExec(command)).Apply(ctx); IsError(res) {
 			Debug("ERROR: when performing check: %s", res)
 			return false, res
 		}
@@ -209,7 +250,7 @@ func CheckBinaryExists(cmd string) CheckerFunc {
 		// if it prints the full path: check it is really there
 		if path.IsAbs(s) {
 			Debug("checking file %q exists at %q", cmd, s)
-			return CheckFileExists(s).Check(cfg)
+			return CheckFileExists(s).Check(ctx)
 		}
 
 		// otherwise, just fail
