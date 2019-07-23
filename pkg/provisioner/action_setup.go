@@ -17,7 +17,6 @@ package provisioner
 import (
 	"fmt"
 	"io/ioutil"
-	"strings"
 
 	"github.com/hashicorp/terraform/helper/schema"
 
@@ -59,7 +58,7 @@ func doKubeadmSetup(d *schema.ResourceData) ssh.Action {
 
 		return ssh.ActionList{
 			ssh.DoMessage(descr),
-			ssh.DoExecScript(strings.NewReader(code)),
+			ssh.DoExecScript([]byte(code)),
 		}
 	}
 	return ssh.ActionList{

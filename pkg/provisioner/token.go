@@ -119,14 +119,12 @@ func DoExecKubeadmToken(d *schema.ResourceData, cmd string) ssh.Action {
 
 	kubeadm := getKubeadmFromResourceData(d)
 
-	return ssh.DoWithCleanup(
-		ssh.ActionList{
-			ssh.DoTry(ssh.DoDeleteFile(remoteKubeconfig)),
-		},
-		ssh.ActionList{
-			ssh.DoUploadFileToFile(kubeconfig, remoteKubeconfig),
-			ssh.DoExec(fmt.Sprintf("%s token --kubeconfig=%s %s", kubeadm, remoteKubeconfig, cmd)),
-		})
+	return ssh.DoWithCleanup(ssh.ActionList{
+		ssh.DoUploadFileToFile(kubeconfig, remoteKubeconfig),
+		ssh.DoExec(fmt.Sprintf("%s token --kubeconfig=%s %s", kubeadm, remoteKubeconfig, cmd)),
+	}, ssh.ActionList{
+		ssh.DoTry(ssh.DoDeleteFile(remoteKubeconfig)),
+	})
 }
 
 // DoGetCurrentRemoteTokens get the list of remote tokens stored in the API server
@@ -135,7 +133,7 @@ func DoGetCurrentRemoteTokens(d *schema.ResourceData, kts KubeadmTokensSet) ssh.
 
 	// run "kubeadm token list" in the remote host, uploading the kubeconfig before
 	return ssh.ActionList{
-		ssh.DoSendingExecOutputToWriter(&buf, DoExecKubeadmToken(d, "list")),
+		ssh.DoSendingExecOutputToWriter(DoExecKubeadmToken(d, "list"), &buf),
 		ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 			ssh.Debug("parsing kubeadm output")
 			ssh.Debug("%s", buf.String())

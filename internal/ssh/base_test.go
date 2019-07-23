@@ -57,14 +57,13 @@ func TestDoSendingOutput(t *testing.T) {
 	var buf bytes.Buffer
 	var buf2 bytes.Buffer
 	actions := ActionList{
-		DoSendingExecOutputToWriter(&buf, ActionList{
+		DoSendingExecOutputToWriter(ActionList{
 			ActionFunc(func(ctx context.Context) Action {
 				return doEcho("1")
 			}),
-			DoSendingExecOutputToWriter(&buf2,
-				ActionFunc(func(context.Context) Action {
-					return doEcho("(this is another message that should go to another buffer)")
-				})),
+			DoSendingExecOutputToWriter(ActionFunc(func(context.Context) Action {
+				return doEcho("(this is another message that should go to another buffer)")
+			}), &buf2),
 			ActionFunc(func(context.Context) Action {
 				return doEcho("2")
 			}),
@@ -77,7 +76,7 @@ func TestDoSendingOutput(t *testing.T) {
 						doEcho("4"),
 					}
 				})),
-		}),
+		}, &buf),
 	}
 
 	ctx := NewTestingContext()
@@ -123,62 +122,61 @@ func TestDoSendingOutputToFun(t *testing.T) {
 	//}
 
 	actions := ActionList{
-		DoSendingExecOutputToFun(func(s string) {
-			received += s
-		}, ActionList{
+		DoSendingExecOutputToFunc(ActionList{
 			ActionFunc(func(ctx context.Context) Action {
 				return doEcho("1")
 			}),
-			DoSendingExecOutputToFun(
+			DoSendingExecOutputToFunc(
+				ActionFunc(func(context.Context) Action {
+					return doEcho("(VVVV)")
+				}),
 				func(s string) {
 					trashBuffer += s
-				}, ActionFunc(func(context.Context) Action {
-					return doEcho("(VVVV)")
-				})),
+				}),
 			DoSendingExecOutputToDevNull(DoLocalExec("ls", "/tmp")),
 			// this works:
-			DoSendingExecOutputToFun(
+			DoSendingExecOutputToFunc(
+				doEcho("(XXXX)"),
 				func(s string) {
 					trashBuffer += s
-				},
-				doEcho("(XXXX)")),
+				}),
 			// this works:
-			DoSendingExecOutputToFun(
-				func(s string) {
-					trashBuffer += s
-				},
+			DoSendingExecOutputToFunc(
 				ActionList{
 					doEcho("(MMMM)"),
 					doEcho("(NNNN)"),
 					ActionFunc(func(context.Context) Action {
 						return doEcho("(LLLL)")
 					}),
-				}),
-			// this doesnt
-			DoSendingExecOutputToFun(
+				},
 				func(s string) {
 					trashBuffer += s
-				},
+				}),
+			// this doesnt
+			DoSendingExecOutputToFunc(
 				func() Action {
 					return ActionFunc(func(context.Context) Action {
 						return doEcho("(YYYY)")
 					})
-				}()),
-			// this doesnt
-			DoSendingExecOutputToFun(
+				}(),
 				func(s string) {
 					trashBuffer += s
-				},
-				tFunc("")),
+				}),
 			// this doesnt
-			DoSendingExecOutputToFun(
+			DoSendingExecOutputToFunc(
+				tFunc(""),
 				func(s string) {
 					trashBuffer += s
-				},
+				}),
+			// this doesnt
+			DoSendingExecOutputToFunc(
 				DoLazy(
 					ActionFunc(func(context.Context) Action {
 						return doEcho("(ZZZZ)")
-					}))()),
+					}))(),
+				func(s string) {
+					trashBuffer += s
+				}),
 			ActionFunc(func(context.Context) Action {
 				return doEcho("2")
 			}),
@@ -186,15 +184,17 @@ func TestDoSendingOutputToFun(t *testing.T) {
 				return doEcho("3")
 			})),
 			DoTry(ActionError("an error")),
-			DoWithCleanup(DoNothing(), ActionFunc(func(context.Context) Action {
+			DoWithCleanup(ActionFunc(func(context.Context) Action {
 				return doEcho("4")
-			})),
+			}), DoNothing()),
 			DoIfElse(CheckExpr(false),
 				nil,
 				ActionFunc(func(context.Context) Action {
 					return doEcho("5")
 				}),
 			),
+		}, func(s string) {
+			received += s
 		}),
 	}
 
@@ -216,19 +216,18 @@ func TestDoSendingOutputToFunWithError(t *testing.T) {
 	someOtherBuffer := ""
 
 	actions := ActionList{
-		DoSendingExecOutputToFun(func(s string) {
-			received += s
-		}, ActionList{
+		DoSendingExecOutputToFunc(ActionList{
 			ActionFunc(func(ctx context.Context) Action {
 				return doEcho("1")
 			}),
-			DoSendingExecOutputToFun(
+			DoSendingExecOutputToFunc(
+				ActionFunc(func(context.Context) Action {
+					return doEcho("'this is another message that should go to another buffer'")
+				}),
 				func(s string) {
 					someOtherBuffer += s
 				},
-				ActionFunc(func(context.Context) Action {
-					return doEcho("'this is another message that should go to another buffer'")
-				})),
+			),
 			DoTry(ActionError("this should be ignored")),
 			DoIfElse(CheckExpr(false),
 				nil,
@@ -237,6 +236,8 @@ func TestDoSendingOutputToFunWithError(t *testing.T) {
 				}),
 			),
 			ActionError("some error"),
+		}, func(s string) {
+			received += s
 		}),
 	}
 
@@ -301,7 +302,7 @@ func TestActionList(t *testing.T) {
 
 	var buf bytes.Buffer
 	ctx := NewTestingContext()
-	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(ctx)
+	res := DoSendingExecOutputToWriter(&actions, &buf).Apply(ctx)
 	if IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}
@@ -349,7 +350,7 @@ func TestIfThenElse(t *testing.T) {
 
 	var buf bytes.Buffer
 	ctx := NewTestingContext()
-	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(ctx)
+	res := DoSendingExecOutputToWriter(&actions, &buf).Apply(ctx)
 	if IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}
@@ -371,28 +372,33 @@ func TestDoTry(t *testing.T) {
 
 	actions := ActionList{
 		DoTry(
-			doRecordPath("0"),
-			DoTry(
-				doRecordPath("1"),
-				doRecordPath("2"),
-			),
-			nil,
-			nil,
-			ActionFunc(func(context.Context) Action {
-				return ActionError("some error")
-			}),
-			// this ActionList is never executed, as the presence of an error makes the whole list errored
+			// will try all the actions in this list; if some action fails,
+			// it will continue with the next action
 			ActionList{
-				doRecordPath("XXX"),
-				ActionError("some error"),
-			},
-			ActionFunc(func(context.Context) Action {
-				return ActionList{
-					doRecordPath("3"),
-				}
+				doRecordPath("0"),
+				DoTry(
+					ActionList{
+						doRecordPath("1"),
+						doRecordPath("2"),
+					}),
+				nil,
+				nil,
+				ActionFunc(func(context.Context) Action {
+					return ActionError("some error")
+				}),
+				// this ActionList is never executed, as the "trial" is not recursive
+				// and the presence of an error makes the whole list errored
+				ActionList{
+					doRecordPath("XXX"),
+					ActionError("some error"),
+				},
+				ActionFunc(func(context.Context) Action {
+					return ActionList{
+						doRecordPath("3"),
+					}
+				}),
+				nil,
 			}),
-			nil,
-		),
 		nil,
 		nil,
 		doRecordPath("4"),
@@ -400,7 +406,7 @@ func TestDoTry(t *testing.T) {
 
 	var buf bytes.Buffer
 	ctx := NewTestingContext()
-	res := DoSendingExecOutputToWriter(&buf, &actions).Apply(ctx)
+	res := DoSendingExecOutputToWriter(&actions, &buf).Apply(ctx)
 	if IsError(res) {
 		t.Fatalf("Error: error detected: %s", res)
 	}

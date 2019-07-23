@@ -157,7 +157,7 @@ func (endpoints EtcdEndpointsSet) GetLocalEndpoint() EtcdEndpoint {
 func DoGetEndpointsList(eps *EtcdEndpointsSet) ssh.Action {
 	var buf bytes.Buffer
 	return ssh.ActionList{
-		ssh.DoSendingExecOutputToWriter(&buf, DoRunEtcdctlSubcommand(subcmdEndpointsList)),
+		ssh.DoSendingExecOutputToWriter(DoRunEtcdctlSubcommand(subcmdEndpointsList), &buf),
 		ssh.ActionFunc(func(ctx context.Context) ssh.Action {
 			err := eps.FromString(buf.String())
 			if err != nil {

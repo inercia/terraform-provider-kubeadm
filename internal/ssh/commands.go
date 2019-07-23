@@ -108,18 +108,18 @@ func DoExec(command string) Action {
 }
 
 // DoExecScript is a runner for a script (with some random path in /tmp)
-func DoExecScript(contents io.Reader) Action {
+func DoExecScript(contents []byte) Action {
 	path, err := GetTempFilename()
 	if err != nil {
 		return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 	}
 	return DoWithCleanup(
 		ActionList{
-			DoTry(DoDeleteFile(path)),
-		},
-		ActionList{
 			doRealUploadFile(contents, path),
 			DoExec(fmt.Sprintf("sh %s", path)),
+		},
+		ActionList{
+			DoTry(DoDeleteFile(path)),
 		})
 }
 
@@ -203,7 +203,7 @@ func CheckExec(cmd string) CheckerFunc {
 	return CheckerFunc(func(ctx context.Context) (bool, error) {
 		Debug("Checking condition: '%s'", cmd)
 		var buf bytes.Buffer
-		if res := DoSendingExecOutputToWriter(&buf, DoExec(command)).Apply(ctx); IsError(res) {
+		if res := DoSendingExecOutputToWriter(DoExec(command), &buf).Apply(ctx); IsError(res) {
 			Debug("ERROR: when performing check %q: %s", cmd, res)
 			return false, res
 		}
@@ -229,7 +229,7 @@ func CheckBinaryExists(cmd string) CheckerFunc {
 	return CheckerFunc(func(ctx context.Context) (bool, error) {
 		Debug("Checking binary exists with: '%s'", cmd)
 		var buf bytes.Buffer
-		if res := DoSendingExecOutputToWriter(&buf, DoExec(command)).Apply(ctx); IsError(res) {
+		if res := DoSendingExecOutputToWriter(DoExec(command), &buf).Apply(ctx); IsError(res) {
 			Debug("ERROR: when performing check: %s", res)
 			return false, res
 		}

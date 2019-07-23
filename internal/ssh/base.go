@@ -123,7 +123,7 @@ func applyList(actions ActionList, ignoreErrors bool, ctx context.Context) Actio
 		// ... and add the resulting actions in front of the queue
 		switch v := res.(type) {
 		case ActionList:
-			// if it is a list, expand it
+			// optimization: if it is a list, expand it here
 			actions = append(v, actions...)
 		default:
 			actions = append([]Action{res}, actions...)
@@ -223,7 +223,7 @@ func (f CheckerFunc) Check(ctx context.Context) (bool, error) {
 
 // DoWithCleanup runs some action and, despite the result, runs the cleanup function
 // It returns the actions result.
-func DoWithCleanup(cleanup Action, actions Action) Action {
+func DoWithCleanup(actions Action, cleanup Action) Action {
 	return ActionFunc(func(ctx context.Context) Action {
 		res := ActionList{actions}.Apply(ctx)
 		_ = ActionList{cleanup}.Apply(ctx)
@@ -232,7 +232,7 @@ func DoWithCleanup(cleanup Action, actions Action) Action {
 }
 
 // DoWithError runs some action and, if some error happens, runs the exception
-func DoWithException(exc Action, actions Action) Action {
+func DoWithException(actions Action, exc Action) Action {
 	return ActionFunc(func(ctx context.Context) Action {
 		res := ActionList{actions}.Apply(ctx)
 		if IsError(res) {
@@ -271,10 +271,22 @@ func DoIfElse(condition Checker, actionIf Action, actionElse Action) Action {
 	})
 }
 
-// DoTry tries to run some actions, but it is ok if some action fails
-func DoTry(actions ...Action) Action {
+// DoTry tries to run some actions, but it is ok if some action fail,
+// continuing with the others...
+// note that this "trial" is not recursive: if something fails in a list deeper
+// in the stack, the whole list will be failed as usual.
+func DoTry(action Action) Action {
 	return ActionFunc(func(ctx context.Context) Action {
-		return applyList(actions, true, ctx)
+		switch v := action.(type) {
+		case ActionList:
+			return applyList(v, true, ctx)
+		default:
+			res := ActionList{v}.Apply(ctx)
+			if IsError(res) {
+				return nil
+			}
+			return res
+		}
 	})
 }
 
@@ -282,7 +294,7 @@ func DoTry(actions ...Action) Action {
 type Retry struct {
 	Times int
 
-	// Interval is the
+	// Interval is the time between trials
 	Interval time.Duration
 }
 
@@ -310,14 +322,14 @@ func DoRetry(run Retry, actions ...Action) ActionFunc {
 	})
 }
 
-// DoSendingExecOutputToFun runs some action redirecting all the Do***Exec outputs
+// DoSendingExecOutputToFunc runs some action redirecting all the Do***Exec outputs
 // to some function
 // Some notes:
 // * make sure you strip spaces in the output, as some extra spaces can be before/after
-func DoSendingExecOutputToFun(interceptor OutputFunc, action ...Action) Action {
+func DoSendingExecOutputToFunc(action Action, interceptor OutputFunc) Action {
 	return ActionFunc(func(ctx context.Context) Action {
 		newCtx := NewContext(ctx, GetUserOutputFromContext(ctx), interceptor, GetCommFromContext(ctx), GetUseSudoFromContext(ctx))
-		return ActionList(action).Apply(newCtx)
+		return ActionList{action}.Apply(newCtx)
 	})
 }
 
@@ -325,11 +337,11 @@ func DoSendingExecOutputToFun(interceptor OutputFunc, action ...Action) Action {
 // to some io.Writer
 // Some notes:
 // * make sure you strip spaces in the output, as some extra spaces can be before/after
-func DoSendingExecOutputToWriter(writer io.Writer, action Action) Action {
-	return DoSendingExecOutputToFun(func(s string) {
+func DoSendingExecOutputToWriter(action Action, writer io.Writer) Action {
+	return DoSendingExecOutputToFunc(action, func(s string) {
 		c := strings.ReplaceAll(s, "\r", "\n")
 		_, _ = writer.Write([]byte(c))
-	}, action)
+	})
 }
 
 // DoSendingExecOutputToDevNull runs some action redirecting all the Do***Exec outputs
@@ -337,9 +349,9 @@ func DoSendingExecOutputToWriter(writer io.Writer, action Action) Action {
 // Some notes:
 // * make sure you trip spaces in the output, as some extra spaces can be before/after
 func DoSendingExecOutputToDevNull(action Action) Action {
-	return DoSendingExecOutputToFun(func(s string) {
+	return DoSendingExecOutputToFunc(action, func(s string) {
 		// do nothing with "s"
-	}, action)
+	})
 }
 
 // CheckExpr returns the result of the boolean expression
@@ -352,7 +364,8 @@ func CheckExpr(expr bool) CheckerFunc {
 // CheckAction returns true if the Action does not return an error
 func CheckAction(action Action) CheckerFunc {
 	return CheckerFunc(func(ctx context.Context) (bool, error) {
-		if res := action.Apply(ctx); IsError(res) {
+		actions := ActionList{action}
+		if res := actions.Apply(ctx); IsError(res) {
 			return false, nil
 		}
 		return true, nil

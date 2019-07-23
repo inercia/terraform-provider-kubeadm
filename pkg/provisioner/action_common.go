@@ -15,7 +15,6 @@
 package provisioner
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -97,14 +96,11 @@ func doKubeadm(d *schema.ResourceData, kubeadmConfigFilename string, command str
 	// otherwise, back up the config file
 	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Starting kubeadm..."),
-		ssh.DoWithException(
-			ssh.ActionList{
-				ssh.DoTry(ssh.DoDeleteFile(kubeadmConfigFilename))},
-			ssh.ActionList{
-				doUploadKubeadmConfig(d, command, kubeadmConfigFilename),
-				doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
-			},
-		),
+		ssh.DoWithException(ssh.ActionList{
+			doUploadKubeadmConfig(d, command, kubeadmConfigFilename),
+			doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
+		}, ssh.ActionList{
+			ssh.DoTry(ssh.DoDeleteFile(kubeadmConfigFilename))}),
 		ssh.DoTry(ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak")),
 	}
 	return actions
@@ -140,7 +136,7 @@ func doUploadKubeadmConfig(d *schema.ResourceData, command string, kubeadmConfig
 				return ssh.ActionError(fmt.Sprintf("could not get a valid 'config' for join'ing: %s", err))
 			}
 		}
-		return ssh.DoUploadReaderToFile(bytes.NewReader(configBytes), kubeadmConfigFilename)
+		return ssh.DoUploadBytesToFile(configBytes, kubeadmConfigFilename)
 	})
 }
 
@@ -164,7 +160,7 @@ func doUploadCerts(d *schema.ResourceData) ssh.Action {
 	for baseName, cert := range certsConfig.DistributionMap() {
 		fullPath := path.Join(certsDir, baseName)
 		ssh.Debug("will upload certificate to %q", fullPath)
-		upload := ssh.DoUploadReaderToFile(strings.NewReader(*cert), fullPath)
+		upload := ssh.DoUploadBytesToFile([]byte(*cert), fullPath)
 		actions = append(actions, upload)
 	}
 

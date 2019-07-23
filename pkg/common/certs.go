@@ -108,7 +108,8 @@ func (c *CertsConfig) FromMap(m map[string]interface{}) error {
 	return nil
 }
 
-// FromResourceDataConfig loads the certificates config info from the "config" map in the ResourceData provided
+// FromResourceDataConfig loads the certificates config info
+// from the "config" map in the ResourceData provided
 func (c *CertsConfig) FromResourceDataConfig(d *schema.ResourceData) error {
 	certsMap := d.Get("config").(map[string]interface{})
 	if err := c.FromMap(certsMap); err != nil {
@@ -117,9 +118,14 @@ func (c *CertsConfig) FromResourceDataConfig(d *schema.ResourceData) error {
 	return nil
 }
 
-// FromResourceDataConfig loads the certificates config info from the "config" map in the ResourceData provided
+// FromResourceDataConfig loads the certificates config info from
+// the "config" map in the ResourceData provided
 func (c *CertsConfig) FromResourceDataCerts(d *schema.ResourceData) error {
-	certsMap := d.Get("certs.0").(map[string]interface{})
+	certsMapOpt, ok := d.GetOk("certs.0")
+	if !ok {
+		return nil
+	}
+	certsMap := certsMapOpt.(map[string]interface{})
 	if err := c.FromMap(certsMap); err != nil {
 		return err
 	}

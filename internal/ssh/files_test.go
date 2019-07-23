@@ -89,9 +89,6 @@ func TestCheckFileExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error: %s", err)
 	}
-	defer func() {
-		DoTry(DoDeleteLocalFile(name1)).Apply(ctx)
-	}()
 
 	// return a CONDITION_SUCCEEDED
 	ctx = NewTestingContextWithResponses([]string{"CONDITION_SUCCEEDED"})
@@ -101,5 +98,22 @@ func TestCheckFileExists(t *testing.T) {
 	}
 	if !exists {
 		t.Fatalf("Error: unexpected result for exists: %t", exists)
+	}
+}
+
+func TestDoUploadReaderToFile(t *testing.T) {
+	ctx, uploads := NewTestingContextForUploads([]string{})
+
+	dst := "/tmp/something.txt"
+	s := "this is a test"
+
+	actions := ActionList{
+		DoUploadBytesToFile([]byte(s), dst),
+	}
+	if res := actions.Apply(ctx); IsError(res) {
+		t.Fatalf("Error: when running actions: %s", res)
+	}
+	if len(*uploads) == 0 {
+		t.Fatalf("Error: upload not found in %+v", uploads)
 	}
 }

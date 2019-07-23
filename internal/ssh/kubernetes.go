@@ -120,12 +120,10 @@ func DoRemoteKubectl(kubectl string, kubeconfig string, args ...string) Action {
 
 				return DoRetry(
 					Retry{Times: 3},
-					DoWithCleanup(
-						DoTry(DoDeleteFile(remoteKubeconfig)),
-						ActionList{
-							DoUploadFileToFile(kubeconfig, remoteKubeconfig),
-							DoExec(fmt.Sprintf("%s --kubeconfig=%s %s", kubectl, remoteKubeconfig, argsStr)),
-						}))
+					DoWithCleanup(ActionList{
+						DoUploadFileToFile(kubeconfig, remoteKubeconfig),
+						DoExec(fmt.Sprintf("%s --kubeconfig=%s %s", kubectl, remoteKubeconfig, argsStr)),
+					}, DoTry(DoDeleteFile(remoteKubeconfig))))
 			}),
 		})
 }
@@ -144,14 +142,12 @@ func DoRemoteKubectlApply(kubectl string, kubeconfig string, manifests []Manifes
 					if err != nil {
 						return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 					}
-					return DoWithCleanup(
-						ActionList{
-							DoTry(DoDeleteFile(remoteManifest)),
-						},
-						ActionList{
-							DoUploadReaderToFile(strings.NewReader(manifest.Inline), remoteManifest),
-							DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
-						})
+					return DoWithCleanup(ActionList{
+						DoUploadBytesToFile([]byte(manifest.Inline), remoteManifest),
+						DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
+					}, ActionList{
+						DoTry(DoDeleteFile(remoteManifest)),
+					})
 				}))
 
 		case manifest.Path != "":
@@ -162,14 +158,12 @@ func DoRemoteKubectlApply(kubectl string, kubeconfig string, manifests []Manifes
 					if err != nil {
 						return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 					}
-					return DoWithCleanup(
-						ActionList{
-							DoTry(DoDeleteFile(remoteManifest)),
-						},
-						ActionList{
-							DoUploadFileToFile(manifest.Path, remoteManifest),
-							DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
-						})
+					return DoWithCleanup(ActionList{
+						DoUploadFileToFile(manifest.Path, remoteManifest),
+						DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
+					}, ActionList{
+						DoTry(DoDeleteFile(remoteManifest)),
+					})
 				}))
 
 		case manifest.URL != "":

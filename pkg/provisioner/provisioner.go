@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/terraform/helper/schema"
@@ -116,9 +115,9 @@ func applyFn(ctx context.Context) error {
 		doCheckCommonBinaries(d),
 		doPrepareCRI(),
 		ssh.DoEnableService("kubelet.service"),
-		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletSysconfigCode), sysconfigPath),
-		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeletServiceCode), servicePath),
-		ssh.DoUploadReaderToFile(strings.NewReader(assets.KubeadmDropinCode), dropinPath),
+		ssh.DoUploadBytesToFile([]byte(assets.KubeletSysconfigCode), sysconfigPath),
+		ssh.DoUploadBytesToFile([]byte(assets.KubeletServiceCode), servicePath),
+		ssh.DoUploadBytesToFile([]byte(assets.KubeadmDropinCode), dropinPath),
 	)
 
 	if len(join) == 0 {

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"time"
 
 	"github.com/hashicorp/terraform/communicator"
@@ -91,18 +92,50 @@ type dummyCommunicatorWithResponses struct {
 
 	responses []string
 	counter   *int
+	uploads   map[string]int
 }
 
 func (dc dummyCommunicatorWithResponses) Start(cmd *remote.Cmd) error {
 	cmd.Init()
-	cmd.Stdout.Write([]byte(dc.responses[*dc.counter]))
+	if (*dc.counter) >= len(dc.responses) {
+		cmd.Stdout.Write([]byte(""))
+	} else {
+		cmd.Stdout.Write([]byte(dc.responses[*dc.counter]))
+	}
 	cmd.SetExitStatus(0, nil)
 	*dc.counter += 1
 	return nil
 }
 
+func (dc dummyCommunicatorWithResponses) Upload(dst string, r io.Reader) error {
+	all, _ := ioutil.ReadAll(r)
+	dc.uploads[dst] = len(all)
+	return nil
+}
+
+func (dc dummyCommunicatorWithResponses) UploadScript(dst string, r io.Reader) error {
+	all, _ := ioutil.ReadAll(r)
+	dc.uploads[dst] = len(all)
+	return nil
+}
+
+func (_ dummyCommunicatorWithResponses) UploadDir(string, string) error {
+	return nil
+}
+
 func NewTestingContextWithResponses(responses []string) context.Context {
+	// we must keep the "counter" out of the communicator object as this
+	// object is inmutable... :-/
 	counter := 0
 	comm := dummyCommunicatorWithResponses{responses: responses, counter: &counter}
 	return NewTestingContextWithCommunicator(comm)
+}
+
+func NewTestingContextForUploads(responses []string) (context.Context, *map[string]int) {
+	// we must keep the "counter" out of the communicator object as this
+	// object is inmutable... :-/
+	uploads := map[string]int{}
+	counter := 0
+	comm := dummyCommunicatorWithResponses{responses: responses, counter: &counter, uploads: uploads}
+	return NewTestingContextWithCommunicator(comm), &uploads
 }

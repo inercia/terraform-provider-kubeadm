@@ -15,6 +15,7 @@
 package ssh
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -75,7 +76,7 @@ func randomPath(prefix, extension string) (string, error) {
 	return fmt.Sprintf("%s/%s-%s.%s", defaultRemoteTmp, prefix, r, extension), nil
 }
 
-// GetTempFilename returns a temporary filename
+// GetTempFilename returns a temporary filename (but it does not create it)
 func GetTempFilename() (string, error) {
 	return randomPath(defTemporaryFilenamePrefix, defTemporaryFilenameExt)
 }
@@ -93,37 +94,28 @@ func IsTempFilename(filename string) bool {
 }
 
 // doRealUploadFile uploads a file to a remote path
-func doRealUploadFile(contents io.Reader, remote string) Action {
-	dir := filepath.Dir(remote)
-	removeCmd := fmt.Sprintf("rm -f %s", remote)
-
+func doRealUploadFile(contents []byte, remote string) Action {
 	if len(remote) == 0 {
 		return DoAbort("empty destination for upload")
 	}
+
+	dir := filepath.Dir(remote)
 
 	actions := ActionList{
 		DoMessageDebug(fmt.Sprintf("Making sure directory '%s' is there", dir)),
 		DoMkdir(dir),
 		DoMessageDebug(fmt.Sprintf("Making sure '%s' does not exist", remote)),
-		DoExec(removeCmd),
+		DoDeleteFile(remote),
 		ActionFunc(func(ctx context.Context) Action {
-			allContents, err := ioutil.ReadAll(contents)
-			if err != nil {
-				return ActionError(err.Error())
+			if len(contents) == 0 {
+				return ActionError(fmt.Sprintf("internal error: empty file to upload to %q", remote))
 			}
 
-			if len(allContents) == 0 {
-				Debug("WARNING: empty file to upload !!!")
-			}
-
-			// FIXME: for some unknown reason, we must do this conversion...
-			// passing rs.Contents to comm.Upload() leads to an empty file
-			c := strings.NewReader(string(allContents))
-
+			c := bytes.NewReader(contents)
 			comm := GetCommFromContext(ctx)
 
-			Debug("Doing the real upload to %s:\n%s\n", remote, allContents)
-			if err = comm.Upload(remote, c); err != nil {
+			Debug("Doing the real upload to %s:\n%s\n", remote, contents)
+			if err := comm.Upload(remote, c); err != nil {
 				Debug("ERROR: upload failed: %s", err)
 				return ActionError(err.Error())
 			}
@@ -135,13 +127,13 @@ func doRealUploadFile(contents io.Reader, remote string) Action {
 	return actions
 }
 
-// DoUploadReaderToFile uploads a file to a remote path, using a temporary file in /tmp
+// DoUploadBytesToFile uploads a file to a remote path, using a temporary file in /tmp
 // and then moving it to the final destination with `sudo`.
 // It is important to use a temporary file as uploads are performed as a regular
 // user, while the `mv` is done with `sudo`
-func DoUploadReaderToFile(contents io.Reader, remote string) Action {
+func DoUploadBytesToFile(contents []byte, remote string) Action {
 	if len(remote) == 0 {
-		return ActionError("empty remote path in DoUploadReaderToFile()")
+		return ActionError(fmt.Sprintf("internal error: empty remote path in DoUploadBytesToFile()"))
 	}
 
 	// do not create temporary files for files that are already in the remote temporary directory
@@ -159,18 +151,16 @@ func DoUploadReaderToFile(contents io.Reader, remote string) Action {
 		return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 	}
 
-	return DoWithCleanup(
-		ActionList{
-			DoTry(DoDeleteFile(tmpPath)),
-		},
-		ActionList{
-			DoMessageInfo(fmt.Sprintf("Uploading to %q", remote)),
-			DoMessageDebug(fmt.Sprintf("Uploading to temporary file %q", tmpPath)),
-			doRealUploadFile(contents, tmpPath),
-			DoMkdir(filepath.Dir(remote)),
-			DoMessageDebug(fmt.Sprintf("... and moving to final destination %s", remote)),
-			DoMoveFile(tmpPath, remote),
-		})
+	return DoWithCleanup(ActionList{
+		DoMessageInfo(fmt.Sprintf("Uploading to %q", remote)),
+		DoMessageDebug(fmt.Sprintf("Uploading to temporary file %q", tmpPath)),
+		doRealUploadFile(contents, tmpPath),
+		DoMkdir(filepath.Dir(remote)),
+		DoMessageDebug(fmt.Sprintf("... and moving to final destination %s", remote)),
+		DoMoveFile(tmpPath, remote),
+	}, ActionList{
+		DoTry(DoDeleteFile(tmpPath)),
+	})
 }
 
 // DoUploadFileToFile uploads a local file to a remote file (using a temporary file)
@@ -190,7 +180,12 @@ func DoUploadFileToFile(local string, remote string) Action {
 			return ActionError(fmt.Sprintf("could not open local file %q for uploading to %q: %s", local, remote, err))
 		}
 
-		return DoUploadReaderToFile(f, remote)
+		b, err := ioutil.ReadAll(f)
+		if err != nil {
+			return ActionError(fmt.Sprintf("could not read local file %q for uploading to %q: %s", local, remote, err))
+		}
+
+		return DoUploadBytesToFile(b, remote)
 	})
 }
 
@@ -211,42 +206,40 @@ func DoDownloadFileToWriter(remote string, contents io.WriteCloser) Action {
 	extraOutput := ""
 	var err error
 
-	return DoWithCleanup(
-		ActionList{
-			DoMessage(extraOutput),
-			ActionFunc(func(context.Context) Action {
-				// close the file handler
-				_ = contents.Close()
-				return nil
+	return DoWithCleanup(ActionList{
+		DoMessageDebug(fmt.Sprintf("Dumping remote file %q", remote)),
+		DoSendingExecOutputToFunc(
+			DoExec(command),
+			func(s string) {
+				if strings.Contains(s, markStart) {
+					insideBlock = true
+					return
+				}
+				if strings.Contains(s, markEnd) {
+					insideBlock = false
+					return
+				}
+
+				if insideBlock {
+					if _, err = contents.Write([]byte(s)); err != nil {
+						return
+					}
+
+					if _, err = contents.Write([]byte{'\n'}); err != nil {
+						return
+					}
+				} else {
+					extraOutput += s
+				}
 			}),
-		},
-		ActionList{
-			DoMessageDebug(fmt.Sprintf("Dumping remote file %q", remote)),
-			DoSendingExecOutputToFun(
-				func(s string) {
-					if strings.Contains(s, markStart) {
-						insideBlock = true
-						return
-					}
-					if strings.Contains(s, markEnd) {
-						insideBlock = false
-						return
-					}
-
-					if insideBlock {
-						if _, err = contents.Write([]byte(s)); err != nil {
-							return
-						}
-
-						if _, err = contents.Write([]byte{'\n'}); err != nil {
-							return
-						}
-					} else {
-						extraOutput += s
-					}
-				},
-				DoExec(command)),
-		})
+	}, ActionList{
+		DoMessage(extraOutput),
+		ActionFunc(func(context.Context) Action {
+			// close the file handler
+			_ = contents.Close()
+			return nil
+		}),
+	})
 }
 
 // DoWriteLocalFile writes some string in a local file

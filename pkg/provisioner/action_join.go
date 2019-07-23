@@ -51,7 +51,6 @@ func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
 	}
 
 	actions := ssh.ActionList{
-		doMaybeResetWorker(d, common.DefKubeadmJoinConfPath),
 		ssh.DoRetry(
 			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
 			ssh.ActionList{
@@ -65,7 +64,8 @@ func doKubeadmJoinWorker(d *schema.ResourceData) ssh.Action {
 		ssh.DoRetry(
 			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
 			ssh.ActionList{
-				ssh.DoMessageInfo("Joining the cluster as a worker with 'kubadm join'..."),
+				doMaybeResetWorker(d, common.DefKubeadmJoinConfPath),
+				ssh.DoMessageInfo("Trying to join the cluster as a worker with 'kubadm join'..."),
 				doKubeadm(d, common.DefKubeadmJoinConfPath, "join"),
 			}),
 	}
@@ -110,7 +110,6 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 	}
 
 	actions := ssh.ActionList{
-		doMaybeResetMaster(d, common.DefKubeadmJoinConfPath),
 		ssh.DoRetry(
 			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
 			ssh.ActionList{
@@ -124,7 +123,8 @@ func doKubeadmJoinControlPlane(d *schema.ResourceData) ssh.Action {
 		ssh.DoRetry(
 			ssh.Retry{Times: joinRetryTimes, Interval: joinRetryInterval},
 			ssh.ActionList{
-				ssh.DoMessageInfo("Joining the cluster control-plane with 'kubadm join'..."),
+				ssh.DoMessageInfo("Trying to join the cluster control-plane with 'kubadm join'..."),
+				doMaybeResetMaster(d, common.DefKubeadmJoinConfPath),
 				doUploadCerts(d), // (we must upload certs because a "kubeadm reset" wipes them...)
 				doKubeadm(d, common.DefKubeadmJoinConfPath, "join"),
 			}),

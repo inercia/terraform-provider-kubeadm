@@ -121,7 +121,7 @@ func DoGetNodename(d *schema.ResourceData, node *ssh.KubeNode) ssh.Action {
 		// first, get the machine ID
 		ssh.Debug("trying to get the machine ID...")
 		var buf bytes.Buffer
-		res := ssh.DoSendingExecOutputToWriter(&buf, ssh.DoExec(machineIDCmd)).Apply(ctx)
+		res := ssh.DoSendingExecOutputToWriter(ssh.DoExec(machineIDCmd), &buf).Apply(ctx)
 		if ssh.IsError(res) {
 			return res
 		}
@@ -129,7 +129,8 @@ func DoGetNodename(d *schema.ResourceData, node *ssh.KubeNode) ssh.Action {
 		machineID := strings.TrimSpace(buf.String())
 		ssh.Debug("... machineID: %q", machineID)
 
-		res = ssh.DoSendingExecOutputToFun(
+		res = ssh.DoSendingExecOutputToFunc(
+			ssh.DoRemoteKubectl(kubectl, kubeconfig, kubectlGetNodenameCmd),
 			func(s string) {
 				if len(s) == 0 {
 					return
@@ -146,8 +147,7 @@ func DoGetNodename(d *schema.ResourceData, node *ssh.KubeNode) ssh.Action {
 					node.Nodename = strings.TrimSpace(fields[1])
 					ssh.Debug("... detected nodename %q", node.Nodename)
 				}
-			},
-			ssh.DoRemoteKubectl(kubectl, kubeconfig, kubectlGetNodenameCmd)).Apply(ctx)
+			}).Apply(ctx)
 
 		return res
 	})

@@ -36,7 +36,7 @@ func GetContainer(ctx context.Context, pattern string) (string, error) {
 
 	cmd := fmt.Sprintf(dockerGetContainer, pattern)
 	var buf bytes.Buffer
-	if err := DoSendingExecOutputToWriter(&buf, DoExec(cmd)).Apply(ctx); IsError(err) {
+	if err := DoSendingExecOutputToWriter(DoExec(cmd), &buf).Apply(ctx); IsError(err) {
 		return "", err
 	}
 
