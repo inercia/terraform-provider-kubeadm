@@ -34,7 +34,7 @@ require (
 	k8s.io/kube-proxy v0.0.0-20190314002154-4d735c31b054 // indirect
 	k8s.io/kubelet v0.0.0-20190314002251-f6da02f58325 // indirect
 	k8s.io/kubernetes v1.14.1
-	k8s.io/utils v0.0.0-20190308190857-21c4ce38f2a7 // indirect
+	k8s.io/utils v0.0.0-20190308190857-21c4ce38f2a7
 )
 
 replace k8s.io/client-go => k8s.io/client-go v0.0.0-20190626045420-1ec4b74c7bda

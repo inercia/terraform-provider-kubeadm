@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	// default "admin.conf" file path
+	// DefAdminKubeconfig is the default "admin.conf" file path
 	DefAdminKubeconfig = "/etc/kubernetes/admin.conf"
 )
 
@@ -36,7 +36,7 @@ type Manifest struct {
 
 // NewManifest creates a new manifest
 func NewManifest(m string) Manifest {
-	if isValidUrl(m) {
+	if isValidURL(m) {
 		return Manifest{URL: m}
 	}
 	if LocalFileExists(m) {
@@ -53,14 +53,13 @@ func (m Manifest) IsEmpty() bool {
 	return false
 }
 
-// isValidUrl tests a string to determine if it is a url or not.
-func isValidUrl(toTest string) bool {
+// isValidURL tests a string to determine if it is a url or not.
+func isValidURL(toTest string) bool {
 	_, err := url.ParseRequestURI(toTest)
 	if err != nil {
 		return false
-	} else {
-		return true
 	}
+	return true
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -70,9 +69,11 @@ func isValidUrl(toTest string) bool {
 //
 
 var (
+	// ErrParseNodename is an error parsig the nodename
 	ErrParseNodename = errors.New("error parsing node info line")
 )
 
+// KubeNode is a node info in Kubernetes
 type KubeNode struct {
 	Nodename string
 	IP       string
@@ -90,6 +91,7 @@ func (kn KubeNode) String() string {
 	return name
 }
 
+// IsEmpty returns True iff the KubeNode info is empty
 func (kn KubeNode) IsEmpty() bool {
 	return kn.Nodename == "" && kn.IP == "" && kn.Hostname == ""
 }
@@ -100,8 +102,11 @@ func (kn KubeNode) IsEmpty() bool {
 // it takes care about uploading a valid kubeconfig file if not present in the remote machine
 func DoRemoteKubectl(kubectl string, kubeconfig string, args ...string) Action {
 	argsStr := strings.Join(args, " ")
+
 	return DoIfElse(
-		CheckFileExists(DefAdminKubeconfig),
+		// note on the cache: if present, the "admin.conf" is never deleted,
+		//                    so it is safe to store the result in the cache
+		CheckFileExistsOnce(DefAdminKubeconfig),
 		ActionList{
 			DoExec(fmt.Sprintf("kubectl --kubeconfig=%s %s", DefAdminKubeconfig, argsStr)),
 		},
@@ -120,10 +125,12 @@ func DoRemoteKubectl(kubectl string, kubeconfig string, args ...string) Action {
 
 				return DoRetry(
 					Retry{Times: 3},
-					DoWithCleanup(ActionList{
-						DoUploadFileToFile(kubeconfig, remoteKubeconfig),
-						DoExec(fmt.Sprintf("%s --kubeconfig=%s %s", kubectl, remoteKubeconfig, argsStr)),
-					}, DoTry(DoDeleteFile(remoteKubeconfig))))
+					DoWithCleanup(
+						ActionList{
+							DoUploadFileToFile(kubeconfig, remoteKubeconfig),
+							DoExec(fmt.Sprintf("%s --kubeconfig=%s %s", kubectl, remoteKubeconfig, argsStr)),
+						},
+						DoTry(DoDeleteFile(remoteKubeconfig))))
 			}),
 		})
 }
@@ -142,12 +149,13 @@ func DoRemoteKubectlApply(kubectl string, kubeconfig string, manifests []Manifes
 					if err != nil {
 						return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 					}
-					return DoWithCleanup(ActionList{
-						DoUploadBytesToFile([]byte(manifest.Inline), remoteManifest),
-						DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
-					}, ActionList{
-						DoTry(DoDeleteFile(remoteManifest)),
-					})
+					return DoWithCleanup(
+						ActionList{
+							DoUploadBytesToFile([]byte(manifest.Inline), remoteManifest),
+							DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
+						}, ActionList{
+							DoTry(DoDeleteFile(remoteManifest)),
+						})
 				}))
 
 		case manifest.Path != "":
@@ -158,12 +166,13 @@ func DoRemoteKubectlApply(kubectl string, kubeconfig string, manifests []Manifes
 					if err != nil {
 						return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 					}
-					return DoWithCleanup(ActionList{
-						DoUploadFileToFile(manifest.Path, remoteManifest),
-						DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
-					}, ActionList{
-						DoTry(DoDeleteFile(remoteManifest)),
-					})
+					return DoWithCleanup(
+						ActionList{
+							DoUploadFileToFile(manifest.Path, remoteManifest),
+							DoRemoteKubectl(kubectl, kubeconfig, "apply", "-f", remoteManifest),
+						}, ActionList{
+							DoTry(DoDeleteFile(remoteManifest)),
+						})
 				}))
 
 		case manifest.URL != "":

@@ -250,7 +250,9 @@ func CheckBinaryExists(cmd string) CheckerFunc {
 		// if it prints the full path: check it is really there
 		if path.IsAbs(s) {
 			Debug("checking file %q exists at %q", cmd, s)
-			return CheckFileExists(s).Check(ctx)
+			return CheckOnce(
+				fmt.Sprintf("path-command-%s", s),
+				CheckFileExists(s)).Check(ctx)
 		}
 
 		// otherwise, just fail

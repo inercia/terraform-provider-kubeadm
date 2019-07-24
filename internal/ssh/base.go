@@ -37,8 +37,8 @@ const (
 
 // Action is an action that can be "applied"
 type Action interface {
-	error
 	Apply(context.Context) Action
+	Error() string
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -73,6 +73,7 @@ func (ae ActionError) Error() string {
 	return string(ae)
 }
 
+// IsError returns True if it is an error
 func IsError(a Action) bool {
 	if a == nil {
 		return false
@@ -87,7 +88,7 @@ func IsError(a Action) bool {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // applyList runs a list of actions, optionally ignoring errors
-func applyList(actions ActionList, ignoreErrors bool, ctx context.Context) Action {
+func applyList(ctx context.Context, actions ActionList, ignoreErrors bool) Action {
 	// use a queue where we take and put things in the front
 	// note that we operate on a copy of the original actions list
 	for len(actions) > 0 {
@@ -137,7 +138,7 @@ type ActionList []Action
 
 // Apply applies an action
 func (actions ActionList) Apply(ctx context.Context) Action {
-	return applyList(actions, false, ctx)
+	return applyList(ctx, actions, false)
 }
 
 func (actions ActionList) Error() string {
@@ -158,10 +159,12 @@ func DoNothing() Action {
 	})
 }
 
+// Debug prints a debug message
 func Debug(format string, args ...interface{}) {
 	log.Printf("[DEBUG] [KUBEADM] "+format, args...)
 }
 
+// DoMessageRaw prints a raw message
 func DoMessageRaw(msg string) Action {
 	return ActionFunc(func(ctx context.Context) Action {
 		output := GetUserOutputFromContext(ctx)
@@ -170,6 +173,7 @@ func DoMessageRaw(msg string) Action {
 	})
 }
 
+// DoMessageWithColor prints a message with some color
 func DoMessageWithColor(msg string, c color.Color) Action {
 	return DoMessageRaw(commonMsgPrefix + c.Render(msg))
 }
@@ -179,11 +183,13 @@ func DoMessage(format string, args ...interface{}) Action {
 	return DoMessageWithColor(fmt.Sprintf(format, args...), color.FgLightGreen)
 }
 
+// DoMessageWarn prints a warning message
 func DoMessageWarn(format string, args ...interface{}) Action {
 	msg := fmt.Sprintf("WARNING: "+format, args...)
 	return DoMessageWithColor(msg, color.FgRed)
 }
 
+// DoMessageInfo prints an info message
 func DoMessageInfo(format string, args ...interface{}) Action {
 	return DoMessageWithColor(fmt.Sprintf(format, args...), color.FgGreen)
 }
@@ -231,12 +237,23 @@ func DoWithCleanup(actions Action, cleanup Action) Action {
 	})
 }
 
-// DoWithError runs some action and, if some error happens, runs the exception
+// DoWithException runs some action and, if some error happens, runs the exception
 func DoWithException(actions Action, exc Action) Action {
 	return ActionFunc(func(ctx context.Context) Action {
 		res := ActionList{actions}.Apply(ctx)
 		if IsError(res) {
 			_ = ActionList{exc}.Apply(ctx)
+		}
+		return res
+	})
+}
+
+// DoWithSuccess runs some action and, if no error happend, runs a success action
+func DoWithSuccess(actions Action, suc Action) Action {
+	return ActionFunc(func(ctx context.Context) Action {
+		res := ActionList{actions}.Apply(ctx)
+		if !IsError(res) {
+			_ = ActionList{suc}.Apply(ctx)
 		}
 		return res
 	})
@@ -279,7 +296,7 @@ func DoTry(action Action) Action {
 	return ActionFunc(func(ctx context.Context) Action {
 		switch v := action.(type) {
 		case ActionList:
-			return applyList(v, true, ctx)
+			return applyList(ctx, v, true)
 		default:
 			res := ActionList{v}.Apply(ctx)
 			if IsError(res) {
@@ -313,7 +330,7 @@ func DoRetry(run Retry, actions ...Action) ActionFunc {
 			if IsError(res) {
 				_ = DoMessageWarn("failed... retrying in %d seconds...", interval/time.Second).Apply(ctx)
 				time.Sleep(interval)
-				count -= 1
+				count--
 			} else {
 				return res
 			}
@@ -354,6 +371,10 @@ func DoSendingExecOutputToDevNull(action Action) Action {
 	})
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// checks
+///////////////////////////////////////////////////////////////////////////////
+
 // CheckExpr returns the result of the boolean expression
 func CheckExpr(expr bool) CheckerFunc {
 	return CheckerFunc(func(context.Context) (bool, error) {
@@ -372,10 +393,12 @@ func CheckAction(action Action) CheckerFunc {
 	})
 }
 
+// CheckFailed is a check that always returns false
 func CheckFailed() CheckerFunc {
 	return CheckExpr(false)
 }
 
+// CheckError is a check that always returns an error
 func CheckError(err error) CheckerFunc {
 	return CheckerFunc(func(context.Context) (bool, error) {
 		return false, err

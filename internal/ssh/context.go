@@ -36,12 +36,17 @@ func (f OutputFunc) Output(s string) { f(s) }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
+type cache map[string]interface{}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
 // sshContext is the "internal" context we pass around
 type sshContext struct {
 	useSudo    bool
 	userOutput UIOutput
 	execOutput UIOutput
 	comm       communicator.Communicator
+	cache      cache
 }
 
 // WithValues creates a new "internal" SSH context
@@ -51,6 +56,7 @@ func WithValues(ctx context.Context, userOutput UIOutput, execOutput UIOutput, c
 		userOutput: userOutput,
 		execOutput: execOutput,
 		comm:       comm,
+		cache:      cache{},
 	})
 }
 
@@ -72,10 +78,39 @@ func GetUserOutputFromContext(ctx context.Context) UIOutput {
 	return getSSHContext(ctx).userOutput
 }
 
+// GetExecOutputFromContext gets the exec output from the current context
 func GetExecOutputFromContext(ctx context.Context) UIOutput {
 	return getSSHContext(ctx).execOutput
 }
 
+// GetCommFromContext gets the communicator from the current context
 func GetCommFromContext(ctx context.Context) communicator.Communicator {
 	return getSSHContext(ctx).comm
+}
+
+// GetCacheFromContext gets the cache from the current context
+func GetCacheFromContext(ctx context.Context) cache {
+	return getSSHContext(ctx).cache
+}
+
+// GetFromCacheInContext gets a value from the cache
+func GetFromCacheInContext(ctx context.Context, key string) (interface{}, bool) {
+	c := GetCacheFromContext(ctx)
+	value, ok := c[key]
+	Debug("[CACHE] getting %q [found:%t] = %v ", key, ok, value)
+	return value, ok
+}
+
+// SetInCacheInContext sets a value in the cache
+func SetInCacheInContext(ctx context.Context, key string, value interface{}) {
+	c := GetCacheFromContext(ctx)
+	Debug("[CACHE] setting %q = %v", key, value)
+	c[key] = value
+}
+
+// DelInCacheInContext removes akey in the cache
+func DelInCacheInContext(ctx context.Context, key string) {
+	c := GetCacheFromContext(ctx)
+	Debug("[CACHE] deleting %q", key)
+	delete(c, key)
 }
