@@ -328,7 +328,7 @@ func DoRetry(run Retry, actions ...Action) ActionFunc {
 // * make sure you strip spaces in the output, as some extra spaces can be before/after
 func DoSendingExecOutputToFunc(action Action, interceptor OutputFunc) Action {
 	return ActionFunc(func(ctx context.Context) Action {
-		newCtx := NewContext(ctx, GetUserOutputFromContext(ctx), interceptor, GetCommFromContext(ctx), GetUseSudoFromContext(ctx))
+		newCtx := WithValues(ctx, GetUserOutputFromContext(ctx), interceptor, GetCommFromContext(ctx), GetUseSudoFromContext(ctx))
 		return ActionList{action}.Apply(newCtx)
 	})
 }
@@ -424,9 +424,3 @@ func CheckNot(check Checker) CheckerFunc {
 		return !res, nil
 	})
 }
-
-// //////////////////////////////////////////////////////////////////////////////////////
-
-type OutputFunc func(s string)
-
-func (f OutputFunc) Output(s string) { f(s) }

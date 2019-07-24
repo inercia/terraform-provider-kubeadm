@@ -66,7 +66,7 @@ func applyFn(ctx context.Context) error {
 	}
 
 	// add some extra things to the context
-	newCtx := ssh.NewContext(ctx, o, o, comm, useSudo)
+	newCtx := ssh.WithValues(ctx, o, o, comm, useSudo)
 
 	//
 	// resource destruction

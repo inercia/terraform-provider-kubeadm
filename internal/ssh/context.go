@@ -18,25 +18,34 @@ import (
 	"context"
 
 	"github.com/hashicorp/terraform/communicator"
-	"github.com/hashicorp/terraform/terraform"
 )
 
 const (
 	sshContextKey = contextKey("ssh")
 )
 
+// UIOutput is the interface that must be implemented to output
+// data to the end user.
+type UIOutput interface {
+	Output(string)
+}
+
+type OutputFunc func(s string)
+
+func (f OutputFunc) Output(s string) { f(s) }
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // sshContext is the "internal" context we pass around
 type sshContext struct {
 	useSudo    bool
-	userOutput terraform.UIOutput
-	execOutput terraform.UIOutput
+	userOutput UIOutput
+	execOutput UIOutput
 	comm       communicator.Communicator
 }
 
-// NewContext creates a new "internal" SSH context
-func NewContext(ctx context.Context, userOutput terraform.UIOutput, execOutput terraform.UIOutput, comm communicator.Communicator, useSudo bool) context.Context {
+// WithValues creates a new "internal" SSH context
+func WithValues(ctx context.Context, userOutput UIOutput, execOutput UIOutput, comm communicator.Communicator, useSudo bool) context.Context {
 	return context.WithValue(ctx, sshContextKey, sshContext{
 		useSudo:    useSudo,
 		userOutput: userOutput,
@@ -59,11 +68,11 @@ func GetUseSudoFromContext(ctx context.Context) bool {
 }
 
 // GetUserOutputFromContext gets the user output
-func GetUserOutputFromContext(ctx context.Context) terraform.UIOutput {
+func GetUserOutputFromContext(ctx context.Context) UIOutput {
 	return getSSHContext(ctx).userOutput
 }
 
-func GetExecOutputFromContext(ctx context.Context) terraform.UIOutput {
+func GetExecOutputFromContext(ctx context.Context) UIOutput {
 	return getSSHContext(ctx).execOutput
 }
 

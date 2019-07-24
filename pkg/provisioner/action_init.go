@@ -45,7 +45,7 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 	actions := ssh.ActionList{
 		// * if a "admin.conf" is there and the cluster is alive, do nothing
 		//   (just try to reload CNI, Helm and so)
-		// * if a partial setup is detected (ie, cluster is not alive, some manifests are there...)
+		// * if a partial setup is detected (ie, cluster is not alive but some manifests are there...)
 		//   try to reset the node
 		// * in any other case, do a regular "kubeadm init"
 		doDeleteLocalKubeconfig(d),
@@ -55,11 +55,11 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 				ssh.DoMessageInfo("There is a 'admin.conf' in this master pointing to a live cluster: skipping any setup"),
 			},
 			ssh.ActionList{
-				doMaybeResetMaster(d, common.DefKubeadmInitConfPath),
-				doUploadCerts(d), // (we must upload certs because a "kubeadm reset" wipes them...)
 				ssh.DoRetry(
 					ssh.Retry{Times: 3, Interval: 15 * time.Second},
 					ssh.ActionList{
+						doMaybeResetMaster(d, common.DefKubeadmInitConfPath),
+						doUploadCerts(d), // (we must upload certs because a "kubeadm reset" wipes them...)
 						ssh.DoMessageInfo("Initializing the cluster with 'kubadm init'..."),
 						doKubeadm(d, common.DefKubeadmInitConfPath, "init", extraArgs...),
 					},
