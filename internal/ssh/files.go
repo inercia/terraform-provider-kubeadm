@@ -102,8 +102,7 @@ func doRealUploadFile(contents []byte, remote string) Action {
 	dir := filepath.Dir(remote)
 
 	actions := ActionList{
-		DoMessageDebug(fmt.Sprintf("Making sure directory '%s' is there", dir)),
-		DoMkdir(dir),
+		DoMkdirOnce(dir),
 		DoMessageDebug(fmt.Sprintf("Making sure '%s' does not exist", remote)),
 		DoDeleteFile(remote),
 		ActionFunc(func(ctx context.Context) Action {
@@ -136,10 +135,12 @@ func DoUploadBytesToFile(contents []byte, remote string) Action {
 		return ActionError(fmt.Sprintf("internal error: empty remote path in DoUploadBytesToFile()"))
 	}
 
+	dir := filepath.Dir(remote)
+
 	// do not create temporary files for files that are already in the remote temporary directory
 	if IsTempFilename(remote) {
 		return ActionList{
-			DoMkdir(filepath.Dir(remote)),
+			DoMkdirOnce(dir),
 			doRealUploadFile(contents, remote),
 		}
 	}
@@ -155,7 +156,7 @@ func DoUploadBytesToFile(contents []byte, remote string) Action {
 		DoMessageInfo(fmt.Sprintf("Uploading to %q", remote)),
 		DoMessageDebug(fmt.Sprintf("Uploading to temporary file %q", tmpPath)),
 		doRealUploadFile(contents, tmpPath),
-		DoMkdir(filepath.Dir(remote)),
+		DoMkdirOnce(dir),
 		DoMessageDebug(fmt.Sprintf("... and moving to final destination %s", remote)),
 		DoMoveFile(tmpPath, remote),
 	}, ActionList{
@@ -264,7 +265,10 @@ func DoDeleteFile(path string) Action {
 	if path == "" {
 		return ActionError("empty remote file name to remove")
 	}
-	return DoExec(fmt.Sprintf("rm -f %q", path))
+	return ActionList{
+		DoExec(fmt.Sprintf("rm -f %q", path)),
+		DoRemoveFromCache(CacheRemoteFileExistsPrefix + "-" + path),
+	}
 }
 
 // DoDeleteLocalFile removes a local file
@@ -299,9 +303,20 @@ func DoDownloadFile(remote, local string) Action {
 	})
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+// checks
+///////////////////////////////////////////////////////////////////////////////////////
+
 // CheckFileExists checks that a remote file exists
 func CheckFileExists(path string) CheckerFunc {
 	return CheckExec(fmt.Sprintf("[ -f %s ]", path))
+}
+
+// CheckFileExistsOnce checks that a remote file exists (but only once)
+func CheckFileExistsOnce(path string) CheckerFunc {
+	return CheckOnce(
+		CacheRemoteFileExistsPrefix+"-"+path,
+		CheckFileExists(path))
 }
 
 // CheckFileAbsent checks that a remote file does not exists

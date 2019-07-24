@@ -28,10 +28,11 @@ const (
 )
 
 var (
+	// ErrContainerNotFound is the container has not been found
 	ErrContainerNotFound = errors.New("container not found")
 )
 
-// getContainer returns the ID of a container
+// GetContainer returns the ID of a container
 func GetContainer(ctx context.Context, pattern string) (string, error) {
 
 	cmd := fmt.Sprintf(dockerGetContainer, pattern)

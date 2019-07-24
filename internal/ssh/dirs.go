@@ -27,6 +27,15 @@ func DoMkdir(path string) Action {
 	}
 }
 
+// DoMkdirOnce creates a remote directory (only once).
+// We don't really delete any remote directory, so running a `mkdir` for a
+// remote directory only once can be considered safe.
+func DoMkdirOnce(dir string) Action {
+	return DoOnce(
+		CacheRemoteDirExistsPrefix+"-"+dir,
+		DoMkdir(dir))
+}
+
 // CheckDirExists checks that a directory exists
 func CheckDirExists(path string) CheckerFunc {
 	return CheckExec(fmt.Sprintf("[ -d '%s' ]", path))

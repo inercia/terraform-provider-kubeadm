@@ -90,12 +90,6 @@ func TestDoSendingOutput(t *testing.T) {
 	}
 }
 
-//func doLazy(af ActionFunc) func()Action {
-//	return func()Action {
-//		af.Apply()
-//	}
-//}
-
 func DoLazy(af ActionFunc) func() Action {
 	return func() Action {
 		return ActionFunc(func(ctx context.Context) Action {
@@ -420,7 +414,7 @@ func TestDoRetry(t *testing.T) {
 	actions := ActionList{
 		DoRetry(Retry{Times: 3, Interval: 100 * time.Millisecond},
 			ActionFunc(func(context.Context) Action {
-				count += 1
+				count++
 				return ActionError("an error")
 			}),
 		),

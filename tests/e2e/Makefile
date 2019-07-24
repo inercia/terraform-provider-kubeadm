@@ -59,4 +59,5 @@ ci-tests:
             fi ; \
 		done ; \
 	done
+	@echo -e ">>>$(GREEN) All e2e tests have completed$(NC)"
 

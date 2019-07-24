@@ -103,7 +103,7 @@ func (dc dummyCommunicatorWithResponses) Start(cmd *remote.Cmd) error {
 		cmd.Stdout.Write([]byte(dc.responses[*dc.counter]))
 	}
 	cmd.SetExitStatus(0, nil)
-	*dc.counter += 1
+	*dc.counter++
 	return nil
 }
 
@@ -131,6 +131,8 @@ func NewTestingContextWithResponses(responses []string) context.Context {
 	return NewTestingContextWithCommunicator(comm)
 }
 
+// NewTestingContextForUploads creates a new context prepared
+// for doing fake uploads
 func NewTestingContextForUploads(responses []string) (context.Context, *map[string]int) {
 	// we must keep the "counter" out of the communicator object as this
 	// object is inmutable... :-/
