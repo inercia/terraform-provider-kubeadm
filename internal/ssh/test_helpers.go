@@ -80,7 +80,7 @@ func (_ DummyCommunicator) UploadDir(string, string) error {
 func NewTestingContextWithCommunicator(comm communicator.Communicator) context.Context {
 	ctx := context.Background()
 	out := DummyOutput{}
-	return NewContext(ctx, out, out, comm, false)
+	return WithValues(ctx, out, out, comm, false)
 }
 
 func NewTestingContext() context.Context {
