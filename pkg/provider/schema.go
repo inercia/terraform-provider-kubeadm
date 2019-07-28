@@ -269,8 +269,8 @@ func dataSourceKubeadm() *schema.Resource {
 							Type:         schema.TypeString,
 							Optional:     true,
 							Default:      common.DefRuntimeEngine,
-							Description:  "runtime engine: docker or crio",
-							ValidateFunc: validation.StringInSlice([]string{"crio", "docker"}, true),
+							Description:  "runtime engine: docker, containerd or crio",
+							ValidateFunc: validation.StringInSlice([]string{"crio", "containerd", "docker"}, true),
 						},
 						"extra_args": {
 							Type:     schema.TypeList,
