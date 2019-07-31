@@ -153,8 +153,8 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 		"config_path":         kubeconfig,
 		"cni_plugin":          d.Get("cni.0.plugin").(string),
 		"cni_plugin_manifest": d.Get("cni.0.plugin_manifest").(string),
-		"helm_enabled":        fmt.Sprintf("%t", d.Get("addons.0.helm").(bool)),
-		"dashboard_enabled":   fmt.Sprintf("%t", d.Get("addons.0.dashboard").(bool)),
+		"helm_enabled":        fmt.Sprintf("%t", d.Get("helm.0.install").(bool)),
+		"dashboard_enabled":   fmt.Sprintf("%t", d.Get("dashboard.0.install").(bool)),
 		"certs_dir":           initConfig.CertificatesDir,
 	}
 

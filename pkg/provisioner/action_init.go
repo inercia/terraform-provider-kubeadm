@@ -72,7 +72,7 @@ func doKubeadmInit(d *schema.ResourceData) ssh.Action {
 		doLoadDashboard(d),
 		doLoadHelm(d),
 		doLoadCloudProviderManager(d),
-		doLoadManifests(d),
+		doLoadExtraManifests(d),
 	}
 	return actions
 }

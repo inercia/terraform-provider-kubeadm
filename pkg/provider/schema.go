@@ -68,20 +68,30 @@ func dataSourceKubeadm() *schema.Resource {
 					},
 				},
 			},
-			"addons": {
+			"helm": {
 				Type:     schema.TypeList,
 				Optional: true,
 				ForceNew: true,
 				MaxItems: 1,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"helm": {
+						"install": {
 							Type:        schema.TypeBool,
 							Default:     false,
 							Optional:    true,
 							Description: "install Helm",
 						},
-						"dashboard": {
+					},
+				},
+			},
+			"dashboard": {
+				Type:     schema.TypeList,
+				Optional: true,
+				ForceNew: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"install": {
 							Type:        schema.TypeBool,
 							Default:     false,
 							Optional:    true,

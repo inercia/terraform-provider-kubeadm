@@ -39,6 +39,14 @@ resource "kubeadm" "main" {
     #       switching to Docker solves those problems...
     engine = "docker"
   }
+
+  helm {
+    install = true
+  }
+
+  dashboard {
+    install = true
+  }
 }
 
 #####################
