@@ -425,9 +425,12 @@ resource "kubeadm" "main" {
     plugin = "flannel"
   }
 
-  addons {
-    helm      = "true"
-    dashboard = "true"
+  helm {
+    install = true
+  }
+
+  dashboard {
+    install = true
   }
 }
 

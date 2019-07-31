@@ -92,7 +92,7 @@ type dummyCommunicatorWithResponses struct {
 
 	responses []string
 	counter   *int
-	uploads   map[string]int
+	uploads   *(map[string]string)
 }
 
 func (dc dummyCommunicatorWithResponses) Start(cmd *remote.Cmd) error {
@@ -109,13 +109,13 @@ func (dc dummyCommunicatorWithResponses) Start(cmd *remote.Cmd) error {
 
 func (dc dummyCommunicatorWithResponses) Upload(dst string, r io.Reader) error {
 	all, _ := ioutil.ReadAll(r)
-	dc.uploads[dst] = len(all)
+	(*dc.uploads)[dst] = string(all)
 	return nil
 }
 
 func (dc dummyCommunicatorWithResponses) UploadScript(dst string, r io.Reader) error {
 	all, _ := ioutil.ReadAll(r)
-	dc.uploads[dst] = len(all)
+	(*dc.uploads)[dst] = string(all)
 	return nil
 }
 
@@ -127,17 +127,24 @@ func NewTestingContextWithResponses(responses []string) context.Context {
 	// we must keep the "counter" out of the communicator object as this
 	// object is inmutable... :-/
 	counter := 0
-	comm := dummyCommunicatorWithResponses{responses: responses, counter: &counter}
+	comm := dummyCommunicatorWithResponses{
+		responses: responses,
+		counter:   &counter,
+	}
 	return NewTestingContextWithCommunicator(comm)
 }
 
 // NewTestingContextForUploads creates a new context prepared
 // for doing fake uploads
-func NewTestingContextForUploads(responses []string) (context.Context, *map[string]int) {
+func NewTestingContextForUploads(responses []string) (context.Context, *map[string]string) {
 	// we must keep the "counter" out of the communicator object as this
 	// object is inmutable... :-/
-	uploads := map[string]int{}
+	uploads := map[string]string{}
 	counter := 0
-	comm := dummyCommunicatorWithResponses{responses: responses, counter: &counter, uploads: uploads}
+	comm := dummyCommunicatorWithResponses{
+		responses: responses,
+		counter:   &counter,
+		uploads:   &uploads,
+	}
 	return NewTestingContextWithCommunicator(comm), &uploads
 }

@@ -38,22 +38,13 @@ administrative privileges.
 * `cloud` - (Optional) cloud provider configuration (see section below).
 * `cni` - (Optional) CNI configuration (see section below).
 * `etcd`  - (Optional) `etcd` configuration (see section below).
+* `helm` - (Optional) Helm options (see section below).
 * `images`  - (Optional) images used for running the different services (see section below).
 * `network` - (Optional) network configuration (see section below).
 * `runtime` - (Optional) runtime and operational configuration (see section below).
 * `version`  - (Optional) kubernetes version.
 
 ## Nested Blocks
-
-### `addons`
-
-The `addons` block provides flags for enabling/disabling and configuring
-different addons that can be deployed to the cluster.
-
-#### Arguments
-
-* `dashboard` - (Optional) when `true`, deploy the Kubernetes Dashboard.
-* `helm` - (Optional) when `true`, deploy Helm.
 
 ### `api`
 
@@ -112,9 +103,8 @@ resource "kubeadm" "k8s" {
     }
   }
 }
-
-
 ```
+
 #### Arguments
 
 * `plugin` - (Optional) when not empty, name of the CNI plugin to load in the
@@ -229,57 +219,6 @@ Notes:
   certifciates and to [use kubeadm for rotating certificates](https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-certs/). 
   
 
-### `network`
-
-The `network` block is used for configuring the network.
-
-#### Arguments
-
-Example:
-```hcl
-resource "kubeadm" "main" {
-  network {
-    dns_domain = "mycluster.com"
-    services   = "10.25.0.0/16"
-  }
-}
-```
-
-* `services` - (Optional) subnet used by k8s services. Defaults to `10.96.0.0/12`.
-* `pods` - (Optional) subnet used by pods.
-* `dns_domain` - (Optional) DNS domain used by k8s services. Defaults to `cluster.local`.
-
-### `images`
-
-The `images` block provides a way for changing the images used for running
-the control plane in the cluster.
-
-#### Arguments
-
-* `kube_repo` - (Optional) the kubernetes images repository.
-* `etcd_repo` - (Optional) the etcd image repository.
-* `etcd_version` - (Optional) the etcd version.
-
-### `etcd`
-
-The `etcd` block can be used for using an external etcd cluster, providing
-the endpoints that will be used.
-
-Example:
-
-```hcl
-resource "kubeadm" "main" {
-  etcd {
-    endpoints = ["server1.com:2379", "server2.com:2379"]
-  }
-}
-```
-
-#### Arguments
-
-* `endpoints` - (Optional) list of etcd servers URLs, as `host:port`.
-
-
 ### `cloud`
 
 The `cloud` block provides some configuration for  the cloud provider.
@@ -314,6 +253,73 @@ to use. Can be `aws`, `azure`, `cloudstack`, `gce`, `openstack`, etc.
 * `config` - (Optional) the Cloud Provider configuration. This can be read from a file
 (with something like `file("${path.module}/cloud.conf")`), from a `template` or provided 
 inline with a _heredoc_ block.
+
+### `dashboard`
+
+The `dashboard` block provides flags for enabling/disabling the Dashboard 
+and configuring different aspects.
+
+#### Arguments
+
+* `install` - (Optional) when `true`, deploy the Kubernetes Dashboard.
+
+### `helm`
+
+The `helm` block provides a way for enabling and configuring [Helm](https://helm.sh).
+
+#### Arguments
+
+* `install` - (Optional) when `true`, deploy _Tiller_ (the server side of _Helm_) in the cluster.
+
+### `images`
+
+The `images` block provides a way for changing the images used for running
+the control plane in the cluster.
+
+#### Arguments
+
+* `kube_repo` - (Optional) the kubernetes images repository.
+* `etcd_repo` - (Optional) the etcd image repository.
+* `etcd_version` - (Optional) the etcd version.
+
+### `etcd`
+
+The `etcd` block can be used for using an external etcd cluster, providing
+the endpoints that will be used.
+
+Example:
+
+```hcl
+resource "kubeadm" "main" {
+  etcd {
+    endpoints = ["server1.com:2379", "server2.com:2379"]
+  }
+}
+```
+
+#### Arguments
+
+* `endpoints` - (Optional) list of etcd servers URLs, as `host:port`.
+
+### `network`
+
+The `network` block is used for configuring the network.
+
+#### Arguments
+
+Example:
+```hcl
+resource "kubeadm" "main" {
+  network {
+    dns_domain = "mycluster.com"
+    services   = "10.25.0.0/16"
+  }
+}
+```
+
+* `services` - (Optional) subnet used by k8s services. Defaults to `10.96.0.0/12`.
+* `pods` - (Optional) subnet used by pods.
+* `dns_domain` - (Optional) DNS domain used by k8s services. Defaults to `cluster.local`.
 
 ### `runtime`
 
