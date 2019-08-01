@@ -179,13 +179,11 @@ func doLoadCloudProviderManager(d *schema.ResourceData) ssh.Action {
 		return nil
 	}
 
-	config := d.Get("config").(map[string]interface{})
-	replaced, err := common.ReplaceInTemplate(assets.CloudProviderCode, config)
+	manifest := ssh.Manifest{Inline: assets.CloudProviderCode}
+	err := manifest.ReplaceConfig(common.GetProvisionerConfig(d))
 	if err != nil {
 		return ssh.ActionError(fmt.Sprintf("could not replace variables in cloud controller manager manifest for %q: %s", cloudProvider, err))
 	}
-	manifest := ssh.Manifest{Inline: replaced}
-
 	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Loading cloud controller manager for %q", cloudProvider),
 		doRemoteKubectlApply(d, []ssh.Manifest{manifest}),

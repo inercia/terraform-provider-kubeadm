@@ -139,7 +139,7 @@ func InitConfigToResourceData(d *schema.ResourceData, initConfig *kubeadmapi.Ini
 	}
 
 	// update the config.init
-	config := d.Get("config").(map[string]interface{})
+	config := GetProvisionerConfig(d)
 	config["init"] = ToTerraformSafeString(initConfigBytes[:])
 	if err := d.Set("config", config); err != nil {
 		return fmt.Errorf("cannot update config.init")
@@ -238,7 +238,7 @@ func JoinConfigToResourceData(d *schema.ResourceData, joinConfig *kubeadmapi.Joi
 	}
 
 	// update the config.join
-	config := d.Get("config").(map[string]interface{})
+	config := GetProvisionerConfig(d)
 	config["join"] = ToTerraformSafeString(joinConfigBytes[:])
 	if err := d.Set("config", config); err != nil {
 		return fmt.Errorf("cannot update config.join")

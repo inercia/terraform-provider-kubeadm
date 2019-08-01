@@ -15,11 +15,9 @@
 package common
 
 import (
-	"bytes"
 	"io/ioutil"
 	"net/url"
 	"strings"
-	"text/template"
 )
 
 const (
@@ -50,18 +48,4 @@ func GetSafeLocalTempDirectory() (string, error) {
 		return "", err
 	}
 	return t, nil
-}
-
-// ReplaceInTemplate performs replacements in an input text
-func ReplaceInTemplate(text string, replacements map[string]interface{}) (string, error) {
-	tmpl, err := template.New("template").Parse(text)
-	if err != nil {
-		return "", err
-	}
-
-	b := bytes.Buffer{}
-	if err := tmpl.Execute(&b, replacements); err != nil {
-		return "", err
-	}
-	return b.String(), nil
 }

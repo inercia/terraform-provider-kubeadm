@@ -111,7 +111,7 @@ func (c *CertsConfig) FromMap(m map[string]interface{}) error {
 // FromResourceDataConfig loads the certificates config info
 // from the "config" map in the ResourceData provided
 func (c *CertsConfig) FromResourceDataConfig(d *schema.ResourceData) error {
-	certsMap := d.Get("config").(map[string]interface{})
+	certsMap := GetProvisionerConfig(d)
 	if err := c.FromMap(certsMap); err != nil {
 		return err
 	}
