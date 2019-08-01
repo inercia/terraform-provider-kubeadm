@@ -158,16 +158,22 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 		"certs_dir":           initConfig.CertificatesDir,
 	}
 
-	if cniConfigDir, ok := initConfig.NodeRegistration.KubeletExtraArgs["cni-conf-dir"]; ok {
-		provConfig["cni_conf_dir"] = cniConfigDir
+	if cniConfigDir, ok := d.GetOk("cni.0.conf_dir"); ok {
+		provConfig["cni_conf_dir"] = cniConfigDir.(string)
 	} else {
 		provConfig["cni_conf_dir"] = common.DefCniConfDir
 	}
 
-	if version, ok := d.GetOk("version"); ok {
-		provConfig["kube_version"] = version.(string)
+	if cniBinDir, ok := d.GetOk("cni.0.bin_dir"); ok {
+		provConfig["cni_bin_dir"] = cniBinDir.(string)
 	} else {
-		provConfig["kube_version"] = common.DefKubernetesVersion
+		provConfig["cni_bin_dir"] = common.DefCniBinDir
+	}
+
+	if p, ok := d.GetOk("network.0.pods"); ok {
+		provConfig["cni_pod_cidr"] = p.(string)
+	} else {
+		provConfig["cni_pod_cidr"] = common.DefPodCIDR
 	}
 
 	if fb, ok := d.GetOk("cni.0.flannel.0.backend"); ok {
@@ -182,10 +188,10 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 		provConfig["flannel_image_version"] = common.DefFlannelImageVersion
 	}
 
-	if p, ok := d.GetOk("network.0.pods"); ok {
-		provConfig["cni_pod_cidr"] = p.(string)
+	if version, ok := d.GetOk("version"); ok {
+		provConfig["kube_version"] = version.(string)
 	} else {
-		provConfig["cni_pod_cidr"] = common.DefPodCIDR
+		provConfig["kube_version"] = common.DefKubernetesVersion
 	}
 
 	if cloudProviderRaw, ok := d.GetOk("cloud.0.provider"); ok && len(cloudProviderRaw.(string)) > 0 {

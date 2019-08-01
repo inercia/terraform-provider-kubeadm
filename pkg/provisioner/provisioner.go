@@ -25,7 +25,6 @@ import (
 
 	"github.com/inercia/terraform-provider-kubeadm/internal/assets"
 	"github.com/inercia/terraform-provider-kubeadm/internal/ssh"
-	"github.com/inercia/terraform-provider-kubeadm/pkg/common"
 )
 
 var (
@@ -85,6 +84,14 @@ func applyFn(ctx context.Context) error {
 
 	actions := ssh.ActionList{}
 
+	if s.Tainted {
+		actions = append(actions, ssh.DoMessageInfo("This node will be recreated"))
+		// TODO: maybe we should exit here
+	}
+	if d.IsNewResource() {
+		actions = append(actions, ssh.DoMessageInfo("New resource: provisioning"))
+	}
+
 	// add the actions for installing kubeadm
 	actions = append(actions, doKubeadmSetup(d))
 
@@ -92,32 +99,15 @@ func applyFn(ctx context.Context) error {
 	join := getJoinFromResourceData(d)
 	role := getRoleFromResourceData(d)
 
-	// NOTE: the "install" block is optional, so there will be no
-	// default values for "install.0.XXX" if the "install" block has not been given...
-	sysconfigPath := d.Get("install.0.sysconfig_path").(string)
-	if len(sysconfigPath) == 0 {
-		sysconfigPath = common.DefKubeletSysconfigPath
-	}
-
-	servicePath := d.Get("install.0.service_path").(string)
-	if len(servicePath) == 0 {
-		servicePath = common.DefKubeletServicePath
-	}
-
-	dropinPath := d.Get("install.0.dropin_path").(string)
-	if len(dropinPath) == 0 {
-		dropinPath = common.DefKubeadmDropinPath
-	}
-
 	// some common actions to do BEFORE doing initting/joining
 	actions = append(actions,
 		ssh.DoMessageInfo("Checking we have the required binaries..."),
 		doCheckCommonBinaries(d),
 		doPrepareCRI(),
 		ssh.DoEnableService("kubelet.service"),
-		ssh.DoUploadBytesToFile([]byte(assets.KubeletSysconfigCode), sysconfigPath),
-		ssh.DoUploadBytesToFile([]byte(assets.KubeletServiceCode), servicePath),
-		ssh.DoUploadBytesToFile([]byte(assets.KubeadmDropinCode), dropinPath),
+		ssh.DoUploadBytesToFile([]byte(assets.KubeletSysconfigCode), getSysconfigPathFromResourceData(d)),
+		ssh.DoUploadBytesToFile([]byte(assets.KubeletServiceCode), getServicePathFromResourceData(d)),
+		ssh.DoUploadBytesToFile([]byte(assets.KubeadmDropinCode), getDropinPathFromResourceData(d)),
 	)
 
 	if len(join) == 0 {
@@ -147,5 +137,9 @@ func applyFn(ctx context.Context) error {
 		doPrintEtcdStatus(d),
 	)
 
-	return actions.Apply(newCtx)
+	return ssh.ActionList{
+		ssh.DoWithCleanup(
+			actions,
+			ssh.DoCleanupLeftovers()),
+	}.Apply(newCtx)
 }

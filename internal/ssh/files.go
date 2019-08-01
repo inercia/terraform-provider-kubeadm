@@ -303,6 +303,37 @@ func DoDownloadFile(remote, local string) Action {
 	})
 }
 
+//
+// leftovers
+//
+
+// DoAddLeftover adds a leftover file
+func DoAddLeftover(path string) Action {
+	return ActionFunc(func(ctx context.Context) Action {
+		sshc := getSSHContext(ctx)
+		sshc.leftovers = append(sshc.leftovers, path)
+		return nil
+	})
+}
+
+// DoCleanupLeftovers removes all the leftovers files
+func DoCleanupLeftovers() Action {
+	return ActionFunc(func(ctx context.Context) Action {
+		sshc := getSSHContext(ctx)
+		if len(sshc.leftovers) == 0 {
+			return nil
+		}
+
+		actions := ActionList{
+			DoMessageInfo("Removing leftovers..."),
+		}
+		for _, l := range sshc.leftovers {
+			actions = append(actions, DoDeleteFile(l))
+		}
+		return actions
+	})
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 // checks
 ///////////////////////////////////////////////////////////////////////////////////////

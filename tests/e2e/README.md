@@ -24,15 +24,18 @@ Checkout the subdirectories for more details on the current tests suites...
 
 ## Variables
 
-The variables that drive these tests will be things like number of
-_masters/workers_ (specified in the  `master_count`/`worker_count` variables).
-When running in Travis, we will add any variables defined in `$E2E_ENV/ci.tfvars`.
+The variables that drive these tests will be things like:
+ 
+* `TF_VAR_master_count`: number of masters
+* `TF_VAR_worker_count`: number of workers
+* `TF_VAR_cni`: CNI driver
 
-Some other vars are:
+Some other vars:
 
 * `E2E_ENV`: an absolute directory with the tests environment
-
 * `E2E_CLEANUP`: clean up the environment (ie, `terraform destroy`) after failing a tests suite.
+
+and, when running in Travis, we will add any variables defined in `$E2E_ENV/ci.tfvars`.
 
 ## Logs
 

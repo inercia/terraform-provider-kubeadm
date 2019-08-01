@@ -190,6 +190,32 @@ func getKubeconfigFromResourceData(d *schema.ResourceData) string {
 	return f
 }
 
+func getSysconfigPathFromResourceData(d *schema.ResourceData) string {
+	// NOTE: the "install" block is optional, so there will be no
+	// default values for "install.0.XXX" if the "install" block has not been given...
+	sysconfigPath := d.Get("install.0.sysconfig_path").(string)
+	if len(sysconfigPath) == 0 {
+		sysconfigPath = common.DefKubeletSysconfigPath
+	}
+	return sysconfigPath
+}
+
+func getServicePathFromResourceData(d *schema.ResourceData) string {
+	servicePath := d.Get("install.0.service_path").(string)
+	if len(servicePath) == 0 {
+		servicePath = common.DefKubeletServicePath
+	}
+	return servicePath
+}
+
+func getDropinPathFromResourceData(d *schema.ResourceData) string {
+	dropinPath := d.Get("install.0.dropin_path").(string)
+	if len(dropinPath) == 0 {
+		dropinPath = common.DefKubeadmDropinPath
+	}
+	return dropinPath
+}
+
 // getKubeadmFromResourceData returns the kubeadm binary path from the config
 func getKubeadmFromResourceData(d *schema.ResourceData) string {
 	if kubeadmPathOpt, ok := d.GetOk("install.0.kubeadm_path"); ok {

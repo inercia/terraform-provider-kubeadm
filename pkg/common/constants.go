@@ -75,7 +75,7 @@ var (
 	// CNIPluginsManifestsTemplates is the map of manifests for different CNI drivers
 	CNIPluginsManifestsTemplates = map[string]ssh.Manifest{
 		"flannel": {Inline: assets.FlannelManifestCode},
-		"weave":   {URL: "https://cloud.weave.works/k8s/net?k8s-version={{.kube_version}}"},
+		"weave":   {Inline: assets.WeaveManifestCode},
 	}
 
 	// CNIPluginsList gets the list of supported CNI plugins (will be filled by the init())
@@ -130,7 +130,7 @@ var (
 )
 
 func init() {
-	for k, _ := range CNIPluginsManifestsTemplates {
+	for k := range CNIPluginsManifestsTemplates {
 		CNIPluginsList = append(CNIPluginsList, k)
 	}
 }

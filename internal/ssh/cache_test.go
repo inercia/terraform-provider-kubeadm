@@ -16,10 +16,32 @@ package ssh
 
 import (
 	"context"
+	"os"
 	"testing"
 )
 
+func TestIsCacheDisabled(t *testing.T) {
+	prevValue := os.Getenv(cacheEnvVar)
+
+	os.Setenv(cacheEnvVar, "1")
+	if isCacheDisabled() {
+		t.Fatalf("Error: cache is disabled with %s = 1", cacheEnvVar)
+	}
+
+	os.Setenv(cacheEnvVar, "0")
+	if !isCacheDisabled() {
+		t.Fatalf("Error: cache is not disabled with %s = 0", cacheEnvVar)
+	}
+
+	os.Setenv(cacheEnvVar, prevValue)
+}
+
 func TestDoOnce(t *testing.T) {
+	if isCacheDisabled() {
+		t.Skip("DoOnce not tested: cache is disabled.")
+		return
+	}
+
 	count := 0
 	inc := ActionFunc(func(context.Context) Action {
 		t.Log("incrementing the counter...")
@@ -45,6 +67,11 @@ func TestDoOnce(t *testing.T) {
 }
 
 func TestDoOnceWithError(t *testing.T) {
+	if isCacheDisabled() {
+		t.Skip("DoOnceWithError not tested: cache is disabled ")
+		return
+	}
+
 	count := 0
 	failed := 0
 

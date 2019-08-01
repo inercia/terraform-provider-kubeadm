@@ -48,6 +48,11 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		// Computed: true,
 		Optional: true,
 	},
+	"kubeconfig": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
 	"token": {
 		Type: schema.TypeString,
 		// Computed: true,
@@ -60,6 +65,11 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		Optional: true,
 	},
 	"cni_plugin_manifest": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
+	"cni_bin_dir": {
 		Type: schema.TypeString,
 		// Computed: true,
 		Optional: true,

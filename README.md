@@ -21,11 +21,11 @@ provider:
 ```hcl
 resource "kubeadm" "main" {
   api {
-    external = "loadbalancer.external.com"
+    external = "loadbalancer.external.com"   # external address for accessing the API server
   }
   
   cni {
-    plugin = "flannel"
+    plugin = "flannel"   # could be 'weave' as well...
   }
   
   network {
@@ -34,10 +34,8 @@ resource "kubeadm" "main" {
   }
   
   # install some extras: helm, the dashboard...
-  addons {
-    helm = "true"
-    dashboard = "true"
-  }
+  helm      { install = "true" }
+  dashboard { install = "true" }
 }
 
 # from the libvirt provider
