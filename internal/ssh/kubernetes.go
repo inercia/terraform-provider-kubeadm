@@ -53,6 +53,31 @@ func (m Manifest) IsEmpty() bool {
 	return false
 }
 
+// ReplaceConfig performs replacements in all the fields in the manifest
+func (m *Manifest) ReplaceConfig(config map[string]interface{}) error {
+	switch {
+	case m.Inline != "":
+		replaced, err := ReplaceInTemplate(m.Inline, config)
+		if err != nil {
+			return err
+		}
+		m.Inline = replaced
+	case m.Path != "":
+		replaced, err := ReplaceInTemplate(m.Path, config)
+		if err != nil {
+			return err
+		}
+		m.Path = replaced
+	case m.URL != "":
+		replaced, err := ReplaceInTemplate(m.URL, config)
+		if err != nil {
+			return err
+		}
+		m.URL = replaced
+	}
+	return nil
+}
+
 // isValidURL tests a string to determine if it is a url or not.
 func isValidURL(toTest string) bool {
 	_, err := url.ParseRequestURI(toTest)

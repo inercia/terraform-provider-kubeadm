@@ -102,7 +102,7 @@ func dataSourceKubeadm() *schema.Resource {
 							Optional:     true,
 							Default:      "",
 							Description:  "CNI plugin to install. Currently supported: flannel",
-							ValidateFunc: validation.StringInSlice([]string{"", "flannel"}, true),
+							ValidateFunc: validation.StringInSlice(common.CNIPluginsList, true),
 						},
 						"plugin_manifest": {
 							Type:        schema.TypeString,
@@ -147,6 +147,17 @@ func dataSourceKubeadm() *schema.Resource {
 										Description:  "Flannel backend: vxlan, host-gw, udp, ali-vpc, aws-vpc, gce, ipip, ipsec",
 										ValidateFunc: validation.StringInSlice([]string{"vxlan", "host-gw", "udp", "ali-vpc", "aws-vpc", "gce", "ipip", "ipsec"}, true),
 									},
+								},
+							},
+						},
+						"weave": {
+							Type:     schema.TypeList,
+							Optional: true,
+							ForceNew: true,
+							MaxItems: 1,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									// no options yet
 								},
 							},
 						},

@@ -164,6 +164,12 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 		provConfig["cni_conf_dir"] = common.DefCniConfDir
 	}
 
+	if version, ok := d.GetOk("version"); ok {
+		provConfig["kube_version"] = version.(string)
+	} else {
+		provConfig["kube_version"] = common.DefKubernetesVersion
+	}
+
 	if fb, ok := d.GetOk("cni.0.flannel.0.backend"); ok {
 		provConfig["flannel_backend"] = fb.(string)
 	} else {

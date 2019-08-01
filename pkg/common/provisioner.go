@@ -43,6 +43,11 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		// Computed: true,
 		Optional: true,
 	},
+	"kube_version": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
 	"token": {
 		Type: schema.TypeString,
 		// Computed: true,
@@ -165,4 +170,9 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		Optional:  true,
 		Sensitive: true,
 	},
+}
+
+// GetProvisionerConfig returns the config for a provisioner, stored in the "config" attribute
+func GetProvisionerConfig(d *schema.ResourceData) map[string]interface{} {
+	return d.Get("config").(map[string]interface{})
 }

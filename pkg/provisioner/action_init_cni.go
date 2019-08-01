@@ -43,14 +43,9 @@ func doLoadCNI(d *schema.ResourceData) ssh.Action {
 			cniPlugin := strings.TrimSpace(strings.ToLower(cniPluginOpt.(string)))
 			if len(cniPlugin) > 0 {
 				ssh.Debug("verifying CNI plugin: %s", cniPlugin)
-				if template, ok := common.CNIPluginsManifestsTemplates[cniPlugin]; ok {
+				if m, ok := common.CNIPluginsManifestsTemplates[cniPlugin]; ok {
 					ssh.Debug("CNI plugin: %s", cniPlugin)
-					config := d.Get("config").(map[string]interface{})
-					replaced, err := common.ReplaceInTemplate(template, config)
-					if err != nil {
-						return ssh.ActionError(fmt.Sprintf("could not replace variables in manifest for %q: %s", cniPlugin, err))
-					}
-					manifest.Inline = replaced
+					manifest = m
 				} else {
 					panic("unknown CNI driver: should have been caught at the validation stage")
 				}
@@ -61,6 +56,11 @@ func doLoadCNI(d *schema.ResourceData) ssh.Action {
 
 	if manifest.IsEmpty() {
 		return ssh.DoMessageWarn("no CNI driver is going to be loaded")
+	}
+
+	err := manifest.ReplaceConfig(common.GetProvisionerConfig(d))
+	if err != nil {
+		return ssh.ActionError(fmt.Sprintf("could not replace variables in manifest: %s", err))
 	}
 
 	return ssh.ActionList{

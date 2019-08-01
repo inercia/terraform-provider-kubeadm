@@ -120,9 +120,11 @@ resource "kubeadm" "k8s" {
 * `plugin` - (Optional) when not empty, name of the CNI plugin to load in the
 cluster after the initial bootstrap. There is a list of pre-defined manifests
 to load for some well-known plugins, being the list of recognized names:
-  * `flannel`
+  * [`flannel`](https://coreos.com/flannel/docs/latest/)
+  * [`weave`](https://www.weave.works/docs/net/latest/kubernetes/kube-addon/)
 * `plugin_manifest`  - (Optional) when not empty, load the CNI driver by using
-the provided manifest. When both `plugin` and `plugin_manifest` are provided,
+the provided manifest. It can be a 1) manifest in a heredoc text, 2) a URL 3) an 
+existing local file. When both `plugin` and `plugin_manifest` are provided,
 the former one is ignored.
 * `bin_dir` - (Optional) binaries directory for CNI.
 * `conf_dir` - (Optional) configuration directory for CNI.
