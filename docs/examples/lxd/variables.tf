@@ -30,6 +30,11 @@ variable "worker_count" {
   description = "Number of workers to be created"
 }
 
+variable "cni" {
+  default     = "flannel"
+  description = "CNI driver"
+}
+
 variable "kubeconfig" {
   default     = "kubeconfig.local"
   description = "Local kubeconfig file"

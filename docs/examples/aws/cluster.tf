@@ -418,11 +418,11 @@ resource "kubeadm" "main" {
   }
 
   runtime {
-    engine         = "docker"
+    engine = "docker"
   }
 
   cni {
-    plugin = "flannel"
+    plugin = "${var.cni}"
   }
 
   helm {

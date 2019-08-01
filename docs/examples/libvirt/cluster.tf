@@ -33,6 +33,10 @@ resource "kubeadm" "main" {
     services   = "10.25.0.0/16"
   }
 
+  cni {
+    plugin = "${var.cni}"
+  }
+
   runtime {
     # note: "crio" seems to have some issues: some pods keep erroring
     #       in "ContainerCreating", with "failed to get network status for pod sandbox"

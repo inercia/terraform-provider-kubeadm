@@ -24,6 +24,11 @@ variable "kubeconfig" {
   description = "A local copy of the admin kubeconfig created after the cluster initialization"
 }
 
+variable "cni" {
+  default     = "flannel"
+  description = "CNI driver"
+}
+
 variable "vpc_cidr" {
   type        = "string"
   default     = "10.1.0.0/16"

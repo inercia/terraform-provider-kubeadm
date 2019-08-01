@@ -196,7 +196,7 @@ resource "kubeadm" "main" {
   }
 
   cni {
-    plugin = "weave"
+    plugin = "${var.cni}"
 
     # note: OpenSUSE images use a non-standard directory
     bin_dir = "/usr/lib/cni"

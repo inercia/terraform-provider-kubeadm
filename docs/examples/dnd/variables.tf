@@ -16,6 +16,11 @@ variable "img" {
   description = "Docker image name"
 }
 
+variable "cni" {
+  default     = "flannel"
+  description = "CNI driver"
+}
+
 variable "master_count" {
   default     = 1
   description = "Number of masters to be created"

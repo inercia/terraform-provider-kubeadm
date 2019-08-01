@@ -117,3 +117,16 @@ func TestDoUploadReaderToFile(t *testing.T) {
 		t.Fatalf("Error: upload not found in %+v", uploads)
 	}
 }
+
+func TestLeftovers(t *testing.T) {
+	ctx := NewTestingContextWithResponses([]string{})
+
+	actions := ActionList{
+		DoAddLeftover("/tmp/test1"),
+		DoAddLeftover("/tmp/test2"),
+		DoCleanupLeftovers(),
+	}
+	if res := actions.Apply(ctx); IsError(res) {
+		t.Fatalf("Error: when running actions: %s", res)
+	}
+}

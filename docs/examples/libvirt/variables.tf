@@ -10,6 +10,11 @@ variable "worker_count" {
   default = "1"
 }
 
+variable "cni" {
+  default     = "flannel"
+  description = "CNI driver"
+}
+
 variable "ssh" {
   default = "../ssh/id_rsa"
 }

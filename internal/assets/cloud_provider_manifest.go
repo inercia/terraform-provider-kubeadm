@@ -9,7 +9,6 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: cloud-provider-config
-  namespace: kube-system
 type: Opaque
 data:
   # "cloud_config" contains the Base64 encoded configuration file

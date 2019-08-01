@@ -27,9 +27,9 @@ resource "kubeadm" "main" {
   }
 
   cni {
-    plugin = "flannel"
+    plugin = "${var.cni}"
 
-    # OpenSUSE images use a non-standard directory
+    # note: OpenSUSE images use a non-standard directory
     bin_dir = "/usr/lib/cni"
   }
 

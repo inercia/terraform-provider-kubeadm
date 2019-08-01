@@ -18,10 +18,14 @@ import (
 	"encoding/base64"
 )
 
+// ToTerraformSafeString converts some (possibly binary) data to a
+// string that can be stored in the Terraform state
 func ToTerraformSafeString(data []byte) string {
 	return base64.URLEncoding.EncodeToString(data)
 }
 
+// FromTerraformSafeString converts some Terraform state data to
+// (possibly binary) data.
 func FromTerraformSafeString(data string) ([]byte, error) {
 	return base64.URLEncoding.DecodeString(data)
 }
