@@ -15,7 +15,10 @@ resource "kubeadm" "main" {
   }
   
   network {
-    dns_domain = "my_cluster.local"  
+    dns {
+      domain = "my_cluster.local"
+    }
+  
     services = "10.25.0.0/16"
   }
 }
@@ -311,15 +314,21 @@ Example:
 ```hcl
 resource "kubeadm" "main" {
   network {
-    dns_domain = "mycluster.com"
     services   = "10.25.0.0/16"
+
+    dns {
+      domain   = "mycluster.com"
+      upstream = ["8.8.8.8", "8.8.4.4"]
+    }
   }
 }
 ```
 
 * `services` - (Optional) subnet used by k8s services. Defaults to `10.96.0.0/12`.
 * `pods` - (Optional) subnet used by pods.
-* `dns_domain` - (Optional) DNS domain used by k8s services. Defaults to `cluster.local`.
+* `dns` - (Optional) DNS options.
+  * `domain` - (Optional) DNS domain used by k8s services. Defaults to `cluster.local`.
+  * `upstream` - (Optional) list of upstream servers. Defaults to using the DNS configuration present in the node.
 
 ### `runtime`
 

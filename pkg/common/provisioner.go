@@ -84,6 +84,11 @@ var ProvisionerConfigElements = map[string]*schema.Schema{
 		// Computed: true,
 		Optional: true,
 	},
+	"dns_upstream": {
+		Type: schema.TypeString,
+		// Computed: true,
+		Optional: true,
+	},
 	"flannel_backend": {
 		Type:        schema.TypeString,
 		Optional:    true,

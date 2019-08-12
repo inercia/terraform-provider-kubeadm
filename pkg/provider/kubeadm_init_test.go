@@ -29,7 +29,7 @@ func TestKubeadmInitConfigSerialization(t *testing.T) {
 	token := "82eb2m.999999idy9l74yha"
 
 	d.Set("api.0.internal", "10.10.0.1")
-	d.Set("network.0.dns_domain", "my-local.cluster")
+	d.Set("network.0.dns.0.domain", "my-local.cluster")
 
 	initConfig, err := dataSourceToInitConfig(&d, token)
 	if err != nil {

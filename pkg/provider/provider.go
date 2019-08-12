@@ -188,6 +188,17 @@ func createConfigForProvisioner(d *schema.ResourceData) error {
 		provConfig["flannel_image_version"] = common.DefFlannelImageVersion
 	}
 
+	if v, ok := d.GetOk("network.0.dns.0.upstream"); ok {
+		dnsUp := v.([]interface{})
+		if len(dnsUp) > 0 {
+			res := ""
+			for _, s := range dnsUp {
+				res = res + " " + s.(string)
+			}
+			provConfig["dns_upstream"] = res
+		}
+	}
+
 	if version, ok := d.GetOk("version"); ok {
 		provConfig["kube_version"] = version.(string)
 	} else {

@@ -104,6 +104,7 @@ func applyFn(ctx context.Context) error {
 		ssh.DoMessageInfo("Checking we have the required binaries..."),
 		doCheckCommonBinaries(d),
 		doPrepareCRI(),
+		doUploadResolvConf(d),
 		ssh.DoEnableService("kubelet.service"),
 		ssh.DoUploadBytesToFile([]byte(assets.KubeletSysconfigCode), getSysconfigPathFromResourceData(d)),
 		ssh.DoUploadBytesToFile([]byte(assets.KubeletServiceCode), getServicePathFromResourceData(d)),

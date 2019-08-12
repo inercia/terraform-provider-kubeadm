@@ -195,12 +195,28 @@ func dataSourceKubeadm() *schema.Resource {
 							Description:  "subnet used by pods",
 							ValidateFunc: validation.CIDRNetwork(0, 32),
 						},
-						"dns_domain": {
-							Type:         schema.TypeString,
-							Optional:     true,
-							Default:      common.DefDNSDomain,
-							Description:  "DNS domain used by k8s services. Defaults to cluster.local.",
-							ValidateFunc: common.ValidateDNSName,
+						"dns": {
+							Type:     schema.TypeList,
+							Optional: true,
+							ForceNew: true,
+							MaxItems: 1,
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"domain": {
+										Type:         schema.TypeString,
+										Optional:     true,
+										Default:      common.DefDNSDomain,
+										Description:  "DNS domain used by k8s services. Defaults to cluster.local.",
+										ValidateFunc: common.ValidateDNSName,
+									},
+									"upstream": {
+										Type:        schema.TypeList,
+										Optional:    true,
+										Description: "upstream DNS servers",
+										Elem:        &schema.Schema{Type: schema.TypeString},
+									},
+								},
+							},
 						},
 					},
 				},
