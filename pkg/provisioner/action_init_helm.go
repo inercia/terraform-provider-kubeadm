@@ -63,8 +63,12 @@ func doLoadHelm(d *schema.ResourceData) ssh.Action {
 	allManifests := strings.Join(manifests, "\n---\n")
 	ssh.Debug("Helm manifests: %s", allManifests)
 
+	kubeconfig := getKubeconfigFromResourceData(d)
+
 	return ssh.ActionList{
 		ssh.DoMessageInfo("Loading Helm..."),
 		doRemoteKubectlApply(d, []ssh.Manifest{{Inline: allManifests}}),
+		ssh.DoMessageInfo("Now you should initialize the client with 'helm --kubeconfig=%s init'", kubeconfig),
+		ssh.DoMessageInfo("Then you can install charts with something like 'helm install --kubeconfig=%s --generate-name ...'", kubeconfig),
 	}
 }

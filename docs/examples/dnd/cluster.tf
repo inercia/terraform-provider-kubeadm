@@ -182,7 +182,11 @@ resource "kubeadm" "main" {
   config_path = "${var.kubeconfig}"
 
   network {
-    dns_domain = "${var.domain_name}.k8s.local"
+    dns {
+      domain   = "${var.domain_name}.k8s.local"
+      upstream = ["8.8.8.8", "8.8.4.4"]
+    }
+
     services   = "10.25.0.0/16"
   }
 

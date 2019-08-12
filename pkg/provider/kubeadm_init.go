@@ -80,17 +80,27 @@ func dataSourceToInitConfig(d *schema.ResourceData, token string) (*kubeadmapi.I
 		if servicesCIDROpt, ok := d.GetOk("network.0.services"); ok {
 			initConfig.Networking.ServiceSubnet = servicesCIDROpt.(string)
 		}
-		if dnsDomainOpt, ok := d.GetOk("network.0.dns_domain"); ok {
-			dnsDomain := dnsDomainOpt.(string)
 
-			// validate the DNS domain... otherwise we will get an error when
-			// we run `kubeadm init`
-			r, _ := regexp.Compile(`[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*`)
-			if !r.MatchString(dnsDomain) {
-				return nil, fmt.Errorf("invalid DNS name '%s': a DNS-1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (e.g. 'example.com')", dnsDomain)
+		if _, ok := d.GetOk("network.0.dns.0"); ok {
+			if dnsDomainOpt, ok := d.GetOk("network.0.dns.0.domain"); ok {
+				dnsDomain := dnsDomainOpt.(string)
+
+				// validate the DNS domain... otherwise we will get an error when
+				// we run `kubeadm init`
+				r, _ := regexp.Compile(`[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*`)
+				if !r.MatchString(dnsDomain) {
+					return nil, fmt.Errorf("invalid DNS name '%s': a DNS-1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (e.g. 'example.com')", dnsDomain)
+				}
+
+				initConfig.Networking.DNSDomain = dnsDomain
 			}
 
-			initConfig.Networking.DNSDomain = dnsDomain
+			if dnsUpstreamOpt, ok := d.GetOk("network.0.dns.0.upstream"); ok {
+				dnsUp := dnsUpstreamOpt.([]interface{})
+				if len(dnsUp) > 0 {
+					initConfig.NodeRegistration.KubeletExtraArgs["resolv-conf"] = common.DefResolvUpstreamConf
+				}
+			}
 		}
 	}
 

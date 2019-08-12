@@ -29,7 +29,9 @@ data "template_file" "cloud_init_user_data" {
 
 resource "kubeadm" "main" {
   network {
-    dns_domain = "mycluster.com"
+    dns {
+      domain = "mycluster.com"
+    }
     services   = "10.25.0.0/16"
   }
 

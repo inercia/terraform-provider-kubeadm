@@ -408,7 +408,9 @@ resource "kubeadm" "main" {
   }
 
   network {
-    dns_domain = "k8s.local"
+    dns {
+      domain = "k8s.local"
+    }
     services   = "10.25.0.0/16"
   }
 

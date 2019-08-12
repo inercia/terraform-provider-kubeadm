@@ -94,27 +94,27 @@ func IsTempFilename(filename string) bool {
 }
 
 // doRealUploadFile uploads a file to a remote path
-func doRealUploadFile(contents []byte, remote string) Action {
-	if len(remote) == 0 {
+func doRealUploadFile(contents []byte, dst string) Action {
+	if len(dst) == 0 {
 		return DoAbort("empty destination for upload")
 	}
 
-	dir := filepath.Dir(remote)
+	dstDir := filepath.Dir(dst)
 
 	actions := ActionList{
-		DoMkdirOnce(dir),
-		DoMessageDebug(fmt.Sprintf("Making sure '%s' does not exist", remote)),
-		DoDeleteFile(remote),
+		DoMkdirOnce(dstDir),
+		DoMessageDebug(fmt.Sprintf("Making sure '%s' does not exist", dst)),
+		DoDeleteFile(dst),
 		ActionFunc(func(ctx context.Context) Action {
 			if len(contents) == 0 {
-				return ActionError(fmt.Sprintf("internal error: empty file to upload to %q", remote))
+				return ActionError(fmt.Sprintf("internal error: empty file to upload to %q", dst))
 			}
 
 			c := bytes.NewReader(contents)
 			comm := GetCommFromContext(ctx)
 
-			Debug("Doing the real upload to %s:\n%s\n", remote, contents)
-			if err := comm.Upload(remote, c); err != nil {
+			Debug("Doing the real upload to %s:\n%s\n", dst, contents)
+			if err := comm.Upload(dst, c); err != nil {
 				Debug("ERROR: upload failed: %s", err)
 				return ActionError(err.Error())
 			}
@@ -130,37 +130,31 @@ func doRealUploadFile(contents []byte, remote string) Action {
 // and then moving it to the final destination with `sudo`.
 // It is important to use a temporary file as uploads are performed as a regular
 // user, while the `mv` is done with `sudo`
-func DoUploadBytesToFile(contents []byte, remote string) Action {
-	if len(remote) == 0 {
+func DoUploadBytesToFile(contents []byte, dst string) Action {
+	if len(dst) == 0 {
 		return ActionError(fmt.Sprintf("internal error: empty remote path in DoUploadBytesToFile()"))
 	}
 
-	dir := filepath.Dir(remote)
-
 	// do not create temporary files for files that are already in the remote temporary directory
-	if IsTempFilename(remote) {
-		return ActionList{
-			DoMkdirOnce(dir),
-			doRealUploadFile(contents, remote),
-		}
+	if IsTempFilename(dst) {
+		return doRealUploadFile(contents, dst)
 	}
 
 	// for regular files, upload to a temp file and then move the temp file to the final destination
 	// (uploading directly to destination could need root permissions, while we can "mv" with "sudo")
-	tmpPath, err := GetTempFilename()
+	dstTmpPath, err := GetTempFilename()
 	if err != nil {
 		return ActionError(fmt.Sprintf("Could not create temporary file: %s", err))
 	}
 
 	return DoWithCleanup(ActionList{
-		DoMessageInfo(fmt.Sprintf("Uploading to %q", remote)),
-		DoMessageDebug(fmt.Sprintf("Uploading to temporary file %q", tmpPath)),
-		doRealUploadFile(contents, tmpPath),
-		DoMkdirOnce(dir),
-		DoMessageDebug(fmt.Sprintf("... and moving to final destination %s", remote)),
-		DoMoveFile(tmpPath, remote),
+		DoMessageInfo(fmt.Sprintf("Uploading to %q", dst)),
+		DoMessageDebug(fmt.Sprintf("Uploading to temporary file %q", dstTmpPath)),
+		doRealUploadFile(contents, dstTmpPath),
+		DoMessageDebug(fmt.Sprintf("... and moving to final destination %s", dst)),
+		DoMoveFile(dstTmpPath, dst),
 	}, ActionList{
-		DoTry(DoDeleteFile(tmpPath)),
+		DoTry(DoDeleteFile(dstTmpPath)),
 	})
 }
 
@@ -281,12 +275,17 @@ func DoDeleteLocalFile(path string) Action {
 
 // DoMoveFile moves a file
 func DoMoveFile(src, dst string) Action {
-	return DoExec(fmt.Sprintf("mv -f %q %q", src, dst))
+	dstDir := filepath.Dir(dst)
+	return DoExec(fmt.Sprintf("mkdir -p %q && mv -f %q %q", dstDir, src, dst))
 }
 
 // DoMoveLocalFile moves a local file
 func DoMoveLocalFile(src, dst string) Action {
-	return DoLocalExec("mv", "-f", src, dst)
+	dstDir := filepath.Dir(dst)
+	return ActionList{
+		DoLocalExec("mkdir", dstDir),
+		DoLocalExec("mv", "-f", src, dst),
+	}
 }
 
 // DoDownloadFile downloads a remote file to a local file

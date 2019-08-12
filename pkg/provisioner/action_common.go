@@ -15,6 +15,7 @@
 package provisioner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -214,4 +215,31 @@ func doCheckCommonBinaries(d *schema.ResourceData) ssh.Action {
 	}
 
 	return checks
+}
+
+// doUploadResolvConf uploads some configuration for DNS upstream servers
+func doUploadResolvConf(d *schema.ResourceData) ssh.Action {
+	dRaw, ok := d.GetOk("config.dns_upstream")
+	if !ok {
+		return nil
+	}
+
+	upstreamStr := dRaw.(string)
+	if len(upstreamStr) == 0 {
+		return nil
+	}
+
+	buf := bytes.Buffer{}
+	servers := strings.Split(strings.TrimSpace(upstreamStr), " ")
+	for _, server := range servers {
+		if server == "" {
+			continue
+		}
+		buf.WriteString(fmt.Sprintf("nameserver %s\n", server))
+	}
+
+	return ssh.ActionList{
+		ssh.DoMessageInfo("Using user-provided upstream DNS resolvers: %+v", servers),
+		ssh.DoUploadBytesToFile(buf.Bytes(), common.DefResolvUpstreamConf),
+	}
 }

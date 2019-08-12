@@ -69,6 +69,9 @@ const (
 
 	// kubectl executable in the machines (we assume it is in some standard path)
 	DefKubectlPath = "kubectl"
+
+	// resolv.conf for pods when upstream servers are provided
+	DefResolvUpstreamConf = "/etc/resolv.conf-kubeadm"
 )
 
 var (

@@ -15,7 +15,9 @@ resource "kubeadm" "main" {
   config_path = "${var.kubeconfig}"
 
   network {
-    dns_domain = "mycluster.com"
+    dns {
+      domain = "mycluster.com"
+    }
     services   = "10.25.0.0/16"
   }
 

@@ -56,6 +56,17 @@ func dataSourceToJoinConfig(d *schema.ResourceData, token string) (*kubeadmapi.J
 		}
 	}
 
+	if _, ok := d.GetOk("network.0"); ok {
+		if _, ok := d.GetOk("network.0.dns.0"); ok {
+			if dnsUpstreamOpt, ok := d.GetOk("network.0.dns.0.upstream"); ok {
+				dnsUp := dnsUpstreamOpt.([]interface{})
+				if len(dnsUp) > 0 {
+					joinConfig.NodeRegistration.KubeletExtraArgs["resolv-conf"] = common.DefResolvUpstreamConf
+				}
+			}
+		}
+	}
+
 	// check if we have some cloud-provider
 	if cloudProvRaw, ok := d.GetOk("cloud.0.provider"); ok && len(cloudProvRaw.(string)) > 0 {
 		joinConfig.NodeRegistration.KubeletExtraArgs["cloud-provider"] = "external"
