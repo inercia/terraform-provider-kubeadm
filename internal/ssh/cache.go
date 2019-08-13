@@ -106,6 +106,22 @@ func DoSetInCache(key string, value interface{}) Action {
 	})
 }
 
+// DoFlushCache flushes the cache
+func DoFlushCache() Action {
+	return ActionFunc(func(ctx context.Context) Action {
+		if isCacheDisabled() {
+			return nil
+		}
+		sctx := getSSHContext(ctx)
+		sctx.cache = cache{}
+		return nil
+	})
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Checks
+/////////////////////////////////////////////////////////////////////////////
+
 // CheckInCache returns true if the key is in the cache
 func CheckInCache(key string) CheckerFunc {
 	return CheckerFunc(func(ctx context.Context) (bool, error) {
