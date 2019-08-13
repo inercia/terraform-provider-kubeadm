@@ -97,11 +97,21 @@ func doKubeadm(d *schema.ResourceData, kubeadmConfigFilename string, command str
 	// otherwise, back up the config file
 	actions := ssh.ActionList{
 		ssh.DoMessageInfo("Starting kubeadm..."),
-		ssh.DoWithException(ssh.ActionList{
-			doUploadKubeadmConfig(d, command, kubeadmConfigFilename),
-			doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
-		}, ssh.ActionList{
-			ssh.DoTry(ssh.DoDeleteFile(kubeadmConfigFilename))}),
+		ssh.DoWithException(
+			ssh.ActionList{
+				doUploadKubeadmConfig(d, command, kubeadmConfigFilename),
+				doExecKubeadmWithConfig(d, command, kubeadmConfigFilename, args...),
+			},
+			ssh.ActionList{
+				ssh.DoMessageWarn("kubeadm failed: dumping logs..."),
+				ssh.DoMessageWarn("- kubelet logs:"),
+				ssh.DoExec("systemctl --no-pager -l status kubelet"),
+				ssh.DoMessageWarn("- docker logs:"),
+				ssh.DoExec("systemctl --no-pager -l status docker"),
+				ssh.DoMessageWarn("- last lines in the journal:"),
+				ssh.DoExec("journalctl -e --no-pager | tail -n 20"),
+				ssh.DoTry(ssh.DoDeleteFile(kubeadmConfigFilename)),
+			}),
 		ssh.DoTry(ssh.DoMoveFile(kubeadmConfigFilename, kubeadmConfigFilename+".bak")),
 	}
 	return actions
