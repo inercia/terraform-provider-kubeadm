@@ -36,6 +36,63 @@ func TestIsCacheDisabled(t *testing.T) {
 	os.Setenv(cacheEnvVar, prevValue)
 }
 
+func TestCacheBasic(t *testing.T) {
+	if isCacheDisabled() {
+		t.Skip("DoOnce not tested: cache is disabled.")
+		return
+	}
+
+	ctx := NewTestingContext()
+
+	t.Log("Setting some value in the cache...")
+	actions := ActionList{
+		DoSetInCache("test", "value"),
+		DoSetInCache("thor", "value"),
+		DoSetInCache("loki", "value"),
+	}
+	res := actions.Apply(ctx)
+	if IsError(res) {
+		t.Fatalf("Error: error detected: %s", res)
+	}
+
+	count := 0
+	inc := ActionFunc(func(context.Context) Action {
+		t.Log("incrementing the counter...")
+		count++
+		return nil
+	})
+
+	t.Log("Checking that value is in the cache...")
+	actions = ActionList{
+		DoIf(CheckInCache("test"), inc),
+		DoIf(CheckInCache("foo"), inc),
+		DoIf(CheckInCache("bar"), inc),
+	}
+	res = actions.Apply(ctx)
+	if IsError(res) {
+		t.Fatalf("Error: error detected: %s", res)
+	}
+	if count != 1 {
+		t.Fatalf("Error: unexpected value in counter: %d, expected: %d", count, 1)
+	}
+
+	t.Log("Flushing the cache and checking again...")
+	count = 0
+	actions = ActionList{
+		DoFlushCache(),
+		DoIf(CheckInCache("test"), inc),
+		DoIf(CheckInCache("thor"), inc),
+		DoIf(CheckInCache("loki"), inc),
+	}
+	res = actions.Apply(ctx)
+	if IsError(res) {
+		t.Fatalf("Error: error detected: %s", res)
+	}
+	if count != 0 {
+		t.Fatalf("Error: unexpected value in counter: %d, expected: %d", count, 0)
+	}
+}
+
 func TestDoOnce(t *testing.T) {
 	if isCacheDisabled() {
 		t.Skip("DoOnce not tested: cache is disabled.")

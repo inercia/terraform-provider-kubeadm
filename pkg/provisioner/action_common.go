@@ -115,6 +115,7 @@ func doMaybeResetWorker(d *schema.ResourceData, kubeadmConfigFilename string) ss
 			ssh.DoMessageWarn("previous kubeadm config file found: resetting node"),
 			doExecKubeadmWithConfig(d, "reset", "", "--force"),
 			ssh.DoDeleteFile(kubeadmConfigFilename),
+			ssh.DoFlushCache(),
 		})
 }
 
