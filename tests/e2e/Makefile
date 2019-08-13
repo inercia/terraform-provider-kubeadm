@@ -22,6 +22,8 @@ ci-setup:
 	unzip terraform_0.11.13_linux_amd64.zip
 	sudo mv terraform /usr/local/bin/
 
+	[ "$TRAVIS_EVENT_TYPE" = "cron" ] && make -C nightly ci-setup
+
 ci-cleanup:
 	@[ -n "$$E2E_CLEANUP" ] && \
 		echo -e ">>>$(RED) Destroying cluster... $(NC)\n" && \
@@ -38,7 +40,10 @@ ci-logs:
 		echo -e ">>>$(RED) Logs available at $$E2E_ENV/terraform.log $(NC)"  || \
 		/bin/true
 
-ci-tests:
+ci-nightly:
+	[ "$TRAVIS_EVENT_TYPE" = "cron" ] && make -C nightly ci-tests
+
+ci-tests-testsuites:
 	@echo -e ">>>$(GREEN) Starting tests suites: $(NC)"
 	@echo
 	@rm -f $$E2E_ENV/terraform.log
@@ -60,4 +65,7 @@ ci-tests:
 		done ; \
 	done
 	@echo -e ">>>$(GREEN) All e2e tests have completed$(NC)"
+
+
+ci-tests: ci-tests-testsuites ci-nightly
 
