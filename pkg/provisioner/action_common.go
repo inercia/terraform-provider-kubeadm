@@ -32,16 +32,19 @@ import (
 // expectedBinaries is the list of expected binaries to be present in the remote machine
 var expectedBinaries = []struct {
 	name        string
+	why         string
 	defaultPath func(*schema.ResourceData) string
 	property    string
 }{
 	{
 		name:        "kubeadm",
+		why:         "kubeadm is necessary for starting all the components of the kubernetes cluster",
 		defaultPath: getKubeadmFromResourceData,
 		property:    "install.kubeadm_path",
 	},
 	{
 		name:        "kubectl",
+		why:         "kubectl is necessary for loading additional manifests in the kubernetes cluster",
 		defaultPath: getKubectlFromResourceData,
 		property:    "install.kubectl_path",
 	},
@@ -203,7 +206,7 @@ func doLoadCloudProviderManager(d *schema.ResourceData) ssh.Action {
 	return actions
 }
 
-// doCheckCommonBinaries checks that some common binaries neccessary are present in the remote machine
+// doCheckCommonBinaries checks that some common binaries necessary are present in the remote machine
 func doCheckCommonBinaries(d *schema.ResourceData) ssh.Action {
 
 	checks := ssh.ActionList{}
@@ -213,22 +216,31 @@ func doCheckCommonBinaries(d *schema.ResourceData) ssh.Action {
 			path = expected.defaultPath(d)
 		}
 
-		abortMsg := fmt.Sprintf("%s NOT found in $PATH.", expected.name)
-		if expected.property != "" {
-			abortMsg += fmt.Sprintf(" You can specify a custom executable in the '%s' property in the provisioner.", expected.property)
+		// create a list of actions that will happen if the executable "path" is not found
+		notFoundActions := ssh.ActionList{
+			ssh.DoMessageWarn("%s NOT found in $PATH.", expected.name),
 		}
+		if expected.why != "" {
+			notFoundActions = append(notFoundActions, ssh.DoMessageWarn(expected.why))
+		}
+		if expected.property != "" {
+			notFoundActions = append(notFoundActions, ssh.DoMessageWarn("You can specify a custom path in the '%s' property in the 'provisioner kubeadm' block.", expected.property))
+		}
+		// .. and the last action will be an abort()
+		notFoundActions = append(notFoundActions, ssh.DoAbort("base system requirements not satisfied"))
 
 		checks = append(checks,
 			ssh.DoIfElse(
 				ssh.CheckBinaryExists(path),
 				ssh.DoMessageInfo("- %s found", expected.name),
-				ssh.DoAbort(abortMsg)))
+				notFoundActions))
 	}
 
 	return checks
 }
 
-// doUploadResolvConf uploads some configuration for DNS upstream servers
+// doUploadResolvConf (maybe) uploads some configuration for DNS upstream servers
+// this is only done when the "dns.upstream" has been configured in the "resource"
 func doUploadResolvConf(d *schema.ResourceData) ssh.Action {
 	dRaw, ok := d.GetOk("config.dns_upstream")
 	if !ok {

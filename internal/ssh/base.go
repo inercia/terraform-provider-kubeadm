@@ -227,8 +227,9 @@ func (f CheckerFunc) Check(ctx context.Context) (bool, error) {
 	return f(ctx)
 }
 
-// DoWithCleanup runs some action and, despite the result, runs the cleanup function
-// It returns the actions result.
+// DoWithCleanup runs some action(s) and
+// 1) despite the result, runs the cleanup function
+// 2) returns the actions result
 func DoWithCleanup(actions Action, cleanup Action) Action {
 	return ActionFunc(func(ctx context.Context) Action {
 		res := ActionList{actions}.Apply(ctx)
@@ -237,7 +238,9 @@ func DoWithCleanup(actions Action, cleanup Action) Action {
 	})
 }
 
-// DoWithException runs some action and, if some error happens, runs the exception
+// DoWithException runs some action and
+// 1) if some error happens, runs the exception handler
+// 2) returns the error
 func DoWithException(actions Action, exc Action) Action {
 	return ActionFunc(func(ctx context.Context) Action {
 		res := ActionList{actions}.Apply(ctx)
@@ -248,7 +251,9 @@ func DoWithException(actions Action, exc Action) Action {
 	})
 }
 
-// DoWithSuccess runs some action and, if no error happend, runs a success action
+// DoWithSuccess runs some action and
+// 1) if no error happens, runs a success action
+// 2) returns the action(s) result
 func DoWithSuccess(actions Action, suc Action) Action {
 	return ActionFunc(func(ctx context.Context) Action {
 		res := ActionList{actions}.Apply(ctx)
