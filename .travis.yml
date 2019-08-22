@@ -5,6 +5,7 @@ language: go
 go:
   - 1.12.x
 
+
 cache:
   directories:
     # https://docs.travis-ci.com/user/caching/
@@ -18,8 +19,9 @@ cache:
     - $HOME/gopath/pkg/mod
     - $HOME/.terraform.d/plugins
 
-before_install:
-  - make ci-setup
+#branches:
+#  only:
+#    - master
 
 env:
   global:
@@ -32,26 +34,19 @@ env:
     - CI=travis
     - IS_CI=true
     - E2E_CLEANUP=true
+  matrix:
+    # run tests in two different configurations: with flannel and with weave
+    - TF_VAR_cni=flannel
+    - TF_VAR_cni=weave
 
-jobs:
-  include:
-    # NOTE: all the `stages`s  with the same name are run in parallel
-    # NOTE: it seems to be faster to do all in one step
-    # NOTE: use this `sudo .. su` trick in order to use
-    #       the `usermod -a -G lxd` we did on the `before_install`
-    - stage: Unit tests, style checks and e2e tests
-      script: sudo -E su $USER -c "make ci-tests"
+before_install:
+  - make ci-setup
 
-    # TODO: add a deployer to github releases: https://docs.travis-ci.com/user/build-stages/deploy-github-releases/
-
-#branches:
-#  only:
-#    - master
+# NOTE: use this `sudo .. su` trick in order to use things like
+#       the `usermod -a -G lxd` we did on the `before_install`
+script:
+  - sudo -E su $USER -c "make ci-tests"
 
 after_failure:
   - sudo journalctl -e
 
-matrix:
-  fast_finish: true
-  allow_failures:
-    - go: tip

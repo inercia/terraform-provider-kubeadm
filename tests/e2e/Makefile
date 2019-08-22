@@ -7,22 +7,27 @@ NC    := \e[0m
 ci-setup:
 	mkdir -p "$TRAVIS_BUILD_DIR/snaps-cache"
 
-	@echo ">>> Installation stuff specific to the $$E2E_ENV environment"
+	@echo -e ">>>$(GREEN) Installation stuff specific to the $$E2E_ENV environment... $(NC)"
 	[ -n "$$E2E_ENV" ] && make -C "$$E2E_ENV" ci-setup
 
-	@echo ">>> Installing other dependencies, like kubectl, terraform..."
+	@echo -e ">>>$(GREEN) Installing other dependencies, like kubectl, terraform... $(NC)"
 	sudo apt-get update && sudo apt-get install -y apt-transport-https
 	curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 	echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
 	sudo apt-get update
 	sudo apt install -y kubectl kubeadm unzip
 
-	@echo ">>> Installing Terraform..."
+	@echo -e ">>>$(GREEN) Installing Terraform... $(NC)"
 	wget https://releases.hashicorp.com/terraform/0.11.13/terraform_0.11.13_linux_amd64.zip
 	unzip terraform_0.11.13_linux_amd64.zip
 	sudo mv terraform /usr/local/bin/
 
-	[ "$TRAVIS_EVENT_TYPE" = "cron" ] && make -C nightly ci-setup
+	@echo -e ">>>$(GREEN) Checking if we must setup things for nightly tests... $(NC)"
+	@if [ "$$TRAVIS_EVENT_TYPE" = "cron" ] ; then \
+		make -C "nightly" ci-setup ; \
+	else \
+		echo -e ">>>$(GREEN) ... no nightly tests. $(NC)" ; \
+	fi
 
 ci-cleanup:
 	@[ -n "$$E2E_CLEANUP" ] && \
@@ -41,7 +46,12 @@ ci-logs:
 		/bin/true
 
 ci-nightly:
-	[ "$TRAVIS_EVENT_TYPE" = "cron" ] && make -C nightly ci-tests
+	@echo -e ">>>$(GREEN) Checking if we must run the nightly tests... $(NC)"
+	@if [ "$$TRAVIS_EVENT_TYPE" = "cron" ] ; then \
+		make -C "nightly" ci-tests ; \
+	else \
+		echo -e ">>>$(GREEN) ... no nightly tests. $(NC)" ; \
+	fi
 
 ci-tests-testsuites:
 	@echo -e ">>>$(GREEN) Starting tests suites: $(NC)"
