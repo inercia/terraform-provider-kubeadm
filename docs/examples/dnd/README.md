@@ -7,6 +7,8 @@ This configuration can be used for having a convenient way to start a
 Kubernetes cluster in your local laptop, using regular Docker containers
 as nodes of your cluster.
 
+![Run](run-example.gif)
+
 ## How does it work?
 
 The Docker daemon can be run _in_ a Docker container in what is usually called
