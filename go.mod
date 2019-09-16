@@ -23,7 +23,6 @@ require (
 	github.com/huandu/xstrings v1.2.0 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/jmoiron/sqlx v1.2.0 // indirect
-	github.com/kisielk/errcheck v1.2.0 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/lithammer/dedent v1.1.0 // indirect
 	github.com/mitchellh/go-linereader v0.0.0-20190213213312-1b945b3263eb
@@ -50,6 +49,9 @@ require (
 
 replace k8s.io/client-go => k8s.io/client-go v0.0.0-20190626045420-1ec4b74c7bda
 
+// fix some transitional deps
+replace github.com/gogo/protobuf v0.0.0-20190410021324-65acae22fc9 => github.com/gogo/protobuf v1.2.2-0.20190723190241-65acae22fc9d
+
 exclude github.com/Sirupsen/logrus v1.4.1
 
 exclude github.com/Sirupsen/logrus v1.4.0
@@ -63,3 +65,5 @@ exclude github.com/Sirupsen/logrus v1.1.1
 exclude github.com/Sirupsen/logrus v1.1.0
 
 exclude github.com/renstrom/dedent v1.1.0
+
+go 1.13
