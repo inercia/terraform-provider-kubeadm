@@ -276,7 +276,7 @@ func DoDeleteLocalFile(path string) Action {
 // DoMoveFile moves a file
 func DoMoveFile(src, dst string) Action {
 	dstDir := filepath.Dir(dst)
-	return DoExec(fmt.Sprintf("mkdir -p %q && mv -f %q %q", dstDir, src, dst))
+	return DoExec(fmt.Sprintf("sh -c 'mkdir -p %q && mv -f %q %q'", dstDir, src, dst))
 }
 
 // DoMoveLocalFile moves a local file
