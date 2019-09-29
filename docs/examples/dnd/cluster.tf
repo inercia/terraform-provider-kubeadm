@@ -10,7 +10,7 @@ locals {
 }
 
 resource "docker_network" "network" {
-  name            = "${var.name_prefix}net"
+  name            = "${terraform.workspace}net"
   check_duplicate = "true"
 
   ipam_config {
@@ -26,9 +26,9 @@ resource "docker_network" "network" {
 # start a docker registry cache
 # https://github.com/rpardini/docker-registry-proxy
 resource "docker_container" "cache" {
-  name                  = "${var.name_prefix}cache"
+  name                  = "${terraform.workspace}cache"
   image                 = "rpardini/docker-registry-proxy:0.2.4"
-  hostname              = "${var.name_prefix}cache"
+  hostname              = "${terraform.workspace}cache"
   start                 = true
   privileged            = true
   must_run              = true
@@ -54,7 +54,7 @@ resource "docker_container" "cache" {
 
   labels {
     type        = "cache"
-    environment = "${var.name_prefix}"
+    environment = "${terraform.workspace}"
   }
 
   volumes {
@@ -100,7 +100,7 @@ data "template_file" "haproxy_backends" {
 EOF
 
   vars = {
-    fqdn = "${var.name_prefix}master-${count.index}.${var.domain_name}"
+    fqdn = "${terraform.workspace}master-${count.index}.${var.domain_name}"
     ip   = "${cidrhost(var.nodes_network, 16 + count.index)}"
   }
 }
@@ -130,9 +130,9 @@ EOF
 # this is not completely safe, as we start the haproxy before all the masters are up,
 # so `kubeadm init` can run the probe in the wrong backend.
 resource "docker_container" "haproxy" {
-  name                  = "${var.name_prefix}haproxy"
+  name                  = "${terraform.workspace}haproxy"
   image                 = "haproxy"
-  hostname              = "${var.name_prefix}haproxy"
+  hostname              = "${terraform.workspace}haproxy"
   start                 = true
   privileged            = true
   must_run              = true
@@ -153,7 +153,7 @@ resource "docker_container" "haproxy" {
 
   labels {
     type        = "haproxy"
-    environment = "${var.name_prefix}"
+    environment = "${terraform.workspace}"
   }
 
   upload {
@@ -187,7 +187,7 @@ resource "kubeadm" "main" {
       upstream = ["8.8.8.8", "8.8.4.4"]
     }
 
-    services   = "10.25.0.0/16"
+    services = "10.25.0.0/16"
   }
 
   api {
@@ -236,9 +236,9 @@ resource "null_resource" "base_image" {
 
 resource "docker_container" "master" {
   count                 = "${var.master_count}"
-  name                  = "${var.name_prefix}master-${count.index}"
+  name                  = "${terraform.workspace}master-${count.index}"
   image                 = "${var.img}"
-  hostname              = "${var.name_prefix}master-${count.index}"
+  hostname              = "${terraform.workspace}master-${count.index}"
   start                 = true
   privileged            = true
   must_run              = true
@@ -260,7 +260,7 @@ resource "docker_container" "master" {
 
   labels {
     type        = "master"
-    environment = "${var.name_prefix}"
+    environment = "${terraform.workspace}"
   }
 
   host {
@@ -278,6 +278,27 @@ resource "docker_container" "master" {
     container_path = "/sys/fs/cgroup"
     read_only      = "true"
   }
+
+  // some k8s things want to read /lib/modules
+  volumes {
+    host_path      = "/lib/modules"
+    container_path = "/lib/modules"
+    read_only      = "true"
+  }
+
+  mounts {
+    target = "/run"
+    type   = "tmpfs"
+  }
+
+  # TODO: this crashes the docker-provider
+  # mounts {
+  #   target = "/tmp"
+  #   type   = "tmpfs"
+  #   tmpfs_options {
+  #     mode = 1777
+  #   }
+  # }
 
   connection {
     type     = "ssh"
@@ -312,7 +333,7 @@ resource "docker_container" "master" {
     manifests = "${var.manifests}"
 
     ignore_checks = [
-      "KubeletVersion",  // the kubelet version in the base image can be very different
+      "KubeletVersion", // the kubelet version in the base image can be very different
     ]
   }
 
@@ -340,9 +361,9 @@ output "masters" {
 
 resource "docker_container" "worker" {
   count                 = "${var.worker_count}"
-  name                  = "${var.name_prefix}worker-${count.index}"
+  name                  = "${terraform.workspace}worker-${count.index}"
   image                 = "${var.img}"
-  hostname              = "${var.name_prefix}worker-${count.index}"
+  hostname              = "${terraform.workspace}worker-${count.index}"
   start                 = true
   privileged            = true
   must_run              = true
@@ -369,7 +390,7 @@ resource "docker_container" "worker" {
 
   labels {
     type        = "worker"
-    environment = "${var.name_prefix}"
+    environment = "${terraform.workspace}"
   }
 
   upload {
@@ -382,6 +403,28 @@ resource "docker_container" "worker" {
     container_path = "/sys/fs/cgroup"
     read_only      = "true"
   }
+
+  // some k8s things want to read /lib/modules
+  volumes {
+    host_path      = "/lib/modules"
+    container_path = "/lib/modules"
+    read_only      = "true"
+  }
+
+  mounts {
+    target = "/run"
+    type   = "tmpfs"
+  }
+
+  # TODO: this crashes the docker-provider
+  # mounts {
+  #   target = "/tmp"
+  #   type   = "tmpfs"
+  #   tmpfs_options {
+  #     mode = 1777
+  #   }
+  # }
+
 
   connection {
     type     = "ssh"
@@ -415,7 +458,7 @@ resource "docker_container" "worker" {
     role   = "worker"
 
     ignore_checks = [
-      "KubeletVersion",  // the kubelet version in the base image can be very different
+      "KubeletVersion", // the kubelet version in the base image can be very different
     ]
   }
 

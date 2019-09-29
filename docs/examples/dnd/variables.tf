@@ -36,12 +36,6 @@ variable "kubeconfig" {
   description = "Local kubeconfig file"
 }
 
-variable "name_prefix" {
-  type        = "string"
-  default     = "kubeadm-"
-  description = "Optional prefix to be able to have multiple clusters on one host"
-}
-
 variable "private_key" {
   type        = "string"
   default     = "~/.ssh/id_rsa"
