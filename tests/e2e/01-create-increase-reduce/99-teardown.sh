@@ -23,4 +23,9 @@ export KUBECONFIG=$E2E_ENV/kubeconfig.local
 
 section "Testsuite finished: destroying cluster"
 
-tf_destroy $TF_ARGS
+if [ "$$TRAVIS_EVENT_TYPE" = "cron" ] ; then
+    info "daily build: leaving cluster alive..."
+else
+    tf_destroy $TF_ARGS
+fi
+
