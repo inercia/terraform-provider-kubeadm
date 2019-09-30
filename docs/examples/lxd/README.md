@@ -8,7 +8,8 @@ Terraform cluster definition leveraging the libvirt provider.
 
   The easiest way to install LXD is with a Snap: https://snapcraft.io/lxd.
   Just do a `snap install lxd`. Then you will have to add your username to
-  the `lxc` group (for accessing the LXD socket without being root).
+  the `lxd` group (for accessing the LXD socket without being root) with
+  `sudo usermod -aG lxd $USER`, logout and login again.
 
 * _terraform/LXD_
 
@@ -19,9 +20,10 @@ Terraform cluster definition leveraging the libvirt provider.
   the provider automatically. For example:
   ```
   providers {
-    lxd = "/users/me/go/src/github.com/sl1pm4t/terraform-provider-lxd/terraform-provider-lxd"
+    lxd = "<GOPATH>/src/github.com/sl1pm4t/terraform-provider-lxd/terraform-provider-lxd"
   }
   ```
+  (replacing `<GOPATH>` by your GOPATH).
 
 * `kubectl`
 

@@ -13,3 +13,5 @@ terraform.log
 
 .terraform.tfstate.lock.info
 docker_mirror_*
+
+*.code-workspace
