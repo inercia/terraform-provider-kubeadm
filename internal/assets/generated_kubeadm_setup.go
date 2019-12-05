@@ -2,7 +2,7 @@
 
 package assets
 
-const KubeadmSetupScriptCode = `#!/bin/sh
+const KubeadmSetupScriptCode=`#!/bin/sh
 
 ##########################################################################################
 # kubeadm setup script
