@@ -20,7 +20,7 @@ spec:
     - emptyDir
     - hostPath
   allowedHostPaths:
-    - pathPrefix: "/etc/cni/net.d"
+    - pathPrefix: "{{.cni_conf_dir}}"
     - pathPrefix: "/etc/kube-flannel"
     - pathPrefix: "/run/flannel"
   readOnlyRootFilesystem: false
@@ -129,9 +129,9 @@ data:
     }
   net-conf.json: |
     {
-      "Network": "10.244.0.0/16",
+      "Network": "{{.cni_pod_cidr}}",
       "Backend": {
-        "Type": "vxlan"
+        "Type": "{{.flannel_backend}}"
       }
     }
 ---
@@ -173,7 +173,7 @@ spec:
       serviceAccountName: flannel
       initContainers:
         - name: install-cni
-          image: quay.io/coreos/flannel:v0.11.0-amd64
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-amd64
           command:
             - cp
           args:
@@ -187,7 +187,7 @@ spec:
               mountPath: /etc/kube-flannel/
       containers:
         - name: kube-flannel
-          image: quay.io/coreos/flannel:v0.11.0-amd64
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-amd64
           command:
             - /opt/bin/flanneld
           args:
@@ -224,7 +224,7 @@ spec:
             path: /run/flannel
         - name: cni
           hostPath:
-            path: /etc/cni/net.d
+            path: {{.cni_conf_dir}}
         - name: flannel-cfg
           configMap:
             name: kube-flannel-cfg
@@ -267,7 +267,7 @@ spec:
       serviceAccountName: flannel
       initContainers:
         - name: install-cni
-          image: quay.io/coreos/flannel:v0.11.0-arm64
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-arm64
           command:
             - cp
           args:
@@ -281,7 +281,7 @@ spec:
               mountPath: /etc/kube-flannel/
       containers:
         - name: kube-flannel
-          image: quay.io/coreos/flannel:v0.11.0-arm64
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-arm64
           command:
             - /opt/bin/flanneld
           args:
@@ -318,7 +318,7 @@ spec:
             path: /run/flannel
         - name: cni
           hostPath:
-            path: /etc/cni/net.d
+            path: {{.cni_conf_dir}}
         - name: flannel-cfg
           configMap:
             name: kube-flannel-cfg
@@ -361,7 +361,7 @@ spec:
       serviceAccountName: flannel
       initContainers:
         - name: install-cni
-          image: quay.io/coreos/flannel:v0.11.0-arm
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-arm
           command:
             - cp
           args:
@@ -375,7 +375,7 @@ spec:
               mountPath: /etc/kube-flannel/
       containers:
         - name: kube-flannel
-          image: quay.io/coreos/flannel:v0.11.0-arm
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-arm
           command:
             - /opt/bin/flanneld
           args:
@@ -412,7 +412,7 @@ spec:
             path: /run/flannel
         - name: cni
           hostPath:
-            path: /etc/cni/net.d
+            path: {{.cni_conf_dir}}
         - name: flannel-cfg
           configMap:
             name: kube-flannel-cfg
@@ -455,7 +455,7 @@ spec:
       serviceAccountName: flannel
       initContainers:
         - name: install-cni
-          image: quay.io/coreos/flannel:v0.11.0-ppc64le
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-ppc64le
           command:
             - cp
           args:
@@ -469,7 +469,7 @@ spec:
               mountPath: /etc/kube-flannel/
       containers:
         - name: kube-flannel
-          image: quay.io/coreos/flannel:v0.11.0-ppc64le
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-ppc64le
           command:
             - /opt/bin/flanneld
           args:
@@ -506,7 +506,7 @@ spec:
             path: /run/flannel
         - name: cni
           hostPath:
-            path: /etc/cni/net.d
+            path: {{.cni_conf_dir}}
         - name: flannel-cfg
           configMap:
             name: kube-flannel-cfg
@@ -549,7 +549,7 @@ spec:
       serviceAccountName: flannel
       initContainers:
         - name: install-cni
-          image: quay.io/coreos/flannel:v0.11.0-s390x
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-s390x
           command:
             - cp
           args:
@@ -563,7 +563,7 @@ spec:
               mountPath: /etc/kube-flannel/
       containers:
         - name: kube-flannel
-          image: quay.io/coreos/flannel:v0.11.0-s390x
+          image: quay.io/coreos/flannel:{{.flannel_image_version}}-s390x
           command:
             - /opt/bin/flanneld
           args:
@@ -600,7 +600,7 @@ spec:
             path: /run/flannel
         - name: cni
           hostPath:
-            path: /etc/cni/net.d
+            path: {{.cni_conf_dir}}
         - name: flannel-cfg
           configMap:
             name: kube-flannel-cfg
