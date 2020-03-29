@@ -12,7 +12,7 @@ as nodes of your cluster.
 ## How does it work?
 
 The Docker daemon can be run _in_ a Docker container in what is usually called
-a _DnD_ (_Docker-in-Docker_) configuration. This requires a special [Dockerfile](Dockerfile)
+a _DnD_ (_Docker-in-Docker_) configuration. This requires a special [image/Dockerfile](Dockerfile)
 that has been tweaked for starting `systemd` as the the _entrypoint_. `systemd` will them start
 the Docker daemon as well as the `kubelet`. Once all these elements are running, we can
 run `kubeadm` as in any other platform for starting a Kubernetes cluster. 
