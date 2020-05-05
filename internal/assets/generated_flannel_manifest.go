@@ -2,7 +2,7 @@
 
 package assets
 
-const FlannelManifestCode=`---
+const FlannelManifestCode = `---
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:

@@ -2,7 +2,7 @@
 
 package assets
 
-const WeaveManifestCode=`apiVersion: v1
+const WeaveManifestCode = `apiVersion: v1
 kind: List
 items:
   - apiVersion: v1

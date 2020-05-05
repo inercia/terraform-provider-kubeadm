@@ -2,5 +2,5 @@
 
 package assets
 
-const KubeletSysconfigCode=`# kubelet extra configuration
+const KubeletSysconfigCode = `# kubelet extra configuration
 KUBELET_EXTRA_ARGS="--fail-swap-on=false"`

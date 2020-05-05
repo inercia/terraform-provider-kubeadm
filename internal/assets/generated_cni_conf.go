@@ -2,7 +2,7 @@
 
 package assets
 
-const CNIDefConfCode=`{
+const CNIDefConfCode = `{
 	"cniVersion": "0.2.0",
 	"type": "loopback"
 }

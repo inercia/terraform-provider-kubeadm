@@ -17,7 +17,7 @@ PKG_SUSE_PACKAGES="$PKG_SUSE kubernetes-kubelet kubernetes-client"
 PKG_APT="kubeadm"
 PKG_APT_REPO="http://apt.kubernetes.io/"
 PKG_APT_GPG="https://packages.cloud.google.com/apt/doc/apt-key.gpg"
-PKG_APT_PACKAGES="$PKG_APT kubelet kubectl docker.io kubernetes-cni"
+PKG_APT_PACKAGES="$PKG_APT kubelet=1.6.13-00 kubectl=1.6.13-00 docker.io kubernetes-cni"
 PKG_APT_PACKAGES_PRE="apt-transport-https ebtables ethtool"
 PKG_APT_SRCLST="/etc/apt/sources.list.d/kubernetes.list"
 

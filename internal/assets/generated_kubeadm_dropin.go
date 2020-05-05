@@ -2,7 +2,7 @@
 
 package assets
 
-const KubeadmDropinCode=`# Note: This dropin only works with kubeadm and kubelet v1.11+
+const KubeadmDropinCode = `# Note: This dropin only works with kubeadm and kubelet v1.11+
 [Service]
 Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
 Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"

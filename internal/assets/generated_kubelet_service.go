@@ -2,7 +2,7 @@
 
 package assets
 
-const KubeletServiceCode=`[Unit]
+const KubeletServiceCode = `[Unit]
 Description=kubelet: The Kubernetes Node Agent
 Documentation=http://kubernetes.io/docs/
 

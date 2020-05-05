@@ -2,7 +2,7 @@
 
 package assets
 
-const CloudProviderCode=`# from https://kubernetes.io/docs/tasks/administer-cluster/running-cloud-controller/
+const CloudProviderCode = `# from https://kubernetes.io/docs/tasks/administer-cluster/running-cloud-controller/
 
 {{- if .cloud_config}}
 apiVersion: v1
